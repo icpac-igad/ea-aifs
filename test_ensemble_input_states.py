@@ -16,6 +16,7 @@ import pickle
 import numpy as np
 import earthkit.data as ekd
 import earthkit.regrid as ekr
+from google.cloud import storage
 
 from ecmwf.opendata import Client as OpendataClient
 
@@ -32,6 +33,12 @@ SOIL_LEVELS = [1, 2]
 ENSEMBLE_MEMBERS = list(range(1, 51))  # Test all 50 members
 OUTPUT_DIR = "test_input_states"
 SAVE_STATES = True  # Save input states to disk for verification
+
+# GCS configuration
+GCS_BUCKET = "hrrr_delete"
+GCS_SERVICE_ACCOUNT_KEY = "coiled-data-e4drr_202505.json"
+UPLOAD_TO_GCS = True  # Upload pkl files to GCS
+CLEANUP_LOCAL_FILES = True  # Remove local files after successful GCS upload
 
 
 def get_open_data(date, param, levelist=[], number=None):
@@ -151,17 +158,46 @@ def verify_input_state(input_state, member):
     return False
 
 
+def upload_to_gcs(local_file_path, gcs_bucket, gcs_blob_name, service_account_key):
+    """Upload a file to Google Cloud Storage."""
+    try:
+        # Initialize GCS client with service account key
+        client = storage.Client.from_service_account_json(service_account_key)
+        bucket = client.bucket(gcs_bucket)
+        blob = bucket.blob(gcs_blob_name)
+        
+        # Upload the file
+        blob.upload_from_filename(local_file_path)
+        print(f"    ✅ Uploaded to gs://{gcs_bucket}/{gcs_blob_name}")
+        return True
+    except Exception as e:
+        print(f"    ❌ Failed to upload to GCS: {str(e)}")
+        return False
+
+
 def main():
     """Main function to test ensemble input state creation."""
     # Get latest date
     DATE = OpendataClient("ecmwf").latest()
+    datestr = DATE.strftime("%Y%m%d_%H%M")
     print(f"Initial date is {DATE}")
+    print(f"Date string for GCS: {datestr}")
     print(f"Will test creating input states for {len(ENSEMBLE_MEMBERS)} ensemble members")
     
     # Create output directory if saving states
     if SAVE_STATES:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         print(f"\nInput states will be saved to {OUTPUT_DIR}/")
+    
+    # Check GCS configuration
+    if UPLOAD_TO_GCS:
+        if not os.path.exists(GCS_SERVICE_ACCOUNT_KEY):
+            print(f"❌ GCS service account key not found: {GCS_SERVICE_ACCOUNT_KEY}")
+            print("Disabling GCS upload...")
+            UPLOAD_TO_GCS = False
+        else:
+            print(f"✅ GCS upload enabled to bucket: {GCS_BUCKET}")
+            print(f"Files will be saved under date folder: {datestr}/")
     
     # Track timing and success
     successful_members = []
@@ -190,6 +226,16 @@ def main():
                     with open(filename, 'wb') as f:
                         pickle.dump(input_state, f)
                     print(f"  Saved to {filename}")
+                    
+                    # Upload to GCS if enabled
+                    if UPLOAD_TO_GCS:
+                        gcs_blob_name = f"{datestr}/input_state_member_{member:03d}.pkl"
+                        upload_success = upload_to_gcs(filename, GCS_BUCKET, gcs_blob_name, GCS_SERVICE_ACCOUNT_KEY)
+                        
+                        # Clean up local file if upload successful and cleanup enabled
+                        if upload_success and CLEANUP_LOCAL_FILES:
+                            os.remove(filename)
+                            print(f"    🗑️  Removed local file: {filename}")
             else:
                 failed_members.append(member)
             

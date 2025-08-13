@@ -12,6 +12,8 @@ import datetime
 from collections import defaultdict
 import os
 import time
+import pickle
+import argparse
 
 import numpy as np
 import earthkit.data as ekd
@@ -20,7 +22,6 @@ import earthkit.regrid as ekr
 from anemoi.inference.runners.simple import SimpleRunner
 from anemoi.inference.outputs.printer import print_state
 from anemoi.inference.outputs.gribfile import GribFileOutput
-from anemoi.inference.context import Context
 
 from ecmwf.opendata import Client as OpendataClient
 
@@ -37,6 +38,10 @@ SOIL_LEVELS = [1, 2]
 ENSEMBLE_MEMBERS = list(range(1, 51))  # Members 1-50
 LEAD_TIME = 72  # Hours
 OUTPUT_DIR = "ensemble_outputs"
+
+# Pickle file configuration
+USE_PICKLE_FILES = False  # Set to True to use pre-downloaded pickle files
+PICKLE_INPUT_DIR = "./input_states"  # Directory containing downloaded pickle files
 
 
 def get_open_data(date, param, levelist=[], number=None):
@@ -65,6 +70,26 @@ def get_open_data(date, param, levelist=[], number=None):
         fields[param] = np.stack(values)
 
     return fields
+
+
+def load_input_state_from_pickle(member, pickle_dir):
+    """Load input state from pre-downloaded pickle file."""
+    pickle_file = os.path.join(pickle_dir, f"input_state_member_{member:03d}.pkl")
+    
+    if not os.path.exists(pickle_file):
+        raise FileNotFoundError(f"Pickle file not found: {pickle_file}")
+    
+    try:
+        with open(pickle_file, 'rb') as f:
+            input_state = pickle.load(f)
+        
+        print(f"    ✅ Loaded from pickle: {pickle_file}")
+        print(f"    Date: {input_state['date']}")
+        print(f"    Fields: {len(input_state['fields'])}")
+        
+        return input_state
+    except Exception as e:
+        raise RuntimeError(f"Error loading pickle file {pickle_file}: {str(e)}")
 
 
 def get_input_fields(date, number):
@@ -100,19 +125,24 @@ def run_ensemble_member(runner, date, member, output_dir):
     date_str = date.strftime("%Y%m%d_%H%M")
     grib_file = f"{output_dir}/aifs_ens_forecast_{date_str}_member{member:03d}.grib"
     
-    # Get input fields
-    print(f"Retrieving initial conditions for member {member}...")
-    fields = get_input_fields(date, member)
-    input_state = dict(date=date, fields=fields)
+    # Get input fields (either from pickle or live download)
+    if USE_PICKLE_FILES:
+        print(f"Loading initial conditions from pickle for member {member}...")
+        input_state = load_input_state_from_pickle(member, PICKLE_INPUT_DIR)
+        # Use the date from the pickle file
+        date = input_state['date']
+    else:
+        print(f"Retrieving initial conditions for member {member}...")
+        fields = get_input_fields(date, member)
+        input_state = dict(date=date, fields=fields)
     
-    # Create context for outputs
-    context = Context()
-    context.time_step = 6  # 6-hour time step
-    context.lead_time = LEAD_TIME
-    context.reference_date = date
+    # Set context properties on the runner (which extends Context)
+    runner.time_step = 6  # 6-hour time step
+    runner.lead_time = LEAD_TIME
+    runner.reference_date = date
     
-    # Initialize GRIB output
-    grib_output = GribFileOutput(context, path=grib_file)
+    # Initialize GRIB output using runner as context
+    grib_output = GribFileOutput(runner, path=grib_file)
     
     # Run forecast
     print(f"Running forecast for member {member}...")
