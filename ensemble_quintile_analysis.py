@@ -1,7 +1,91 @@
-import xarray as xr
-import numpy as np
-import pandas as pd
+
 from datetime import datetime, timedelta
+import os
+import numpy as np 
+
+import xarray as xr
+import pandas as pd
+from AI_WQ_package import retrieve_evaluation_data
+
+def get_quintile_clim(forecast_date, variable, password=None):
+    """
+    Retrieve the quintile climatology for a given forecast date and variable.
+
+    Args:
+        forecast_date (str): The forecast date in the format YYYYMMDD.
+        variable (str): The variable to retrieve quintile climatology for.
+        password (str): Password for data access. If None, uses environment variable.
+
+    Returns:
+        tuple: (clim1, clim2) - The quintile climatologies for both valid dates.
+    """
+    if password is None:
+        password = os.getenv('AIWQ_SUBMIT_PWD')
+    
+    fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
+
+    clim1 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date1, variable, password=password)
+    clim2 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date2, variable, password=password)
+
+    return clim1, clim2
+
+def valid_dates(forecast_date):
+    """
+    Retrieve the valid dates for a given forecast date.
+
+    Args:
+        forecast_date (str): The forecast date in the format YYYYMMDD.
+
+    Returns:
+        tuple: A tuple containing the valid dates for the forecast. 
+    """
+    date_obj = datetime.strptime(forecast_date, "%Y%m%d")
+
+    # add number of days to date object depending on lead time
+    fc_valid_date_obj1 = date_obj + timedelta(days=4+(7*2))  # get to the next Monday then add number of weeks
+    fc_valid_date_obj2 = date_obj + timedelta(days=4+(7*3))
+
+    fc_valid_date1 = fc_valid_date_obj1.strftime("%Y%m%d")
+    fc_valid_date2 = fc_valid_date_obj2.strftime("%Y%m%d")
+
+    return fc_valid_date1, fc_valid_date2
+
+def download_all_quintiles(forecast_date, variables=None, password=None):
+    """
+    Download quintile climatologies for multiple variables and both valid dates.
+    
+    Args:
+        forecast_date (str): The forecast date in the format YYYYMMDD.
+        variables (list): List of variables to download. If None, uses default set.
+        password (str): Password for data access. If None, uses environment variable.
+    
+    Returns:
+        dict: Dictionary with structure {variable: {valid_date1: clim1, valid_date2: clim2}}
+    """
+    if variables is None:
+        variables = ['tas', 'mslp', 'pr']  # Default variables
+    
+    if password is None:
+        password = os.getenv('AIWQ_SUBMIT_PWD')
+    
+    fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
+    
+    quintile_data = {}
+    
+    for variable in variables:
+        print(f"Downloading quintile climatology for {variable}...")
+        try:
+            clim1, clim2 = get_quintile_clim(forecast_date, variable, password)
+            quintile_data[variable] = {
+                fc_valid_date1: clim1,
+                fc_valid_date2: clim2
+            }
+            print(f"✓ Successfully downloaded {variable} climatology")
+        except Exception as e:
+            print(f"✗ Error downloading {variable}: {e}")
+            quintile_data[variable] = None
+    
+    return quintile_data 
 
 def calculate_ensemble_quintiles(forecast_ds, climatology_base_path="./", variable_mapping=None):
     """
@@ -283,6 +367,10 @@ def prepare_weekly_forecasts(forecast_ds):
 # Example usage
 if __name__ == "__main__":
     
+    forecast_date = '20250814'
+    # Download all default variables for aiquest 
+    all_quintiles = download_all_quintiles(forecast_date)
+
     # Load the ensemble forecast
     output_filename = 'aifs_ensemble_forecast_1p5deg_members001-004.nc'
     fds = xr.open_dataset(output_filename)
