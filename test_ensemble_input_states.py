@@ -189,6 +189,7 @@ def main():
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         print(f"\nInput states will be saved to {OUTPUT_DIR}/")
     
+    UPLOAD_TO_GCS=True
     # Check GCS configuration
     if UPLOAD_TO_GCS:
         if not os.path.exists(GCS_SERVICE_ACCOUNT_KEY):
