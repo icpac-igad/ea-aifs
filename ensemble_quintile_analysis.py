@@ -364,6 +364,87 @@ def prepare_weekly_forecasts(forecast_ds):
     
     return xr.Dataset(weekly_data)
 
+
+def prepare_aiwq_submission(quintile_file, variable, week_period, time_index=0):
+    """
+    Prepare quintile data for AI Weather Quest submission.
+    
+    Args:
+      quintile_file: Path to ensemble_quintile_probabilities.nc
+      variable: 'tas', 'mslp', or 'pr'
+      week_period: '1' or '2'
+      time_index: Which forecast time to use (default: 0)
+    
+    Returns:
+      numpy.ndarray: Shape (5, 121, 240) ready for submission
+    """
+    
+    # Load the quintile dataset
+    ds = xr.open_dataset(quintile_file)
+    
+    # Map variable names
+    var_mapping = {
+      'tas': '2t_quintiles',
+      'mslp': 'msl_quintiles',
+      'pr': 'tp_quintiles'
+    }
+    
+    if variable not in var_mapping:
+      raise ValueError(f"Variable must be one of: {list(var_mapping.keys())}")
+    
+    var_name = var_mapping[variable]
+    
+    # Select the appropriate data slice
+    # Filter by week period
+    week_name = f'week{week_period}'
+    week_mask = ds.week == week_name
+    
+    # Get data for specific time and week
+    data = ds[var_name].isel(time_week=np.where(week_mask)[0][time_index])
+    
+    # The data is already in shape (quintile, latitude, longitude) = (5, 121, 240)
+    # Just need to extract the values
+    submission_data = data.values
+    
+    # Verify shape and constraints
+    assert submission_data.shape == (5, 121, 240), f"Wrong shape: {submission_data.shape}"
+    assert np.all((submission_data >= 0) & (submission_data <= 1)), "Values must be between 0 and 1"
+    
+    # Check that probabilities sum to 1 at each grid point
+    prob_sums = np.sum(submission_data, axis=0)
+    valid_points = ~np.isnan(prob_sums)
+    if np.any(valid_points):
+      sum_check = np.abs(prob_sums[valid_points] - 1.0) < 1e-10
+      if not np.all(sum_check):
+          print(f"Warning: {np.sum(~sum_check)} grid points don't sum to 1.0")
+    
+    return submission_data
+
+# Usage for AI Weather Quest submission:
+def submit_forecast(quintile_file, variable, fc_start_date, fc_period, teamname, modelname, password, time_index=0):
+    """Complete submission workflow"""
+    
+    from AI_WQ_package import forecast_submission
+    
+    # Prepare the data
+    forecast_array = prepare_aiwq_submission(quintile_file, variable, fc_period, time_index)
+    
+    # Create empty DataArray
+    empty_da = forecast_submission.AI_WQ_create_empty_dataarray(
+      variable, fc_start_date, fc_period, teamname, modelname, password
+    )
+    
+    # Fill with your data
+    empty_da.values = forecast_array
+    
+    # Submit
+    submitted_da = forecast_submission.AI_WQ_forecast_submission(
+      empty_da, variable, fc_start_date, fc_period, teamname, modelname, password
+    )
+    
+    return submitted_da
+
+
 # Example usage
 if __name__ == "__main__":
     
@@ -419,3 +500,16 @@ if __name__ == "__main__":
     else:
         print("Failed to calculate quintile probabilities")
         print("Please check that all climatology files are present in the current directory")
+    #submit the forecast 
+    result = submit_forecast(
+      'ensemble_quintile_probabilities.nc',
+      'tas',
+      '20250814',
+      '1',
+       team_name,
+       model_name,
+       password)   
+
+
+
+
