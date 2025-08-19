@@ -1,0 +1,750 @@
+root@coiled-dask-geosfm-1098172-scheduler-15759096:/workspace# python multi_run_AIFS_ENS_v1.py
+Initial date is 2025-08-17 06:00:00
+
+Loading model...
+Model loaded successfully!
+
+============================================================
+Processing ensemble member 1/1
+============================================================
+Retrieving initial conditions for member 1...
+Running forecast for member 1...                                                                                                                                                                       
+.gitattributes: 1.75kB [00:00, 9.25MB/s]                                                                                                                                         | 0/7 [00:00<?, ?it/s]
+run_AIFS_ENS_v1.ipynb: 261kB [00:00, 20.1MB/s]                                                                                                                           | 1/7 [00:00<00:00,  6.66it/s]
+README.md: 6.67kB [00:00, 28.5MB/s]
+assets/encoder_graph.jpeg: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 168k/168k [00:01<00:00, 112kB/s]
+assets/aifs-crps-schematic.png: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 2.84M/2.84M [00:01<00:00, 1.77MB/s]
+assets/decoder_graph.jpeg: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 215k/215k [00:02<00:00, 92.8kB/s]
+aifs-ens-crps-1.0.ckpt: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 922M/922M [00:04<00:00, 207MB/s]
+Fetching 7 files: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7/7 [00:04<00:00,  1.50it/s]
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h000-072.grib
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:42: UserWarning: Using legacy _legacy_data_request, please try to patch your weights.
+  warnings.warn(f"Using legacy {func.__name__}, please try to patch your weights.")
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:216: UserWarning: grid is ambigous: {'None', 'N320'}
+  warnings.warn(f"{c} is ambigous: {checks[c]}")
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:216: UserWarning: area is ambigous: {'[89.785, 0.0, -89.785, 359.719]', 'None'}
+  warnings.warn(f"{c} is ambigous: {checks[c]}")
+  Member 1: 24 hours completed
+  Member 1: 48 hours completed
+  Member 1: 72 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h000-072.grib (1400.92 MB)
+✓ Member 1 completed: 1 files, total 1400.92 MB
+Member 1 processing time: 99.92 seconds
+Estimated time remaining: 0.0 minutes
+
+============================================================
+Processing complete!
+Successfully processed 1/1 members
+Total processing time: 1.7 minutes
+Average time per member: 99.92 seconds
+Total disk space used: 1400.92 MB (1.37 GB)
+
+Generated 1 GRIB files in ensemble_outputs/
+Expected 1 file(s) per member for 72-hour forecast
+
+Verifying sample file: aifs_ens_forecast_20250817_0600_member001_h000-072.grib
+File contains 1200 fields
+First 5 fields:
+  1: q at 50 - step: 6 hours
+  2: q at 100 - step: 6 hours
+  3: q at 150 - step: 6 hours
+  4: q at 200 - step: 6 hours
+  5: q at 250 - step: 6 hours
+root@coiled-dask-geosfm-1098172-scheduler-15759096:/workspace# df -h
+Filesystem      Size  Used Avail Use% Mounted on
+overlay          38G   33G  5.2G  87% /
+tmpfs            64M     0   64M   0% /dev
+shm              64M     0   64M   0% /dev/shm
+/dev/nvme0n1    369G   56K  350G   1% /scratch
+/dev/root        38G   33G  5.2G  87% /mount
+tmpfs            84G   12K   84G   1% /proc/driver/nvidia
+tmpfs            34G  1.8M   34G   1% /run/nvidia-persistenced/socket
+root@coiled-dask-geosfm-1098172-scheduler-15759096:/workspace# python multi_run_AIFS_ENS_v1.py 
+Initial date is 2025-08-17 06:00:00
+
+Loading model...
+Model loaded successfully!
+
+============================================================
+Processing ensemble member 1/1
+============================================================
+Retrieving initial conditions for member 1...
+Running forecast for member 1...                                                                                                                                                                       
+Fetching 7 files: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7/7 [00:00<00:00, 94102.97it/s]
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h000-072.grib
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:42: UserWarning: Using legacy _legacy_data_request, please try to patch your weights.
+  warnings.warn(f"Using legacy {func.__name__}, please try to patch your weights.")
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:216: UserWarning: grid is ambigous: {'N320', 'None'}
+  warnings.warn(f"{c} is ambigous: {checks[c]}")
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:216: UserWarning: area is ambigous: {'[89.785, 0.0, -89.785, 359.719]', 'None'}
+  warnings.warn(f"{c} is ambigous: {checks[c]}")
+  Member 1: 24 hours completed
+  Member 1: 48 hours completed
+  Member 1: 72 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h000-072.grib (1399.30 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h072-144.grib
+  Member 1: 96 hours completed
+  Member 1: 120 hours completed
+  Member 1: 144 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h072-144.grib (1398.27 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h144-216.grib
+  Member 1: 168 hours completed
+  Member 1: 192 hours completed
+  Member 1: 216 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h144-216.grib (1400.26 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h216-288.grib
+  Member 1: 240 hours completed
+  Member 1: 264 hours completed
+  Member 1: 288 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h216-288.grib (1399.77 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h288-360.grib
+  Member 1: 312 hours completed
+  Member 1: 336 hours completed
+  Member 1: 360 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h288-360.grib (1400.31 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h360-432.grib
+  Member 1: 384 hours completed
+  Member 1: 408 hours completed
+  Member 1: 432 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h360-432.grib (1394.78 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h432-504.grib
+  Member 1: 456 hours completed
+  Member 1: 480 hours completed
+  Member 1: 504 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h432-504.grib (1394.24 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h504-576.grib
+  Member 1: 528 hours completed
+  Member 1: 552 hours completed
+  Member 1: 576 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h504-576.grib (1393.44 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h576-648.grib
+  Member 1: 600 hours completed
+  Member 1: 624 hours completed
+  Member 1: 648 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h576-648.grib (1392.33 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h648-720.grib
+  Member 1: 672 hours completed
+  Member 1: 696 hours completed
+  Member 1: 720 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h648-720.grib (1391.00 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member001_h720-792.grib
+  Member 1: 744 hours completed
+  Member 1: 768 hours completed
+  Member 1: 792 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member001_h720-792.grib (1388.62 MB)
+✓ Member 1 completed: 11 files, total 15352.30 MB
+Member 1 processing time: 449.85 seconds
+Estimated time remaining: 0.0 minutes
+
+============================================================
+Processing complete!
+Successfully processed 1/1 members
+Total processing time: 7.5 minutes
+Average time per member: 449.85 seconds
+Total disk space used: 15352.30 MB (14.99 GB)
+
+Generated 11 GRIB files in /scratch/ensemble_outputs/
+Expected 11 file(s) per member for 792-hour forecast
+
+Verifying sample file: aifs_ens_forecast_20250817_0600_member001_h000-072.grib
+File contains 1200 fields
+First 5 fields:
+  1: q at 50 - step: 6 hours
+  2: q at 100 - step: 6 hours
+  3: q at 150 - step: 6 hours
+  4: q at 200 - step: 6 hours
+  5: q at 250 - step: 6 hours
+root@coiled-dask-geosfm-1098172-scheduler-15759096:/workspace# python multi_run_AIFS_ENS_v1.py 
+Initial date is 2025-08-17 06:00:00
+
+Loading model...
+Model loaded successfully!
+
+============================================================
+Processing ensemble member 2/1
+============================================================
+Retrieving initial conditions for member 2...
+Running forecast for member 2...                                                                                                                                                                       
+Fetching 7 files: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7/7 [00:00<00:00, 10131.17it/s]
+  Creating file: aifs_ens_forecast_20250817_0600_member002_h000-072.grib
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:42: UserWarning: Using legacy _legacy_data_request, please try to patch your weights.
+  warnings.warn(f"Using legacy {func.__name__}, please try to patch your weights.")
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:216: UserWarning: grid is ambigous: {'None', 'N320'}
+  warnings.warn(f"{c} is ambigous: {checks[c]}")
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:216: UserWarning: area is ambigous: {'None', '[89.785, 0.0, -89.785, 359.719]'}
+  warnings.warn(f"{c} is ambigous: {checks[c]}")
+  Member 2: 24 hours completed
+  Member 2: 48 hours completed
+  Member 2: 72 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member002_h000-072.grib (1399.82 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member002_h072-144.grib
+  Member 2: 96 hours completed
+  Member 2: 120 hours completed
+  Member 2: 144 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member002_h072-144.grib (1398.08 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member002_h144-216.grib
+  Member 2: 168 hours completed
+  Member 2: 192 hours completed
+  Member 2: 216 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member002_h144-216.grib (1399.12 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member002_h216-288.grib
+  Member 2: 240 hours completed
+  Member 2: 264 hours completed
+  Member 2: 288 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member002_h216-288.grib (1398.77 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member002_h288-360.grib
+  Member 2: 312 hours completed
+  Member 2: 336 hours completed
+  Member 2: 360 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member002_h288-360.grib (1401.02 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member002_h360-432.grib
+  Member 2: 384 hours completed
+  Member 2: 408 hours completed
+  Member 2: 432 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member002_h360-432.grib (1397.11 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member002_h432-504.grib
+  Member 2: 456 hours completed
+  Member 2: 480 hours completed
+  Member 2: 504 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member002_h432-504.grib (1397.10 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member002_h504-576.grib
+  Member 2: 528 hours completed
+  Member 2: 552 hours completed
+  Member 2: 576 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member002_h504-576.grib (1392.95 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member002_h576-648.grib
+  Member 2: 600 hours completed
+  Member 2: 624 hours completed
+  Member 2: 648 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member002_h576-648.grib (1390.12 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member002_h648-720.grib
+  Member 2: 672 hours completed
+  Member 2: 696 hours completed
+  Member 2: 720 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member002_h648-720.grib (1388.46 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member002_h720-792.grib
+  Member 2: 744 hours completed
+  Member 2: 768 hours completed
+  Member 2: 792 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member002_h720-792.grib (1387.55 MB)
+✓ Member 2 completed: 11 files, total 15350.10 MB
+Member 2 processing time: 456.07 seconds
+Estimated time remaining: -7.6 minutes
+
+============================================================
+Processing complete!
+Successfully processed 1/1 members
+Total processing time: 7.6 minutes
+Average time per member: 456.07 seconds
+Total disk space used: 15350.10 MB (14.99 GB)
+
+Generated 22 GRIB files in /scratch/ensemble_outputs/
+Expected 11 file(s) per member for 792-hour forecast
+
+Verifying sample file: aifs_ens_forecast_20250817_0600_member001_h000-072.grib
+File contains 1200 fields
+First 5 fields:
+  1: q at 50 - step: 6 hours
+  2: q at 100 - step: 6 hours
+  3: q at 150 - step: 6 hours
+  4: q at 200 - step: 6 hours
+  5: q at 250 - step: 6 hours
+root@coiled-dask-geosfm-1098172-scheduler-15759096:/workspace# 
+root@coiled-dask-geosfm-1098172-scheduler-15759096:/workspace# 
+root@coiled-dask-geosfm-1098172-scheduler-15759096:/workspace# python multi_run_AIFS_ENS_v1.py 
+Initial date is 2025-08-17 06:00:00
+
+Loading model...
+Model loaded successfully!
+
+============================================================
+Processing ensemble member 3/8
+============================================================
+Retrieving initial conditions for member 3...
+Running forecast for member 3...                                                                                                                                                                       
+Fetching 7 files: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7/7 [00:00<00:00, 50620.91it/s]
+  Creating file: aifs_ens_forecast_20250817_0600_member003_h000-072.grib
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:42: UserWarning: Using legacy _legacy_data_request, please try to patch your weights.
+  warnings.warn(f"Using legacy {func.__name__}, please try to patch your weights.")
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:216: UserWarning: grid is ambigous: {'N320', 'None'}
+  warnings.warn(f"{c} is ambigous: {checks[c]}")
+/opt/venv/lib/python3.12/site-packages/anemoi/inference/legacy.py:216: UserWarning: area is ambigous: {'[89.785, 0.0, -89.785, 359.719]', 'None'}
+  warnings.warn(f"{c} is ambigous: {checks[c]}")
+  Member 3: 24 hours completed
+  Member 3: 48 hours completed
+  Member 3: 72 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member003_h000-072.grib (1400.35 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member003_h072-144.grib
+  Member 3: 96 hours completed
+  Member 3: 120 hours completed
+  Member 3: 144 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member003_h072-144.grib (1398.20 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member003_h144-216.grib
+  Member 3: 168 hours completed
+  Member 3: 192 hours completed
+  Member 3: 216 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member003_h144-216.grib (1398.15 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member003_h216-288.grib
+  Member 3: 240 hours completed
+  Member 3: 264 hours completed
+  Member 3: 288 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member003_h216-288.grib (1399.58 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member003_h288-360.grib
+  Member 3: 312 hours completed
+  Member 3: 336 hours completed
+  Member 3: 360 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member003_h288-360.grib (1399.55 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member003_h360-432.grib
+  Member 3: 384 hours completed
+  Member 3: 408 hours completed
+  Member 3: 432 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member003_h360-432.grib (1397.53 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member003_h432-504.grib
+  Member 3: 456 hours completed
+  Member 3: 480 hours completed
+  Member 3: 504 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member003_h432-504.grib (1398.83 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member003_h504-576.grib
+  Member 3: 528 hours completed
+  Member 3: 552 hours completed
+  Member 3: 576 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member003_h504-576.grib (1392.68 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member003_h576-648.grib
+  Member 3: 600 hours completed
+  Member 3: 624 hours completed
+  Member 3: 648 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member003_h576-648.grib (1390.83 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member003_h648-720.grib
+  Member 3: 672 hours completed
+  Member 3: 696 hours completed
+  Member 3: 720 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member003_h648-720.grib (1387.79 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member003_h720-792.grib
+  Member 3: 744 hours completed
+  Member 3: 768 hours completed
+  Member 3: 792 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member003_h720-792.grib (1387.21 MB)
+✓ Member 3 completed: 11 files, total 15350.70 MB
+Member 3 processing time: 451.08 seconds
+Estimated time remaining: 37.6 minutes
+
+============================================================
+Processing ensemble member 4/8
+============================================================
+Retrieving initial conditions for member 4...
+Running forecast for member 4...                                                                                                                                                                       
+  Creating file: aifs_ens_forecast_20250817_0600_member004_h000-072.grib
+  Member 4: 24 hours completed
+  Member 4: 48 hours completed
+  Member 4: 72 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member004_h000-072.grib (1399.84 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member004_h072-144.grib
+  Member 4: 96 hours completed
+  Member 4: 120 hours completed
+  Member 4: 144 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member004_h072-144.grib (1398.25 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member004_h144-216.grib
+  Member 4: 168 hours completed
+  Member 4: 192 hours completed
+  Member 4: 216 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member004_h144-216.grib (1399.71 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member004_h216-288.grib
+  Member 4: 240 hours completed
+  Member 4: 264 hours completed
+  Member 4: 288 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member004_h216-288.grib (1399.79 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member004_h288-360.grib
+  Member 4: 312 hours completed
+  Member 4: 336 hours completed
+  Member 4: 360 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member004_h288-360.grib (1398.03 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member004_h360-432.grib
+  Member 4: 384 hours completed
+  Member 4: 408 hours completed
+  Member 4: 432 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member004_h360-432.grib (1396.04 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member004_h432-504.grib
+  Member 4: 456 hours completed
+  Member 4: 480 hours completed
+  Member 4: 504 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member004_h432-504.grib (1396.61 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member004_h504-576.grib
+  Member 4: 528 hours completed
+  Member 4: 552 hours completed
+  Member 4: 576 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member004_h504-576.grib (1391.74 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member004_h576-648.grib
+  Member 4: 600 hours completed
+  Member 4: 624 hours completed
+  Member 4: 648 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member004_h576-648.grib (1392.16 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member004_h648-720.grib
+  Member 4: 672 hours completed
+  Member 4: 696 hours completed
+  Member 4: 720 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member004_h648-720.grib (1392.05 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member004_h720-792.grib
+  Member 4: 744 hours completed
+  Member 4: 768 hours completed
+  Member 4: 792 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member004_h720-792.grib (1387.17 MB)
+✓ Member 4 completed: 11 files, total 15351.39 MB
+Member 4 processing time: 439.97 seconds
+Estimated time remaining: 29.7 minutes
+
+============================================================
+Processing ensemble member 5/8
+============================================================
+Retrieving initial conditions for member 5...
+Running forecast for member 5...                                                                                                                                                                       
+  Creating file: aifs_ens_forecast_20250817_0600_member005_h000-072.grib
+  Member 5: 24 hours completed
+  Member 5: 48 hours completed
+  Member 5: 72 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member005_h000-072.grib (1400.17 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member005_h072-144.grib
+  Member 5: 96 hours completed
+  Member 5: 120 hours completed
+  Member 5: 144 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member005_h072-144.grib (1399.99 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member005_h144-216.grib
+  Member 5: 168 hours completed
+  Member 5: 192 hours completed
+  Member 5: 216 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member005_h144-216.grib (1401.13 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member005_h216-288.grib
+  Member 5: 240 hours completed
+  Member 5: 264 hours completed
+  Member 5: 288 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member005_h216-288.grib (1403.49 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member005_h288-360.grib
+  Member 5: 312 hours completed
+  Member 5: 336 hours completed
+  Member 5: 360 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member005_h288-360.grib (1403.53 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member005_h360-432.grib
+  Member 5: 384 hours completed
+  Member 5: 408 hours completed
+  Member 5: 432 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member005_h360-432.grib (1397.66 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member005_h432-504.grib
+  Member 5: 456 hours completed
+  Member 5: 480 hours completed
+  Member 5: 504 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member005_h432-504.grib (1393.17 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member005_h504-576.grib
+  Member 5: 528 hours completed
+  Member 5: 552 hours completed
+  Member 5: 576 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member005_h504-576.grib (1394.93 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member005_h576-648.grib
+  Member 5: 600 hours completed
+  Member 5: 624 hours completed
+  Member 5: 648 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member005_h576-648.grib (1394.66 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member005_h648-720.grib
+  Member 5: 672 hours completed
+  Member 5: 696 hours completed
+  Member 5: 720 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member005_h648-720.grib (1391.78 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member005_h720-792.grib
+  Member 5: 744 hours completed
+  Member 5: 768 hours completed
+  Member 5: 792 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member005_h720-792.grib (1389.70 MB)
+✓ Member 5 completed: 11 files, total 15370.21 MB
+Member 5 processing time: 444.57 seconds
+Estimated time remaining: 22.3 minutes
+
+============================================================
+Processing ensemble member 6/8
+============================================================
+Retrieving initial conditions for member 6...
+Running forecast for member 6...                                                                                                                                                                       
+  Creating file: aifs_ens_forecast_20250817_0600_member006_h000-072.grib
+  Member 6: 24 hours completed
+  Member 6: 48 hours completed
+  Member 6: 72 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member006_h000-072.grib (1399.23 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member006_h072-144.grib
+  Member 6: 96 hours completed
+  Member 6: 120 hours completed
+  Member 6: 144 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member006_h072-144.grib (1400.91 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member006_h144-216.grib
+  Member 6: 168 hours completed
+  Member 6: 192 hours completed
+  Member 6: 216 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member006_h144-216.grib (1400.45 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member006_h216-288.grib
+  Member 6: 240 hours completed
+  Member 6: 264 hours completed
+  Member 6: 288 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member006_h216-288.grib (1402.89 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member006_h288-360.grib
+  Member 6: 312 hours completed
+  Member 6: 336 hours completed
+  Member 6: 360 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member006_h288-360.grib (1399.20 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member006_h360-432.grib
+  Member 6: 384 hours completed
+  Member 6: 408 hours completed
+  Member 6: 432 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member006_h360-432.grib (1396.83 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member006_h432-504.grib
+  Member 6: 456 hours completed
+  Member 6: 480 hours completed
+  Member 6: 504 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member006_h432-504.grib (1393.93 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member006_h504-576.grib
+  Member 6: 528 hours completed
+  Member 6: 552 hours completed
+  Member 6: 576 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member006_h504-576.grib (1392.54 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member006_h576-648.grib
+  Member 6: 600 hours completed
+  Member 6: 624 hours completed
+  Member 6: 648 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member006_h576-648.grib (1389.67 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member006_h648-720.grib
+  Member 6: 672 hours completed
+  Member 6: 696 hours completed
+  Member 6: 720 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member006_h648-720.grib (1389.81 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member006_h720-792.grib
+  Member 6: 744 hours completed
+  Member 6: 768 hours completed
+  Member 6: 792 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member006_h720-792.grib (1387.35 MB)
+✓ Member 6 completed: 11 files, total 15352.82 MB
+Member 6 processing time: 443.18 seconds
+Estimated time remaining: 14.8 minutes
+
+============================================================
+Processing ensemble member 7/8
+============================================================
+Retrieving initial conditions for member 7...
+Running forecast for member 7...                                                                                                                                                                       
+  Creating file: aifs_ens_forecast_20250817_0600_member007_h000-072.grib
+  Member 7: 24 hours completed
+  Member 7: 48 hours completed
+  Member 7: 72 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member007_h000-072.grib (1400.17 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member007_h072-144.grib
+  Member 7: 96 hours completed
+  Member 7: 120 hours completed
+  Member 7: 144 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member007_h072-144.grib (1399.84 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member007_h144-216.grib
+  Member 7: 168 hours completed
+  Member 7: 192 hours completed
+  Member 7: 216 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member007_h144-216.grib (1401.42 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member007_h216-288.grib
+  Member 7: 240 hours completed
+  Member 7: 264 hours completed
+  Member 7: 288 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member007_h216-288.grib (1400.66 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member007_h288-360.grib
+  Member 7: 312 hours completed
+  Member 7: 336 hours completed
+  Member 7: 360 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member007_h288-360.grib (1399.48 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member007_h360-432.grib
+  Member 7: 384 hours completed
+  Member 7: 408 hours completed
+  Member 7: 432 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member007_h360-432.grib (1397.54 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member007_h432-504.grib
+  Member 7: 456 hours completed
+  Member 7: 480 hours completed
+  Member 7: 504 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member007_h432-504.grib (1396.02 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member007_h504-576.grib
+  Member 7: 528 hours completed
+  Member 7: 552 hours completed
+  Member 7: 576 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member007_h504-576.grib (1395.56 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member007_h576-648.grib
+  Member 7: 600 hours completed
+  Member 7: 624 hours completed
+  Member 7: 648 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member007_h576-648.grib (1389.55 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member007_h648-720.grib
+  Member 7: 672 hours completed
+  Member 7: 696 hours completed
+  Member 7: 720 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member007_h648-720.grib (1390.95 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member007_h720-792.grib
+  Member 7: 744 hours completed
+  Member 7: 768 hours completed
+  Member 7: 792 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member007_h720-792.grib (1388.02 MB)
+✓ Member 7 completed: 11 files, total 15359.20 MB
+Member 7 processing time: 443.24 seconds
+Estimated time remaining: 7.4 minutes
+
+============================================================
+Processing ensemble member 8/8
+============================================================
+Retrieving initial conditions for member 8...
+Running forecast for member 8...                                                                                                                                                                       
+  Creating file: aifs_ens_forecast_20250817_0600_member008_h000-072.grib
+  Member 8: 24 hours completed
+  Member 8: 48 hours completed
+  Member 8: 72 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member008_h000-072.grib (1399.96 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member008_h072-144.grib
+  Member 8: 96 hours completed
+  Member 8: 120 hours completed
+  Member 8: 144 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member008_h072-144.grib (1397.80 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member008_h144-216.grib
+  Member 8: 168 hours completed
+  Member 8: 192 hours completed
+  Member 8: 216 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member008_h144-216.grib (1399.19 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member008_h216-288.grib
+  Member 8: 240 hours completed
+  Member 8: 264 hours completed
+  Member 8: 288 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member008_h216-288.grib (1400.38 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member008_h288-360.grib
+  Member 8: 312 hours completed
+  Member 8: 336 hours completed
+  Member 8: 360 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member008_h288-360.grib (1398.48 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member008_h360-432.grib
+  Member 8: 384 hours completed
+  Member 8: 408 hours completed
+  Member 8: 432 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member008_h360-432.grib (1396.31 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member008_h432-504.grib
+  Member 8: 456 hours completed
+  Member 8: 480 hours completed
+  Member 8: 504 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member008_h432-504.grib (1397.62 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member008_h504-576.grib
+  Member 8: 528 hours completed
+  Member 8: 552 hours completed
+  Member 8: 576 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member008_h504-576.grib (1396.58 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member008_h576-648.grib
+  Member 8: 600 hours completed
+  Member 8: 624 hours completed
+  Member 8: 648 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member008_h576-648.grib (1391.79 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member008_h648-720.grib
+  Member 8: 672 hours completed
+  Member 8: 696 hours completed
+  Member 8: 720 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member008_h648-720.grib (1389.34 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member008_h720-792.grib
+  Member 8: 744 hours completed
+  Member 8: 768 hours completed
+  Member 8: 792 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member008_h720-792.grib (1385.97 MB)
+✓ Member 8 completed: 11 files, total 15353.41 MB
+Member 8 processing time: 439.79 seconds
+Estimated time remaining: 0.0 minutes
+
+============================================================
+Processing ensemble member 9/8
+============================================================
+Retrieving initial conditions for member 9...
+Running forecast for member 9...                                                                                                                                                                       
+  Creating file: aifs_ens_forecast_20250817_0600_member009_h000-072.grib
+  Member 9: 24 hours completed
+  Member 9: 48 hours completed
+  Member 9: 72 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member009_h000-072.grib (1400.45 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member009_h072-144.grib
+  Member 9: 96 hours completed
+  Member 9: 120 hours completed
+  Member 9: 144 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member009_h072-144.grib (1398.16 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member009_h144-216.grib
+  Member 9: 168 hours completed
+  Member 9: 192 hours completed
+  Member 9: 216 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member009_h144-216.grib (1398.80 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member009_h216-288.grib
+  Member 9: 240 hours completed
+  Member 9: 264 hours completed
+  Member 9: 288 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member009_h216-288.grib (1401.47 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member009_h288-360.grib
+  Member 9: 312 hours completed
+  Member 9: 336 hours completed
+  Member 9: 360 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member009_h288-360.grib (1399.57 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member009_h360-432.grib
+  Member 9: 384 hours completed
+  Member 9: 408 hours completed
+  Member 9: 432 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member009_h360-432.grib (1397.83 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member009_h432-504.grib
+  Member 9: 456 hours completed
+  Member 9: 480 hours completed
+  Member 9: 504 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member009_h432-504.grib (1393.20 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member009_h504-576.grib
+  Member 9: 528 hours completed
+  Member 9: 552 hours completed
+  Member 9: 576 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member009_h504-576.grib (1394.09 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member009_h576-648.grib
+  Member 9: 600 hours completed
+  Member 9: 624 hours completed
+  Member 9: 648 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member009_h576-648.grib (1393.79 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member009_h648-720.grib
+  Member 9: 672 hours completed
+  Member 9: 696 hours completed
+  Member 9: 720 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member009_h648-720.grib (1387.89 MB)
+  Creating file: aifs_ens_forecast_20250817_0600_member009_h720-792.grib
+  Member 9: 744 hours completed
+  Member 9: 768 hours completed
+  Member 9: 792 hours completed
+  ✓ Completed: aifs_ens_forecast_20250817_0600_member009_h720-792.grib (1381.54 MB)
+✓ Member 9 completed: 11 files, total 15346.79 MB
+Member 9 processing time: 440.56 seconds
+Estimated time remaining: -7.4 minutes
+
+============================================================
+Processing ensemble member 10/8
+============================================================
+Retrieving initial conditions for member 10...
+✗ Error processing member 10: [Errno 28] No space left on device                                                                                                                                       
+
+============================================================
+Processing complete!
+Successfully processed 7/8 members
+Total processing time: 51.7 minutes
+Average time per member: 443.20 seconds
+Total disk space used: 107484.53 MB (104.97 GB)
+
+Generated 99 GRIB files in /scratch/ensemble_outputs/
+Expected 11 file(s) per member for 792-hour forecast
+
+Verifying sample file: aifs_ens_forecast_20250817_0600_member001_h000-072.grib
+File contains 1200 fields
+First 5 fields:
+  1: q at 50 - step: 6 hours
+  2: q at 100 - step: 6 hours
+  3: q at 150 - step: 6 hours
+  4: q at 200 - step: 6 hours
+  5: q at 250 - step: 6 hours
+root@coiled-dask-geosfm-1098172-scheduler-15759096:/workspace# 
+root@coiled-dask-geosfm-1098172-scheduler-15759096:/workspace# df -h
+Filesystem      Size  Used Avail Use% Mounted on
+overlay          38G   37G  938M  98% /
+tmpfs            64M     0   64M   0% /dev
+shm              64M     0   64M   0% /dev/shm
+/dev/nvme0n1    369G  135G  215G  39% /scratch
+/dev/root        38G   37G  938M  98% /mount
+tmpfs            84G   12K   84G   1% /proc/driver/nvidia
+tmpfs            34G  1.8M   34G   1% /run/nvidia-persistenced/socket
+root@coiled-dask-geosfm-1098172-scheduler-15759096:/workspace# 
+root@coiled-dask-geosfm-1098172-scheduler-15759096:/workspace# 

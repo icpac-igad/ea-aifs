@@ -28,6 +28,7 @@ This repository contains a complete workflow for generating and submitting AI we
 See the [docs](docs/) folder for detailed documentation:
 
 - **[AI FORECAST WORKFLOW](docs/AI_FORECAST_WORKFLOW.md)** - Complete workflow guide
+- **[COILED GPU INFERENCE GUIDE](docs/COILED_GPU_INFERENCE_GUIDE.md)** - GPU inference setup, cost analysis & optimization
 - [CONTEXT EXPLANATION](docs/CONTEXT_EXPLANATION.md)
 - [DETAILED GRIB SAVING EXPLANATION](docs/DETAILED_GRIB_SAVING_EXPLANATION.md)
 - [DETAILED NETCDF SAVING EXPLANATION](docs/DETAILED_NETCDF_SAVING_EXPLANATION.md)
@@ -46,3 +47,17 @@ Unit tests and development utilities are located in the `unittests/` folder:
 ## Docker Environment
 
 The project includes a Docker environment in the `env/` folder for running AIFS models with CUDA support. See [docs/](docs/) for Docker setup and Coiled integration notes. 
+
+## Acknowledgements
+
+This work was funded in part by 
+
+1. Hazard modeling, impact estimation, climate storylines for event catalogue
+   on drought and flood disasters in the Eastern Africa (E4DRR) project.
+   https://icpac-igad.github.io/e4drr/ United Nations | Complex Risk Analytics
+   Fund (CRAF’d) on the activity 2.3.3 Experiment generative AI for EPS(Ensemble Prediction Systems):
+   Explore the application of Generative AI (cGAN) in bias correction and
+   downscaling of EPS data in an operational setup.
+1. The Strengthening Early Warning Systems for Anticipatory Action (SEWAA)
+   Project. https://cgan.icpac.net/
+
