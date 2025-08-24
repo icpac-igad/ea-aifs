@@ -5,6 +5,11 @@ import numpy as np
 
 import xarray as xr
 import pandas as pd
+import tempfile
+import shutil
+from pathlib import Path
+from google.cloud import storage
+from google.oauth2 import service_account
 from AI_WQ_package import retrieve_evaluation_data
 
 def get_quintile_clim(forecast_date, variable, password=None):
@@ -85,7 +90,157 @@ def download_all_quintiles(forecast_date, variables=None, password=None):
             print(f"✗ Error downloading {variable}: {e}")
             quintile_data[variable] = None
     
-    return quintile_data 
+    return quintile_data
+
+def download_ensemble_nc_from_gcs(
+    forecast_date, 
+    members=None, 
+    gcs_bucket="ea_aifs_w1", 
+    gcs_prefix="1p5deg_nc/",
+    service_account_path="/home/sparrow/Documents/08-2023/impact_weather_icpac/lab/icpac_gcp/e4drr/gcp-coiled-sa-20250310/coiled-data-e4drr_202505.json",
+    local_dir="./ensemble_nc_files"
+):
+    """
+    Download ensemble NetCDF files from GCS and combine into a single dataset.
+    
+    Args:
+        forecast_date (str): Forecast date in YYYYMMDD format
+        members (list): List of member numbers to download. If None, downloads all available
+        gcs_bucket (str): GCS bucket name
+        gcs_prefix (str): GCS prefix where NetCDF files are stored
+        service_account_path (str): Path to GCS service account key
+        local_dir (str): Local directory for temporary file downloads
+    
+    Returns:
+        xr.Dataset: Combined ensemble dataset with all members
+    """
+    
+    print(f"📥 Downloading ensemble NetCDF files from GCS")
+    print(f"   Bucket: gs://{gcs_bucket}/{gcs_prefix}")
+    print(f"   Forecast date: {forecast_date}")
+    
+    try:
+        # Initialize GCS client
+        credentials = service_account.Credentials.from_service_account_file(service_account_path)
+        client = storage.Client(credentials=credentials)
+        bucket = client.bucket(gcs_bucket)
+        
+        # Create local directory
+        os.makedirs(local_dir, exist_ok=True)
+        
+        # List available NetCDF files
+        print(f"   🔍 Scanning for available NetCDF files...")
+        blobs = bucket.list_blobs(prefix=gcs_prefix)
+        
+        available_files = []
+        for blob in blobs:
+            if blob.name.endswith('.nc') and forecast_date in blob.name:
+                # Extract member number from filename
+                # Expected format: aifs_ensemble_forecast_1p5deg_memberXXX.nc
+                filename = os.path.basename(blob.name)
+                import re
+                match = re.search(r'member(\d+)\.nc', filename)
+                if match:
+                    member_num = int(match.group(1))
+                    if members is None or member_num in members:
+                        available_files.append({
+                            'blob_name': blob.name,
+                            'filename': filename,
+                            'member': member_num
+                        })
+        
+        if not available_files:
+            print(f"   ❌ No NetCDF files found for forecast date {forecast_date}")
+            return None
+        
+        available_files.sort(key=lambda x: x['member'])  # Sort by member number
+        print(f"   ✅ Found {len(available_files)} NetCDF files")
+        
+        # Download files and load datasets
+        member_datasets = []
+        downloaded_files = []
+        
+        for i, file_info in enumerate(available_files):
+            print(f"   📥 Downloading {file_info['filename']} ({i+1}/{len(available_files)})")
+            
+            # Download file
+            local_path = os.path.join(local_dir, file_info['filename'])
+            blob = bucket.blob(file_info['blob_name'])
+            blob.download_to_filename(local_path)
+            downloaded_files.append(local_path)
+            
+            # Load as xarray dataset
+            try:
+                ds = xr.open_dataset(local_path)
+                member_datasets.append(ds)
+                print(f"      ✅ Loaded member {file_info['member']:03d}: {list(ds.data_vars)}")
+            except Exception as e:
+                print(f"      ❌ Error loading {file_info['filename']}: {e}")
+                continue
+        
+        if not member_datasets:
+            print(f"   ❌ No datasets could be loaded")
+            return None
+        
+        # Combine all members into a single ensemble dataset
+        print(f"   🔗 Combining {len(member_datasets)} members into ensemble dataset...")
+        
+        try:
+            # Concatenate along member dimension
+            ensemble_ds = xr.concat(member_datasets, dim='member')
+            
+            # Add ensemble metadata
+            ensemble_ds.attrs.update({
+                'title': 'AIFS Ensemble Forecast - Combined Dataset',
+                'description': f'Combined ensemble forecast with {len(member_datasets)} members',
+                'forecast_date': forecast_date,
+                'members': f'{available_files[0]["member"]}-{available_files[-1]["member"]}',
+                'source': 'ECMWF AIFS processed through grib_to_nc_processor.py',
+                'processing_date': str(np.datetime64('now'))
+            })
+            
+            print(f"   ✅ Combined ensemble dataset:")
+            print(f"      Members: {len(member_datasets)}")
+            print(f"      Variables: {list(ensemble_ds.data_vars)}")
+            print(f"      Dimensions: {dict(ensemble_ds.dims)}")
+            
+            return ensemble_ds
+            
+        except Exception as e:
+            print(f"   ❌ Error combining datasets: {e}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error downloading from GCS: {e}")
+        return None
+        
+    finally:
+        # Clean up downloaded files
+        try:
+            for file_path in downloaded_files:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            if os.path.exists(local_dir) and not os.listdir(local_dir):
+                os.rmdir(local_dir)
+            print(f"   🧹 Cleaned up temporary files")
+        except Exception as e:
+            print(f"   ⚠️  Warning: Could not clean up temporary files: {e}")
+
+def load_ensemble_from_gcs(forecast_date, members=None):
+    """
+    Convenience function to download and load ensemble data from GCS.
+    
+    Args:
+        forecast_date (str): Forecast date in YYYYMMDD format  
+        members (list): Specific members to download, or None for all
+        
+    Returns:
+        xr.Dataset: Combined ensemble dataset
+    """
+    return download_ensemble_nc_from_gcs(
+        forecast_date=forecast_date,
+        members=members
+    ) 
 
 def calculate_ensemble_quintiles(forecast_ds, climatology_base_path="./", variable_mapping=None):
     """
@@ -448,19 +603,35 @@ def submit_forecast(quintile_file, variable, fc_start_date, fc_period, teamname,
 # Example usage
 if __name__ == "__main__":
     
-    forecast_date = '20250814'
+    forecast_date = '20250822'  # Updated to match your processing date
+    
+    print("=" * 60)
+    print("AIFS Ensemble Quintile Analysis Pipeline")
+    print("=" * 60)
+    print(f"Forecast date: {forecast_date}")
+    print()
+    
+    # Step 1: Download ensemble NetCDF files from GCS
+    print("📥 Step 1: Loading ensemble forecast from GCS...")
+    fds = load_ensemble_from_gcs(forecast_date)
+    
+    if fds is None:
+        print("❌ Failed to load ensemble data from GCS")
+        print("   Make sure the NetCDF files have been created and uploaded by grib_to_nc_processor.py")
+        exit(1)
+    
+    print("✅ Loaded ensemble forecast dataset:")
+    print(fds)
+    print()
+    
+    # Step 2: Download climatology data
+    print("📥 Step 2: Downloading climatology data...")
     # Download all default variables for aiquest 
     all_quintiles = download_all_quintiles(forecast_date)
-
-    # Load the ensemble forecast
-    output_filename = 'aifs_ensemble_forecast_1p5deg_members001-004.nc'
-    fds = xr.open_dataset(output_filename)
+    print()
     
-    print("Loaded ensemble forecast dataset:")
-    print(fds)
-    
-    # Calculate quintile probabilities (climatology files auto-detected)
-    print("\nCalculating quintile probabilities...")
+    # Step 3: Calculate quintile probabilities
+    print("🔢 Step 3: Calculating quintile probabilities...")
     print("Expected climatology files:")
     print("  mslp_20yrCLIM_WEEKLYMEAN_quintiles_20250901.nc")
     print("  mslp_20yrCLIM_WEEKLYMEAN_quintiles_20250908.nc")
@@ -478,37 +649,52 @@ if __name__ == "__main__":
         print("\nQuintile analysis complete:")
         print(quintile_ds)
         
-        # Save results
-        output_file = 'ensemble_quintile_probabilities.nc'
+        # Step 4: Save results
+        print("💾 Step 4: Saving results...")
+        output_file = f'ensemble_quintile_probabilities_{forecast_date}.nc'
         quintile_ds.to_netcdf(output_file)
-        print(f"\nSaved quintile probabilities to {output_file}")
         
-        # Display summary statistics
-        print("\nSummary of quintile probabilities:")
-        for var in quintile_ds.data_vars:
-            print(f"\n{var}:")
-            var_data = quintile_ds[var]
-            for q_idx, q_val in enumerate([0.2, 0.4, 0.6, 0.8, 1.0]):
-                mean_prob = var_data.isel(quintile=q_idx).mean().values
-                print(f"  Quintile {q_val}: {mean_prob:.3f} mean probability")
-                
-        # Display processing summary
-        print(f"\nProcessed variables: {list(quintile_ds.data_vars)}")
+        # Print file size
+        import os
+        file_size = os.path.getsize(output_file) / (1024**2)  # MB
+        print(f"✅ Saved quintile probabilities to {output_file} ({file_size:.1f} MB)")
+        print()
+        
+        # Step 5: Analysis Summary
+        print("📊 Step 5: Analysis Summary")
+        print("-" * 40)
+        print(f"Processed variables: {list(quintile_ds.data_vars)}")
         print(f"Time periods: {quintile_ds.sizes.get('time_week', 'N/A')}")
         print(f"Grid resolution: {quintile_ds.sizes['latitude']}x{quintile_ds.sizes['longitude']}")
         
+        # Display summary statistics
+        print("\nQuintile probability statistics:")
+        for var in quintile_ds.data_vars:
+            print(f"\n  {var}:")
+            var_data = quintile_ds[var]
+            for q_idx, q_val in enumerate([0.2, 0.4, 0.6, 0.8, 1.0]):
+                mean_prob = var_data.isel(quintile=q_idx).mean().values
+                print(f"    Q{q_idx+1} ({q_val}): {mean_prob:.3f} mean probability")
+        
+        # Step 6: Ready for submission
+        print(f"\n📤 Step 6: Ready for AI Weather Quest submission")
+        print(f"   Output file: {output_file}")
+        print(f"   Available variables: {list(quintile_ds.data_vars)}")
+        print(f"   Use submit_forecast() function to submit results")
+        
     else:
-        print("Failed to calculate quintile probabilities")
-        print("Please check that all climatology files are present in the current directory")
-    #submit the forecast 
-    result = submit_forecast(
-      'ensemble_quintile_probabilities.nc',
-      'tas',
-      '20250814',
-      '1',
-       team_name,
-       model_name,
-       password)   
+        print("❌ Failed to calculate quintile probabilities")
+        print("   Please check that all climatology files are present in the current directory")
+    
+    # Optional: Submit the forecast (uncomment and configure as needed)
+    # result = submit_forecast(
+    #     output_file,
+    #     'mslp',  # or 'pr', 'tas' depending on available variables
+    #     forecast_date,
+    #     '1',     # week period
+    #     team_name,
+    #     model_name,
+    #     password)   
 
 
 
