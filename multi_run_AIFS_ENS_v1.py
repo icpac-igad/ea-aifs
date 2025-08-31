@@ -40,7 +40,7 @@ OUTPUT_DIR = "/scratch/ensemble_outputs"
 
 # Pickle file configuration
 USE_PICKLE_FILES = False  # Set to True to use pre-downloaded pickle files
-PICKLE_INPUT_DIR = "./input_states"  # Directory containing downloaded pickle files
+PICKLE_INPUT_DIR = "/scratch/input_states"  # Directory containing downloaded pickle files
 
 
 def get_open_data(date, param, levelist=[], number=None):

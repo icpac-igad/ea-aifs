@@ -7,7 +7,7 @@ for use in GPU-based ensemble forecasting. This avoids the time-consuming data
 retrieval and preprocessing steps on expensive GPU instances.
 
 Usage:
-    python download_pkl_from_gcs.py --date 20250105_0000 --members 1-50 --output-dir ./input_states
+    python download_pkl_from_gcs.py --date 20250828_0000 --members 1-25 --output-dir /scratch/input_states
 """
 
 import os

@@ -11,6 +11,7 @@ from pathlib import Path
 from google.cloud import storage
 from google.oauth2 import service_account
 from AI_WQ_package import retrieve_evaluation_data
+import icechunk
 
 def get_quintile_clim(forecast_date, variable, password=None):
     """
@@ -92,11 +93,178 @@ def download_all_quintiles(forecast_date, variables=None, password=None):
     
     return quintile_data
 
+def download_ensemble_nc_from_gcs_chunked(
+    forecast_date, 
+    members=None, 
+    gcs_bucket="ea_aifs_w1", 
+    gcs_prefix=None,
+    service_account_path="coiled-data-e4drr_202505.json",
+    local_dir="./ensemble_nc_files",
+    icechunk_store_path="./ensemble_icechunk_store"
+):
+    """
+    Download ensemble NetCDF files from GCS and combine using icechunk for memory efficiency.
+    
+    Args:
+        forecast_date (str): Forecast date in YYYYMMDD format
+        members (list): List of member numbers to download. If None, downloads all available
+        gcs_bucket (str): GCS bucket name
+        gcs_prefix (str): GCS prefix where NetCDF files are stored. If None, uses forecast_date
+        service_account_path (str): Path to GCS service account key (relative path)
+        local_dir (str): Local directory for temporary file downloads
+        icechunk_store_path (str): Path for icechunk store
+    
+    Returns:
+        xr.Dataset: Combined ensemble dataset with all members (lazy-loaded via icechunk)
+    """
+    
+    # Set default GCS prefix based on forecast date if not provided
+    if gcs_prefix is None:
+        gcs_prefix = f"{forecast_date}_0000/1p5deg_nc/"
+    
+    print(f"📥 Downloading ensemble NetCDF files from GCS (Memory-Efficient)")
+    print(f"   Bucket: gs://{gcs_bucket}/{gcs_prefix}")
+    print(f"   Forecast date: {forecast_date}")
+    print(f"   Icechunk store: {icechunk_store_path}")
+    
+    try:
+        # Initialize GCS client
+        credentials = service_account.Credentials.from_service_account_file(service_account_path)
+        client = storage.Client(credentials=credentials)
+        bucket = client.bucket(gcs_bucket)
+        
+        # Create local directory and clean up existing icechunk store
+        os.makedirs(local_dir, exist_ok=True)
+        if os.path.exists(icechunk_store_path):
+            import shutil
+            shutil.rmtree(icechunk_store_path)
+        
+        # List available NetCDF files in GCS
+        print(f"   🔍 Scanning for available NetCDF files...")
+        blobs = bucket.list_blobs(prefix=gcs_prefix)
+        
+        available_files = []
+        for blob in blobs:
+            if blob.name.endswith('.nc') and forecast_date in blob.name:
+                # Extract member number from filename
+                filename = os.path.basename(blob.name)
+                import re
+                match = re.search(r'member(\d+)\.nc', filename)
+                if match:
+                    member_num = int(match.group(1))
+                    if members is None or member_num in members:
+                        available_files.append({
+                            'blob_name': blob.name,
+                            'filename': filename,
+                            'member': member_num
+                        })
+        
+        if not available_files:
+            print(f"   ❌ No NetCDF files found for forecast date {forecast_date}")
+            return None
+        
+        available_files.sort(key=lambda x: x['member'])  # Sort by member number
+        print(f"   ✅ Found {len(available_files)} NetCDF files in GCS")
+        
+        # Create local icechunk repository
+        local_storage = icechunk.local_filesystem_storage(icechunk_store_path)
+        repo = icechunk.Repository.create(local_storage)
+        session = repo.writable_session("main")
+        
+        zarr_group = "ensemble_forecast"
+        processed_count = 0
+        
+        # Process members one by one for memory efficiency
+        for i, file_info in enumerate(available_files):
+            member_num = file_info['member']
+            print(f"   📥 Processing member {member_num:03d} ({i+1}/{len(available_files)})")
+            
+            # Download file if it doesn't exist locally
+            local_path = os.path.join(local_dir, file_info['filename'])
+            if not os.path.exists(local_path):
+                print(f"      Downloading {file_info['filename']}")
+                blob = bucket.blob(file_info['blob_name'])
+                blob.download_to_filename(local_path)
+            else:
+                print(f"      Using cached file: {file_info['filename']}")
+            
+            # Load and process single member
+            try:
+                ds = xr.open_dataset(local_path, chunks={'member': 1, 'step': 10, 'latitude': 60, 'longitude': 120})
+                
+                # Update member coordinate to the correct value
+                print(f"      Current member coordinate: {ds.member.values}, updating to: {member_num}")
+                ds = ds.assign_coords(member=[member_num])
+                
+                if i == 0:
+                    # First member - create the store structure
+                    print(f"      🏗️  Creating icechunk store with member {member_num:03d}")
+                    ds.to_zarr(session.store, group=zarr_group, mode='w', consolidated=False)
+                    print(f"      ✅ Created store with dimensions: {dict(ds.dims)}")
+                else:
+                    # Append subsequent members along member dimension
+                    print(f"      ➕ Appending member {member_num:03d} to icechunk store")
+                    ds.to_zarr(session.store, group=zarr_group, append_dim='member', consolidated=False)
+                    print(f"      ✅ Appended member {member_num:03d}")
+                
+                processed_count += 1
+                
+                # Clean up memory immediately
+                ds.close()
+                del ds
+                import gc
+                gc.collect()
+                
+            except Exception as e:
+                print(f"      ❌ Error processing member {member_num:03d}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+        
+        if processed_count == 0:
+            print(f"   ❌ No members could be processed")
+            return None
+        
+        # Commit the session
+        session.commit(f"Processed {processed_count} ensemble members for {forecast_date}")
+        print(f"   ✅ Committed icechunk store with {processed_count} members")
+        
+        # Open the final dataset for reading
+        print(f"   🔗 Opening final ensemble dataset from icechunk store...")
+        read_session = repo.readonly_session(branch="main")
+        ensemble_ds = xr.open_zarr(read_session.store, group=zarr_group, 
+                                 chunks={'member': 1, 'step': 10, 'latitude': 60, 'longitude': 120})
+        
+        # Add ensemble metadata
+        ensemble_ds.attrs.update({
+            'title': 'AIFS Ensemble Forecast - Icechunk Store',
+            'description': f'Memory-efficient ensemble forecast with {processed_count} members',
+            'forecast_date': forecast_date,
+            'members': f'{available_files[0]["member"]}-{available_files[-1]["member"]}',
+            'source': 'ECMWF AIFS processed through icechunk for memory efficiency',
+            'processing_date': str(np.datetime64('now')),
+            'storage_backend': 'icechunk'
+        })
+        
+        print(f"   ✅ Final ensemble dataset:")
+        print(f"      Members: {ensemble_ds.sizes['member']}")
+        print(f"      Variables: {list(ensemble_ds.data_vars)}")
+        print(f"      Dimensions: {dict(ensemble_ds.dims)}")
+        print(f"      Storage: icechunk (lazy-loaded)")
+        
+        return ensemble_ds
+        
+    except Exception as e:
+        print(f"❌ Error in icechunk processing: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 def download_ensemble_nc_from_gcs(
     forecast_date, 
     members=None, 
     gcs_bucket="ea_aifs_w1", 
-    gcs_prefix="1p5deg_nc/",
+    gcs_prefix=None,
     service_account_path="/home/sparrow/Documents/08-2023/impact_weather_icpac/lab/icpac_gcp/e4drr/gcp-coiled-sa-20250310/coiled-data-e4drr_202505.json",
     local_dir="./ensemble_nc_files"
 ):
@@ -107,13 +275,17 @@ def download_ensemble_nc_from_gcs(
         forecast_date (str): Forecast date in YYYYMMDD format
         members (list): List of member numbers to download. If None, downloads all available
         gcs_bucket (str): GCS bucket name
-        gcs_prefix (str): GCS prefix where NetCDF files are stored
+        gcs_prefix (str): GCS prefix where NetCDF files are stored. If None, uses forecast_date
         service_account_path (str): Path to GCS service account key
         local_dir (str): Local directory for temporary file downloads
     
     Returns:
         xr.Dataset: Combined ensemble dataset with all members
     """
+    
+    # Set default GCS prefix based on forecast date if not provided
+    if gcs_prefix is None:
+        gcs_prefix = f"{forecast_date}_0000/1p5deg_nc/"
     
     print(f"📥 Downloading ensemble NetCDF files from GCS")
     print(f"   Bucket: gs://{gcs_bucket}/{gcs_prefix}")
@@ -128,7 +300,7 @@ def download_ensemble_nc_from_gcs(
         # Create local directory
         os.makedirs(local_dir, exist_ok=True)
         
-        # List available NetCDF files
+        # List available NetCDF files in GCS
         print(f"   🔍 Scanning for available NetCDF files...")
         blobs = bucket.list_blobs(prefix=gcs_prefix)
         
@@ -154,24 +326,54 @@ def download_ensemble_nc_from_gcs(
             return None
         
         available_files.sort(key=lambda x: x['member'])  # Sort by member number
-        print(f"   ✅ Found {len(available_files)} NetCDF files")
+        print(f"   ✅ Found {len(available_files)} NetCDF files in GCS")
         
-        # Download files and load datasets
+        # Check which files need to be downloaded (only missing files)
+        files_to_download = []
+        existing_files = []
+        
+        for file_info in available_files:
+            local_path = os.path.join(local_dir, file_info['filename'])
+            if os.path.exists(local_path):
+                # File already exists locally
+                existing_files.append({
+                    'local_path': local_path,
+                    'member': file_info['member'],
+                    'filename': file_info['filename']
+                })
+                print(f"   ✓ Already exists: {file_info['filename']}")
+            else:
+                # File needs to be downloaded
+                files_to_download.append(file_info)
+        
+        print(f"   📂 Found {len(existing_files)} files already downloaded")
+        print(f"   📥 Need to download {len(files_to_download)} missing files")
+        
+        # Download only missing files
         member_datasets = []
-        downloaded_files = []
+        all_local_files = []
         
-        for i, file_info in enumerate(available_files):
-            print(f"   📥 Downloading {file_info['filename']} ({i+1}/{len(available_files)})")
+        # Download missing files
+        for i, file_info in enumerate(files_to_download):
+            print(f"   📥 Downloading {file_info['filename']} ({i+1}/{len(files_to_download)})")
             
-            # Download file
             local_path = os.path.join(local_dir, file_info['filename'])
             blob = bucket.blob(file_info['blob_name'])
             blob.download_to_filename(local_path)
-            downloaded_files.append(local_path)
-            
-            # Load as xarray dataset
+            all_local_files.append({
+                'local_path': local_path,
+                'member': file_info['member'],
+                'filename': file_info['filename']
+            })
+        
+        # Combine existing and newly downloaded files
+        all_local_files.extend(existing_files)
+        all_local_files.sort(key=lambda x: x['member'])  # Sort by member number
+        
+        # Load all files as xarray datasets
+        for file_info in all_local_files:
             try:
-                ds = xr.open_dataset(local_path)
+                ds = xr.open_dataset(file_info['local_path'])
                 member_datasets.append(ds)
                 print(f"      ✅ Loaded member {file_info['member']:03d}: {list(ds.data_vars)}")
             except Exception as e:
@@ -194,7 +396,7 @@ def download_ensemble_nc_from_gcs(
                 'title': 'AIFS Ensemble Forecast - Combined Dataset',
                 'description': f'Combined ensemble forecast with {len(member_datasets)} members',
                 'forecast_date': forecast_date,
-                'members': f'{available_files[0]["member"]}-{available_files[-1]["member"]}',
+                'members': f'{all_local_files[0]["member"]}-{all_local_files[-1]["member"]}',
                 'source': 'ECMWF AIFS processed through grib_to_nc_processor.py',
                 'processing_date': str(np.datetime64('now'))
             })
@@ -215,39 +417,40 @@ def download_ensemble_nc_from_gcs(
         return None
         
     finally:
-        # Clean up downloaded files
-        try:
-            for file_path in downloaded_files:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            if os.path.exists(local_dir) and not os.listdir(local_dir):
-                os.rmdir(local_dir)
-            print(f"   🧹 Cleaned up temporary files")
-        except Exception as e:
-            print(f"   ⚠️  Warning: Could not clean up temporary files: {e}")
+        # Note: Files are kept in local_dir for future use to avoid re-downloading
+        # Clean up only if explicitly requested
+        pass
 
-def load_ensemble_from_gcs(forecast_date, members=None):
+def load_ensemble_from_gcs(forecast_date, members=None, use_icechunk=True):
     """
     Convenience function to download and load ensemble data from GCS.
     
     Args:
         forecast_date (str): Forecast date in YYYYMMDD format  
         members (list): Specific members to download, or None for all
+        use_icechunk (bool): If True, use memory-efficient icechunk approach
         
     Returns:
         xr.Dataset: Combined ensemble dataset
     """
-    return download_ensemble_nc_from_gcs(
-        forecast_date=forecast_date,
-        members=members
-    ) 
+    if use_icechunk:
+        return download_ensemble_nc_from_gcs_chunked(
+            forecast_date=forecast_date,
+            members=members
+        )
+    else:
+        return download_ensemble_nc_from_gcs(
+            forecast_date=forecast_date,
+            members=members
+        ) 
 
-def calculate_ensemble_quintiles(forecast_ds, climatology_base_path="./", variable_mapping=None):
+def calculate_ensemble_quintiles(forecast_ds, forecast_date, climatology_base_path="./", variable_mapping=None):
     """
     Calculate quintile probabilities for ensemble forecasts against climatology.
     
     Args:
         forecast_ds (xr.Dataset): Ensemble forecast dataset with dimensions (time, member, step, latitude, longitude)
+        forecast_date (str): Forecast date in YYYYMMDD format (e.g., '20250821')
         climatology_base_path (str): Base path where climatology files are located
         variable_mapping (dict): Optional mapping of forecast variables to climatology variables
     
@@ -262,21 +465,32 @@ def calculate_ensemble_quintiles(forecast_ds, climatology_base_path="./", variab
             '2t': 'tas'     # 2-meter temperature -> surface air temperature
         }
     
-    # Define climatology file patterns for each variable and week
+    # Calculate valid dates for climatology based on forecast date
+    fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
+    
+    print(f"📅 Using climatology for valid dates: {fc_valid_date1}, {fc_valid_date2}")
+    
+    # Define climatology file patterns for each variable and week using correct dates
     climatology_files = {
         'mslp': {
-            'week1': f"{climatology_base_path}/mslp_20yrCLIM_WEEKLYMEAN_quintiles_20250901.nc",
-            'week2': f"{climatology_base_path}/mslp_20yrCLIM_WEEKLYMEAN_quintiles_20250908.nc"
+            'week1': f"{climatology_base_path}/mslp_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date1}.nc",
+            'week2': f"{climatology_base_path}/mslp_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date2}.nc"
         },
         'pr': {
-            'week1': f"{climatology_base_path}/pr_20yrCLIM_WEEKLYSUM_quintiles_20250901.nc",
-            'week2': f"{climatology_base_path}/pr_20yrCLIM_WEEKLYSUM_quintiles_20250908.nc"
+            'week1': f"{climatology_base_path}/pr_20yrCLIM_WEEKLYSUM_quintiles_{fc_valid_date1}.nc",
+            'week2': f"{climatology_base_path}/pr_20yrCLIM_WEEKLYSUM_quintiles_{fc_valid_date2}.nc"
         },
         'tas': {
-            'week1': f"{climatology_base_path}/tas_20yrCLIM_WEEKLYMEAN_quintiles_20250901.nc",
-            'week2': f"{climatology_base_path}/tas_20yrCLIM_WEEKLYMEAN_quintiles_20250908.nc"
+            'week1': f"{climatology_base_path}/tas_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date1}.nc",
+            'week2': f"{climatology_base_path}/tas_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date2}.nc"
         }
     }
+    
+    print(f"📁 Expected climatology files:")
+    for var, weeks in climatology_files.items():
+        for week, filepath in weeks.items():
+            filename = os.path.basename(filepath)
+            print(f"   {filename}")
     
     quintile_results = {}
     
@@ -313,7 +527,6 @@ def calculate_ensemble_quintiles(forecast_ds, climatology_base_path="./", variab
                 
                 try:
                     # Check if file exists
-                    import os
                     if not os.path.exists(clim_file):
                         print(f"    Warning: Climatology file not found: {clim_file}")
                         continue
@@ -389,7 +602,7 @@ def calculate_ensemble_quintiles(forecast_ds, climatology_base_path="./", variab
 
 def calculate_grid_quintiles(ensemble_data, climatology_quintiles):
     """
-    Calculate quintile probabilities for each grid point.
+    Calculate quintile probabilities for each grid point - OPTIMIZED VERSION.
     
     Args:
         ensemble_data (xr.DataArray): Ensemble forecast data (member, latitude, longitude)
@@ -399,61 +612,47 @@ def calculate_grid_quintiles(ensemble_data, climatology_quintiles):
         xr.DataArray: Quintile probabilities (quintile, latitude, longitude)
     """
     
-    print(f"DEBUG: climatology_quintiles type: {type(climatology_quintiles)}")
-    print(f"DEBUG: ensemble_data type: {type(ensemble_data)}")
+    print(f"      🚀 Using VECTORIZED calculation for speed...")
     
     # Check if climatology_quintiles is actually a DataArray
     if not isinstance(climatology_quintiles, xr.DataArray):
         raise TypeError(f"Expected xr.DataArray, got {type(climatology_quintiles)}")
     
     n_members = ensemble_data.sizes['member']
-    quintile_probs = np.zeros((5, ensemble_data.sizes['latitude'], ensemble_data.sizes['longitude']))
     
     # Handle different climatology data structures
     if 'time' in climatology_quintiles.dims:
-        # Take the first (and usually only) time slice
         clim_data = climatology_quintiles.isel(time=0)
     else:
         clim_data = climatology_quintiles
     
-    print(f"DEBUG: clim_data shape: {clim_data.shape}")
-    print(f"DEBUG: clim_data dims: {clim_data.dims}")
+    # Convert to numpy arrays for vectorized operations
+    ensemble_values = ensemble_data.values  # Shape: (n_members, n_lat, n_lon)
+    clim_thresholds = clim_data.values      # Shape: (4, n_lat, n_lon)
     
-    # Get the actual quantile values from the climatology data
-    clim_quantile_values = clim_data.quantile  # Should be [0.2, 0.4, 0.6, 0.8]
-    print(f"DEBUG: clim_quantile_values: {clim_quantile_values}")
+    # Initialize output array
+    quintile_probs = np.zeros((5, ensemble_data.sizes['latitude'], ensemble_data.sizes['longitude']))
     
-    # For each grid point
-    for lat_idx in range(ensemble_data.sizes['latitude']):
-        for lon_idx in range(ensemble_data.sizes['longitude']):
-            
-            # Get ensemble values at this grid point
-            ensemble_values = ensemble_data.isel(latitude=lat_idx, longitude=lon_idx).values
-            
-            # Get climatology quintile thresholds at this grid point
-            clim_thresholds = clim_data.isel(latitude=lat_idx, longitude=lon_idx).values  # Shape: (4,) for [0.2, 0.4, 0.6, 0.8]
-            
-            # Calculate probability for each quintile
-            # Q1 (0-20%): values < 20th percentile threshold
-            prob_q1 = np.sum(ensemble_values < clim_thresholds[0]) / n_members
-            
-            # Q2 (20-40%): values >= 20th percentile and < 40th percentile
-            prob_q2 = np.sum((ensemble_values >= clim_thresholds[0]) & (ensemble_values < clim_thresholds[1])) / n_members
-            
-            # Q3 (40-60%): values >= 40th percentile and < 60th percentile  
-            prob_q3 = np.sum((ensemble_values >= clim_thresholds[1]) & (ensemble_values < clim_thresholds[2])) / n_members
-            
-            # Q4 (60-80%): values >= 60th percentile and < 80th percentile
-            prob_q4 = np.sum((ensemble_values >= clim_thresholds[2]) & (ensemble_values < clim_thresholds[3])) / n_members
-            
-            # Q5 (80-100%): values >= 80th percentile
-            prob_q5 = np.sum(ensemble_values >= clim_thresholds[3]) / n_members
-            
-            quintile_probs[0, lat_idx, lon_idx] = prob_q1
-            quintile_probs[1, lat_idx, lon_idx] = prob_q2
-            quintile_probs[2, lat_idx, lon_idx] = prob_q3
-            quintile_probs[3, lat_idx, lon_idx] = prob_q4
-            quintile_probs[4, lat_idx, lon_idx] = prob_q5
+    # Vectorized quintile calculation - process all grid points at once!
+    # Q1: values < 20th percentile
+    quintile_probs[0] = np.sum(ensemble_values < clim_thresholds[0], axis=0) / n_members
+    
+    # Q2: 20th <= values < 40th
+    quintile_probs[1] = np.sum((ensemble_values >= clim_thresholds[0]) & 
+                               (ensemble_values < clim_thresholds[1]), axis=0) / n_members
+    
+    # Q3: 40th <= values < 60th  
+    quintile_probs[2] = np.sum((ensemble_values >= clim_thresholds[1]) & 
+                               (ensemble_values < clim_thresholds[2]), axis=0) / n_members
+    
+    # Q4: 60th <= values < 80th
+    quintile_probs[3] = np.sum((ensemble_values >= clim_thresholds[2]) & 
+                               (ensemble_values < clim_thresholds[3]), axis=0) / n_members
+    
+    # Q5: values >= 80th
+    quintile_probs[4] = np.sum(ensemble_values >= clim_thresholds[3], axis=0) / n_members
+    
+    print(f"      ✅ Vectorized calculation complete!")
     
     # Create xarray DataArray
     quintile_da = xr.DataArray(
@@ -603,7 +802,7 @@ def submit_forecast(quintile_file, variable, fc_start_date, fc_period, teamname,
 # Example usage
 if __name__ == "__main__":
     
-    forecast_date = '20250822'  # Updated to match your processing date
+    forecast_date = '20250821'  # Updated to match your processing date
     
     print("=" * 60)
     print("AIFS Ensemble Quintile Analysis Pipeline")
@@ -611,9 +810,10 @@ if __name__ == "__main__":
     print(f"Forecast date: {forecast_date}")
     print()
     
-    # Step 1: Download ensemble NetCDF files from GCS
+    # Step 1: Download ensemble NetCDF files from GCS (using icechunk for memory efficiency)
     print("📥 Step 1: Loading ensemble forecast from GCS...")
-    fds = load_ensemble_from_gcs(forecast_date)
+    print("   Using memory-efficient icechunk approach to avoid RAM issues")
+    fds = load_ensemble_from_gcs(forecast_date, use_icechunk=True)
     
     if fds is None:
         print("❌ Failed to load ensemble data from GCS")
@@ -626,24 +826,32 @@ if __name__ == "__main__":
     
     # Step 2: Download climatology data
     print("📥 Step 2: Downloading climatology data...")
+    
+    # Calculate valid dates and show what will be downloaded
+    fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
+    print(f"   Will download climatology for valid dates: {fc_valid_date1}, {fc_valid_date2}")
+    
     # Download all default variables for aiquest 
     all_quintiles = download_all_quintiles(forecast_date)
     print()
     
     # Step 3: Calculate quintile probabilities
     print("🔢 Step 3: Calculating quintile probabilities...")
-    print("Expected climatology files:")
-    print("  mslp_20yrCLIM_WEEKLYMEAN_quintiles_20250901.nc")
-    print("  mslp_20yrCLIM_WEEKLYMEAN_quintiles_20250908.nc")
-    print("  pr_20yrCLIM_WEEKLYSUM_quintiles_20250901.nc")
-    print("  pr_20yrCLIM_WEEKLYSUM_quintiles_20250908.nc")
-    print("  tas_20yrCLIM_WEEKLYMEAN_quintiles_20250901.nc")
-    print("  tas_20yrCLIM_WEEKLYMEAN_quintiles_20250908.nc")
+    
+    # Calculate correct valid dates for this forecast
+    fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
+    print(f"Expected climatology files for valid dates {fc_valid_date1}, {fc_valid_date2}:")
+    print(f"  mslp_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date1}.nc")
+    print(f"  mslp_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date2}.nc")
+    print(f"  pr_20yrCLIM_WEEKLYSUM_quintiles_{fc_valid_date1}.nc")
+    print(f"  pr_20yrCLIM_WEEKLYSUM_quintiles_{fc_valid_date2}.nc")
+    print(f"  tas_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date1}.nc")
+    print(f"  tas_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date2}.nc")
     print()
     
     # Use current directory as base path (change if files are elsewhere)
     climatology_base_path = "./"
-    quintile_ds = calculate_ensemble_quintiles(fds, climatology_base_path)
+    quintile_ds = calculate_ensemble_quintiles(fds, forecast_date, climatology_base_path)
     
     if quintile_ds is not None:
         print("\nQuintile analysis complete:")
