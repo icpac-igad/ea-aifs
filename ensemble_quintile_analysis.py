@@ -265,7 +265,7 @@ def download_ensemble_nc_from_gcs(
     members=None, 
     gcs_bucket="ea_aifs_w1", 
     gcs_prefix=None,
-    service_account_path="/home/sparrow/Documents/08-2023/impact_weather_icpac/lab/icpac_gcp/e4drr/gcp-coiled-sa-20250310/coiled-data-e4drr_202505.json",
+    service_account_path="coiled-data-e4drr_202505.json",
     local_dir="./ensemble_nc_files"
 ):
     """
