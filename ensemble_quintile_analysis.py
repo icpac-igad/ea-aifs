@@ -30,8 +30,8 @@ def get_quintile_clim(forecast_date, variable, password=None):
     
     fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
 
-    clim1 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date1, variable, password=password)
-    clim2 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date2, variable, password=password)
+    clim1 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date1, variable, password='')
+    clim2 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date2, variable, password='')
 
     return clim1, clim2
 
@@ -96,11 +96,12 @@ def download_all_quintiles(forecast_date, variables=None, password=None):
 def download_ensemble_nc_from_gcs_chunked(
     forecast_date, 
     members=None, 
-    gcs_bucket="ea_aifs_w1", 
-    gcs_prefix=None,
-    service_account_path="coiled-data-e4drr_202505.json",
+    gcs_bucket="aifs-aiquest", 
+    gcs_prefix="forecasts",
+    service_account_path="coiled-data.json",
     local_dir="./ensemble_nc_files",
-    icechunk_store_path="./ensemble_icechunk_store"
+    icechunk_store_path="./ensemble_icechunk_store",
+    skip_download_if_exists=True
 ):
     """
     Download ensemble NetCDF files from GCS and combine using icechunk for memory efficiency.
@@ -113,6 +114,7 @@ def download_ensemble_nc_from_gcs_chunked(
         service_account_path (str): Path to GCS service account key (relative path)
         local_dir (str): Local directory for temporary file downloads
         icechunk_store_path (str): Path for icechunk store
+        skip_download_if_exists (bool): If True, skip downloading files that already exist locally
     
     Returns:
         xr.Dataset: Combined ensemble dataset with all members (lazy-loaded via icechunk)
@@ -120,7 +122,7 @@ def download_ensemble_nc_from_gcs_chunked(
     
     # Set default GCS prefix based on forecast date if not provided
     if gcs_prefix is None:
-        gcs_prefix = f"{forecast_date}_0000/1p5deg_nc/"
+        gcs_prefix = f"{forecast_date}/1p5deg_nc/"
     
     print(f"📥 Downloading ensemble NetCDF files from GCS (Memory-Efficient)")
     print(f"   Bucket: gs://{gcs_bucket}/{gcs_prefix}")
@@ -179,10 +181,13 @@ def download_ensemble_nc_from_gcs_chunked(
             member_num = file_info['member']
             print(f"   📥 Processing member {member_num:03d} ({i+1}/{len(available_files)})")
             
-            # Download file if it doesn't exist locally
+            # Download file if it doesn't exist locally or if skip_download_if_exists is False
             local_path = os.path.join(local_dir, file_info['filename'])
-            if not os.path.exists(local_path):
-                print(f"      Downloading {file_info['filename']}")
+            if not os.path.exists(local_path) or not skip_download_if_exists:
+                if skip_download_if_exists and os.path.exists(local_path):
+                    print(f"      Re-downloading {file_info['filename']} (skip_download_if_exists=False)")
+                else:
+                    print(f"      Downloading {file_info['filename']}")
                 blob = bucket.blob(file_info['blob_name'])
                 blob.download_to_filename(local_path)
             else:
@@ -263,10 +268,11 @@ def download_ensemble_nc_from_gcs_chunked(
 def download_ensemble_nc_from_gcs(
     forecast_date, 
     members=None, 
-    gcs_bucket="ea_aifs_w1", 
-    gcs_prefix=None,
-    service_account_path="coiled-data-e4drr_202505.json",
-    local_dir="./ensemble_nc_files"
+    gcs_bucket="aifs-aiquest", 
+    gcs_prefix="forecasts",
+    service_account_path="coiled-data.json",
+    local_dir="./ensemble_nc_files",
+    skip_download_if_exists=True
 ):
     """
     Download ensemble NetCDF files from GCS and combine into a single dataset.
@@ -278,6 +284,7 @@ def download_ensemble_nc_from_gcs(
         gcs_prefix (str): GCS prefix where NetCDF files are stored. If None, uses forecast_date
         service_account_path (str): Path to GCS service account key
         local_dir (str): Local directory for temporary file downloads
+        skip_download_if_exists (bool): If True, skip downloading files that already exist locally
     
     Returns:
         xr.Dataset: Combined ensemble dataset with all members
@@ -328,14 +335,14 @@ def download_ensemble_nc_from_gcs(
         available_files.sort(key=lambda x: x['member'])  # Sort by member number
         print(f"   ✅ Found {len(available_files)} NetCDF files in GCS")
         
-        # Check which files need to be downloaded (only missing files)
+        # Check which files need to be downloaded (only missing files or if skip_download_if_exists is False)
         files_to_download = []
         existing_files = []
         
         for file_info in available_files:
             local_path = os.path.join(local_dir, file_info['filename'])
-            if os.path.exists(local_path):
-                # File already exists locally
+            if os.path.exists(local_path) and skip_download_if_exists:
+                # File already exists locally and we want to skip download
                 existing_files.append({
                     'local_path': local_path,
                     'member': file_info['member'],
@@ -343,8 +350,10 @@ def download_ensemble_nc_from_gcs(
                 })
                 print(f"   ✓ Already exists: {file_info['filename']}")
             else:
-                # File needs to be downloaded
+                # File needs to be downloaded (missing or forcing re-download)
                 files_to_download.append(file_info)
+                if os.path.exists(local_path):
+                    print(f"   🔄 Will re-download: {file_info['filename']} (skip_download_if_exists=False)")
         
         print(f"   📂 Found {len(existing_files)} files already downloaded")
         print(f"   📥 Need to download {len(files_to_download)} missing files")
@@ -421,7 +430,7 @@ def download_ensemble_nc_from_gcs(
         # Clean up only if explicitly requested
         pass
 
-def load_ensemble_from_gcs(forecast_date, members=None, use_icechunk=True):
+def load_ensemble_from_gcs(forecast_date, members=None, use_icechunk=True, skip_download_if_exists=True):
     """
     Convenience function to download and load ensemble data from GCS.
     
@@ -429,6 +438,7 @@ def load_ensemble_from_gcs(forecast_date, members=None, use_icechunk=True):
         forecast_date (str): Forecast date in YYYYMMDD format  
         members (list): Specific members to download, or None for all
         use_icechunk (bool): If True, use memory-efficient icechunk approach
+        skip_download_if_exists (bool): If True, skip downloading files that already exist locally
         
     Returns:
         xr.Dataset: Combined ensemble dataset
@@ -436,12 +446,14 @@ def load_ensemble_from_gcs(forecast_date, members=None, use_icechunk=True):
     if use_icechunk:
         return download_ensemble_nc_from_gcs_chunked(
             forecast_date=forecast_date,
-            members=members
+            members=members,
+            skip_download_if_exists=skip_download_if_exists
         )
     else:
         return download_ensemble_nc_from_gcs(
             forecast_date=forecast_date,
-            members=members
+            members=members,
+            skip_download_if_exists=skip_download_if_exists
         ) 
 
 def calculate_ensemble_quintiles(forecast_ds, forecast_date, climatology_base_path="./", variable_mapping=None):
@@ -802,7 +814,7 @@ def submit_forecast(quintile_file, variable, fc_start_date, fc_period, teamname,
 # Example usage
 if __name__ == "__main__":
     
-    forecast_date = '20250821'  # Updated to match your processing date
+    forecast_date = '20250904'  # Updated to match your processing date
     
     print("=" * 60)
     print("AIFS Ensemble Quintile Analysis Pipeline")
@@ -813,7 +825,7 @@ if __name__ == "__main__":
     # Step 1: Download ensemble NetCDF files from GCS (using icechunk for memory efficiency)
     print("📥 Step 1: Loading ensemble forecast from GCS...")
     print("   Using memory-efficient icechunk approach to avoid RAM issues")
-    fds = load_ensemble_from_gcs(forecast_date, use_icechunk=True)
+    fds = load_ensemble_from_gcs(forecast_date, use_icechunk=True,skip_download_if_exists=True)
     
     if fds is None:
         print("❌ Failed to load ensemble data from GCS")
@@ -903,6 +915,7 @@ if __name__ == "__main__":
     #     team_name,
     #     model_name,
     #     password)   
+
 
 
 

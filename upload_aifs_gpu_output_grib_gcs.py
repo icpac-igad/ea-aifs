@@ -6,8 +6,8 @@ Optimized for a2-ultragpu-1g instances with concurrent uploads
 This script uploads generated GRIB files to GCS using multiple threads
 to significantly reduce upload time for large files.
 
-python v2upload.py --bucket ea_aifs_w1 --directory /scratch/ensemble_outputs/ \ 
-                   --prefix forecasts/20250814_a3/ --threads 15
+export GOOGLE_APPLICATION_CREDENTIALS="service-account.json"
+python upload_aifs_gpu_output_grib_gcs.py --bucket aifs-aiquest --directory /scratch/ensemble_outputs/ --prefix forecasts/20250904/ --members 1-10 --threads 15
 """
 
 import os
@@ -200,9 +200,27 @@ class GCSGribUploaderMultiThreaded:
         
         return self.successful_uploads, self.failed_uploads, self.total_bytes_uploaded
     
+    def filter_files_by_members(self, files: List[Path], members: Optional[List[int]]) -> List[Path]:
+        """Filter files by ensemble member numbers if specified."""
+        if not members:
+            return files
+        
+        filtered_files = []
+        for file_path in files:
+            # Look for member pattern in filename (e.g., member001, member023)
+            filename = file_path.name
+            for member in members:
+                member_pattern = f"member{member:03d}"
+                if member_pattern in filename:
+                    filtered_files.append(file_path)
+                    break
+        
+        return filtered_files
+    
     def upload_directory(self, local_dir: str, gcs_prefix: str = "", 
                         pattern: str = "*.grib", remove_local: bool = False,
-                        batch_size: Optional[int] = None) -> Tuple[int, int, float]:
+                        batch_size: Optional[int] = None, 
+                        members: Optional[List[int]] = None) -> Tuple[int, int, float]:
         """
         Upload all files matching pattern from a directory to GCS using parallel uploads.
         
@@ -212,6 +230,7 @@ class GCSGribUploaderMultiThreaded:
             pattern: File pattern to match (default: '*.grib')
             remove_local: Whether to remove local files after upload
             batch_size: Optional batch size for processing (None = all at once)
+            members: Optional list of ensemble member numbers to filter files
             
         Returns:
             tuple: (successful_uploads, failed_uploads, total_size_mb)
@@ -228,7 +247,17 @@ class GCSGribUploaderMultiThreaded:
             print(f"❌ No files found matching pattern '{pattern}' in {local_dir}")
             return 0, 0, 0
         
-        print(f"📂 Found {len(files)} files to upload")
+        # Filter by ensemble members if specified
+        if members:
+            original_count = len(files)
+            files = self.filter_files_by_members(files, members)
+            print(f"📂 Found {original_count} files matching pattern, filtered to {len(files)} files for members {members}")
+            
+            if not files:
+                print(f"❌ No files found for specified ensemble members: {members}")
+                return 0, 0, 0
+        else:
+            print(f"📂 Found {len(files)} files to upload")
         
         # Calculate total size
         total_size = sum(f.stat().st_size for f in files) / (1024 * 1024)  # MB
@@ -303,6 +332,19 @@ def optimize_thread_count(file_count: int, file_size_mb: float) -> int:
         return min(20, file_count)
 
 
+def parse_member_range(member_str):
+    """Parse member range string like '1-50' or '1,2,3' into list of integers."""
+    members = []
+    if '-' in member_str:
+        start, end = map(int, member_str.split('-'))
+        members = list(range(start, end + 1))
+    elif ',' in member_str:
+        members = [int(m.strip()) for m in member_str.split(',')]
+    else:
+        members = [int(member_str)]
+    return members
+
+
 def main():
     """Main function to handle command line usage."""
     parser = argparse.ArgumentParser(
@@ -311,17 +353,22 @@ def main():
         epilog="""
 Examples:
   # Upload all GRIB files with default 10 threads
-  python continat_v20250817.py --bucket my-forecasts --directory ensemble_outputs/
+  python upload_aifs_gpu_output_grib_gcs.py --bucket my-forecasts --directory /scratch/ensemble_outputs/
   
-  # Upload with custom thread count (e.g., 20 threads for many small files)
-  python continat_v20250817.py --bucket my-forecasts --directory ensemble_outputs/ --threads 20
+  # Upload specific ensemble members (1-50 format)
+  python upload_aifs_gpu_output_grib_gcs.py --bucket my-forecasts --directory /scratch/ensemble_outputs/ \\
+    --members 1-50 --remove-local
+  
+  # Upload specific members (comma-separated)
+  python upload_aifs_gpu_output_grib_gcs.py --bucket my-forecasts --directory /scratch/ensemble_outputs/ \\
+    --members 1,5,10,25 --threads 15
   
   # Upload with date prefix and remove local files
-  python continat_v20250817.py --bucket my-forecasts --directory ensemble_outputs/ \\
-    --prefix forecasts/20240813/ --remove-local --threads 15
+  python upload_aifs_gpu_output_grib_gcs.py --bucket my-forecasts --directory /scratch/ensemble_outputs/ \\
+    --prefix forecasts/20250907/ --remove-local --threads 15
   
   # Upload in batches (useful for very large datasets)
-  python continat_v20250817.py --bucket my-forecasts --directory ensemble_outputs/ \\
+  python upload_aifs_gpu_output_grib_gcs.py --bucket my-forecasts --directory /scratch/ensemble_outputs/ \\
     --batch-size 50 --threads 10
         """
     )
@@ -346,6 +393,8 @@ Examples:
                        help="Prefix for GCS paths (for directory upload)")
     parser.add_argument("--pattern", default="*.grib",
                        help="File pattern to match (default: *.grib)")
+    parser.add_argument("--members",
+                       help="Specific ensemble members to upload (e.g., '1-50', '1,5,10' or single number)")
     parser.add_argument("--remove-local", action="store_true",
                        help="Remove local files after successful upload")
     parser.add_argument("--batch-size", type=int,
@@ -356,6 +405,16 @@ Examples:
     args = parser.parse_args()
     
     try:
+        # Parse members if specified
+        members = None
+        if args.members:
+            try:
+                members = parse_member_range(args.members)
+                print(f"Will process files for {len(members)} ensemble members: {members}")
+            except ValueError as e:
+                print(f"❌ Error parsing member range: {e}")
+                return 1
+        
         # Auto-optimize thread count if requested
         thread_count = args.threads
         if args.auto_optimize and args.directory:
@@ -393,7 +452,7 @@ Examples:
             # Directory upload with parallel processing
             successful, failed, total_size = uploader.upload_directory(
                 args.directory, args.prefix, args.pattern, 
-                args.remove_local, args.batch_size
+                args.remove_local, args.batch_size, members
             )
             
             if failed > 0:
