@@ -6,6 +6,15 @@ This document describes the complete sequential workflow for AI forecast submiss
 
 The AI forecast submission process consists of 7 sequential steps that move data between different computing environments (CPU, GPU, and cloud storage) to produce ensemble weather forecasts and submit them for evaluation.
 
+### Workflow Index
+1. **Initial Condition Preparation** → `ecmwf_opendata_pkl_input_aifsens.py`
+2. **Transfer to GPU Environment** → `download_pkl_from_gcs.py`
+3. **AI Model Execution** → `multi_run_AIFS_ENS_v1.py`
+4. **GPU Output Upload** → `upload_aifs_gpu_output_grib_gcs.py`
+5. **Forecast Download & Regrid** → `aifs_n320_grib_1p5defg_nc.py`
+6. **Ensemble Analysis** → `ensemble_quintile_analysis.py`
+7. **Forecast Submission** → `forecast_submission_20250918.ipynb`
+
 ## Sequential Workflow Steps
 
 ### Step 1: Initial Condition Preparation (CPU)
@@ -140,16 +149,16 @@ The workflow culminates with the execution of `submit_forecast()` function in `e
 | Script | Execution Time | Environment | Cost (USD) | Notes |
 |--------|----------------|-------------|------------|--------|
 | `ecmwf_opendata_pkl_input_aifsens.py` | 2-2.5 hours | CPU (n2-standard-2) | ~$0.48-0.60 | Data preprocessing and GCS upload |
-| `download_pkl_from_gcs.py` | 10-15 minutes | GPU (a2-ultragpu-1g) | ~$0.50-0.75 | Fast GCS download to GPU local storage |
-| `multi_run_AIFS_ENS_v1.py` | 6 hours | GPU (a2-ultragpu-1g) | ~$5-6 | 50 ensemble members AI inference |
-| `upload_aifs_gpu_output_grib_gcs.py` | 5 minutes | GPU (a2-ultragpu-1g) | ~$0.25 | Multi-threaded GRIB upload |
+| `download_pkl_from_gcs.py` | 10-15 minutes | GPU (a2-ultragpu-1g) | ~$1.25-1.50 | Fast GCS download to GPU local storage |
+| `multi_run_AIFS_ENS_v1.py` | 6.5-7 hours | GPU (a2-ultragpu-1g) | ~$35-42 | 50 ensemble members AI inference |
+| `upload_aifs_gpu_output_grib_gcs.py` | 5 minutes | GPU (a2-ultragpu-1g) | ~$0.50 | Multi-threaded GRIB upload |
 | `aifs_n320_grib_1p5defg_nc.py` | 4-4.5 hours | CPU (n2-standard-2) | ~$0.96-1.08 | GRIB regridding and processing |
 | `ensemble_quintile_analysis.py` | 15 minutes | CPU (n2-standard-2) | ~$0.06 | Ensemble analysis and submission |
 | `forecast_submission_20250918.ipynb` | 5 minutes | CPU (n2-standard-2) | ~$0.02 | Final submission validation |
 
-**Total Cost per Forecast Run: ~$30-40 USD**
-- GPU Operations: ~$5-6 per hour
-- CPU Operations: ~$2-3
+**Total Cost per Forecast Run: ~$39-46 USD**
+- GPU Operations: ~$37-44 (7+ hours at $5-6/hour)
+- CPU Operations: ~$1.5-2 (7+ hours at $0.24/hour)
 
 ## Forecast Run History
 
