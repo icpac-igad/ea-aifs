@@ -550,6 +550,34 @@ Keep track of:
 - Processing parameters
 - Performance improvements
 
+## Common Problems
+
+```
+python multi_run_AIFS_ENS_v1.py 
+Initial date is 2025-09-21 12:00:00
+
+Loading model...
+Model loaded successfully!
+
+============================================================
+Processing ensemble member 9/1
+============================================================
+Retrieving initial conditions for member 9...
+Running forecast for member 9...                                                                                                                                              
+Fetching 7 files: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7/7 [00:00<00:00, 51690.37it/s]
+✗ Error processing member 9: CUDA out of memory. Tried to allocate 3.10 GiB. GPU 0 has a total capacity of 79.25 GiB of which 1.99 GiB is free. Process 7100 has 50.66 GiB memory in use. Process 27947 has 26.58 GiB memory in use. Of the allocated memory 24.19 GiB is allocated by PyTorch, and 1.90 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
+============================================================
+Processing complete!
+Successfully processed 0/1 members
+Total processing time: 0.0 minutes
+Total disk space used: 0.00 MB (0.00 GB)
+
+Generated 0 GRIB files in /scratch/ensemble_outputs/
+Expected 11 file(s) per member for 792-hour forecast
+```
+
+
 ## Acknowledgements
 
 This work was funded in part by:
