@@ -74,17 +74,17 @@ except Exception:
 class GRIBToNetCDFProcessor:
     def __init__(self):
         # GCS Configuration
-        self.gcs_bucket = "ea_aifs_w1"
-        self.gcs_input_prefix = "forecasts/20240821_0000/"
-        self.gcs_output_prefix = "20240821_0000/1p5deg_nc/"
-        self.service_account_key = "coiled-data-e4drr_202505.json"
+        self.gcs_bucket = "aifs-aiquest"
+        self.gcs_input_prefix = "forecasts/20251023/"
+        self.gcs_output_prefix = "forecasts/20251023/1p5deg_nc/"
+        self.service_account_key = "coiled-data.json"
 
         # Forecast Configuration
-        self.forecast_date = "20250822"
-        self.forecast_time = "1200"
+        self.forecast_date = "20251024"
+        self.forecast_time = "1800"
         #self.forecast_time = "0000" for ensemble 1-28
 
-        self.members = list(range(36, 51))  # Members 1-50
+        self.members = list(range(46, 51))  # Members 1-50
 
         # Time ranges for 792-hour forecast
         self.time_ranges = [
@@ -566,4 +566,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     exit(main())
+
 
