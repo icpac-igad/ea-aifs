@@ -18,7 +18,7 @@ import os
 import time
 import warnings
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
 
@@ -469,6 +469,9 @@ def main():
 
     # Configuration
     date_str = '20251103'
+    dt = datetime.strptime(date_str, '%Y%m%d')
+    prev_dt = dt - timedelta(days=1)
+    prev_date_str = prev_dt.strftime('%Y%m%d')
     run = '00'
     target_members = [-1, 1, 2, 3, 4, 5]  + list(range(6, 51))
 
@@ -479,8 +482,8 @@ def main():
 
     # Define ECMWF files - just the first few timesteps for efficiency
     ecmwf_files = [
-        f"s3://ecmwf-forecasts/{date_str}/{run}z/ifs/0p25/enfo/{date_str}{run}0000-0h-enfo-ef.grib2",
-        f"s3://ecmwf-forecasts/{date_str}/{run}z/ifs/0p25/enfo/{date_str}{run}0000-3h-enfo-ef.grib2"
+        f"s3://ecmwf-forecasts/{date_str}/{run}z/ifs/0p25/enfo/{prev_date_str}180000-0h-enfo-ef.grib2",
+        f"s3://ecmwf-forecasts/{date_str}/{run}z/ifs/0p25/enfo/{date_str}{run}0000-0h-enfo-ef.grib2"
     ]
 
     # Check file availability
