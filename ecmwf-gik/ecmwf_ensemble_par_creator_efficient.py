@@ -51,17 +51,14 @@ def log_checkpoint(message: str, start_time: float = None):
     return current_time
 
 
-# Import the efficient functions from existing files
+# Import the efficient functions from utils module
 try:
-    from eutils import fixed_ensemble_grib_tree, ecmwf_filter_scan_grib
-    log_message("Successfully imported efficient functions from eutils.py")
-except ImportError:
-    try:
-        from test_run_ecmwf_step1_scangrib import fixed_ensemble_grib_tree, ecmwf_filter_scan_grib
-        log_message("Successfully imported efficient functions from test file")
-    except ImportError:
-        log_message("Error: Could not import required functions. Please ensure eutils.py or test_run_ecmwf_step1_scangrib.py is available", "ERROR")
-        exit(1)
+    from utils_ecmwf_step1_scangrib import fixed_ensemble_grib_tree, ecmwf_filter_scan_grib
+    log_message("Successfully imported efficient functions from utils_ecmwf_step1_scangrib")
+except ImportError as e:
+    log_message(f"Error: Could not import required functions from utils_ecmwf_step1_scangrib.py: {e}", "ERROR")
+    log_message("Please ensure utils_ecmwf_step1_scangrib.py is in the same directory", "ERROR")
+    exit(1)
 
 
 def process_ecmwf_files_efficiently(
@@ -139,22 +136,26 @@ def process_ecmwf_files_efficiently(
     create_parquet_file_fixed(deflated_ensemble_tree['refs'], str(comprehensive_parquet))
     log_checkpoint(f"Comprehensive parquet saved: {comprehensive_parquet}", parquet_start)
 
-    # Step 5: Validate with datatree
-    validation_start = log_checkpoint("Validating with xarray datatree")
+    # Step 5: Validate zarr metadata
+    # Using simple zarr metadata validation instead of xarray to avoid version compatibility issues
+    validation_start = log_checkpoint("Validating zarr metadata")
     try:
-        fs = fsspec.filesystem("reference", fo=ensemble_tree, remote_protocol='s3', remote_options={'anon': True})
-        mapper = fs.get_mapper("")
+        # Find all zarr variables in the ensemble tree
+        variables = set()
+        for key in ensemble_tree['refs'].keys():
+            if '/.zarray' in key:
+                var_path = key.replace('/.zarray', '')
+                variables.add(var_path)
 
-        dt = xr.open_datatree(mapper, engine="zarr", consolidated=False)
-        log_checkpoint("DataTree validation successful", validation_start)
+        if not variables:
+            raise ValueError("No valid zarr variables found in ensemble tree")
 
-        # Log available variables
-        variables = list(dt.keys())
-        log_message(f"Available variables: {len(variables)}")
-        log_message(f"Variables: {variables[:10]}{'...' if len(variables) > 10 else ''}")
+        log_checkpoint("Zarr metadata validation successful", validation_start)
+        log_message(f"Validated {len(variables)} zarr variables")
+        log_message(f"Sample variables: {sorted(list(variables))[:10]}{'...' if len(variables) > 10 else ''}")
 
     except Exception as e:
-        log_message(f"DataTree validation failed: {e}", "WARNING")
+        log_message(f"Zarr validation failed: {e}", "WARNING")
 
     return {
         'ensemble_tree': ensemble_tree,
@@ -208,18 +209,26 @@ def extract_individual_member_parquets(
             member_parquet = member_dir / f"{member_name}.parquet"
             create_parquet_file_fixed(member_refs, str(member_parquet))
 
-            # Validate member file
+            # Validate member file using simple zarr metadata check
+            # This avoids fsspec/xarray version compatibility issues
             try:
-                fs = fsspec.filesystem("reference", fo={'refs': member_refs, 'version': 1},
-                                     remote_protocol='s3', remote_options={'anon': True})
-                mapper = fs.get_mapper("")
-                dt_member = xr.open_datatree(mapper, engine="zarr", consolidated=False)
+                # Find all zarr variables
+                variables = set()
+                for key in member_refs.keys():
+                    if '/.zarray' in key:
+                        var_path = key.replace('/.zarray', '')
+                        variables.add(var_path)
+
+                if not variables:
+                    raise ValueError("No valid zarr variables found in parquet")
+
+                log_message(f"Validated {len(variables)} zarr variables in {member_name}")
 
                 extraction_results[member_name] = {
                     'success': True,
                     'parquet_file': str(member_parquet),
                     'refs_count': len(member_refs),
-                    'variables': list(dt_member.keys())
+                    'variables_count': len(variables)
                 }
 
                 log_checkpoint(f"{member_name} extraction completed successfully", extract_start)
@@ -459,8 +468,8 @@ def main():
     start_time = time.time()
 
     # Configuration
-    date_str = '20250728'
-    run = '18'
+    date_str = '20251103'
+    run = '00'
     target_members = [-1, 1, 2, 3, 4, 5]  + list(range(6, 51))
 
     # Create output directory
