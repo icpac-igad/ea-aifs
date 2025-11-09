@@ -38,7 +38,7 @@ LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
 SOIL_LEVELS = [1, 2]
 
 # Configuration
-date_str = '20251104'
+date_str = '20251108'
 run = '00'
 
 # Output configuration
@@ -794,3 +794,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
