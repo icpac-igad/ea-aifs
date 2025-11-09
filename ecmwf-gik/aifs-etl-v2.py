@@ -9,6 +9,13 @@ Key improvements over v1:
 - Properly detects and extracts all 13 pressure levels from multi-dimensional arrays
 - Removes the faulty single-level fallback logic
 - Focuses on data extraction only (no regridding)
+- NOW INCLUDES static/constant fields (z, slor, sdor) that earthkit.data collects
+  These orography-related fields are critical for AIFS model compatibility
+
+Static variables added (matching earthkit.data behavior):
+- z: Surface geopotential (orography) - GRIB code 129
+- slor: Slope of sub-gridscale orography - GRIB code 161
+- sdor: Standard deviation of orography - GRIB code 160
 
 Usage:
     python aifs-etl-v2.py
@@ -30,8 +37,18 @@ import pandas as pd
 
 
 # Configuration
+# Surface parameters (time-varying)
 PARAM_SFC = ["10u", "10v", "2d", "2t", "msl", "skt", "sp", "tcw"]
-PARAM_SFC_FC = ["lsm"]
+
+# Static/constant surface fields (orography-related)
+# These fields are collected by earthkit.data from ECMWF Open Data
+# GRIB parameter codes: z=129, slor=161, sdor=160
+PARAM_SFC_FC = ["lsm", "z", "slor", "sdor"]
+#   - lsm: Land-sea mask
+#   - z: Surface geopotential (orography) - CRITICAL for AIFS
+#   - slor: Slope of sub-gridscale orography
+#   - sdor: Standard deviation of orography
+
 PARAM_SOIL = []  # Not available in parquet
 PARAM_PL = ["gh", "t", "u", "v", "w", "q"]
 LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
@@ -330,8 +347,11 @@ def get_variable_path_mapping():
         'sp': 'sp/instant/surface/sp',
         'skt': 'skt/instant/surface/skt',
         'tcw': 'tcw/instant/entireAtmosphere/tcw',
-        # Fixed fields
+        # Fixed fields (constants)
         'lsm': 'lsm/instant/surface/lsm',
+        'z': 'z/instant/surface/z',        # Surface geopotential (orography)
+        'slor': 'slor/instant/surface/slor',  # Slope of sub-gridscale orography
+        'sdor': 'sdor/instant/surface/sdor',  # Standard deviation of orography
         # Pressure level parameters
         'gh': 'gh/instant/isobaricInhPa/gh',
         't': 't/instant/isobaricInhPa/t',
