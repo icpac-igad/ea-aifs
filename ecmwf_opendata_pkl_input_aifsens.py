@@ -30,13 +30,13 @@ LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
 SOIL_LEVELS = [1, 2]
 
 # Test configuration
-ENSEMBLE_MEMBERS = list(range(1, 51))  # Test all 50 members
+ENSEMBLE_MEMBERS = list(range(1, 14))  # Test all 50 members
 OUTPUT_DIR = "test_input_states"
 SAVE_STATES = True  # Save input states to disk for verification
 
 # GCS configuration
-GCS_BUCKET = "hrrr_delete"
-GCS_SERVICE_ACCOUNT_KEY = "coiled-data-e4drr_202505.json"
+GCS_BUCKET = "aifs-aiquest-us-20251127"
+GCS_SERVICE_ACCOUNT_KEY = "coiled-data.json"
 UPLOAD_TO_GCS = True  # Upload pkl files to GCS
 CLEANUP_LOCAL_FILES = True  # Remove local files after successful GCS upload
 
@@ -178,7 +178,7 @@ def upload_to_gcs(local_file_path, gcs_bucket, gcs_blob_name, service_account_ke
 def main():
     """Main function to test ensemble input state creation."""
     # Get latest date
-    DATE = datetime.datetime(2025, 9, 18, 0, 0)  # 2025-09-11 00:00 UTC
+    DATE = datetime.datetime(2025, 11, 27, 0, 0)  # 2025-09-11 00:00 UTC
     #DATE = OpendataClient("ecmwf").latest()
     datestr = DATE.strftime("%Y%m%d_%H%M")
     print(f"Initial date is {DATE}")
@@ -231,7 +231,7 @@ def main():
                     
                     # Upload to GCS if enabled
                     if UPLOAD_TO_GCS:
-                        gcs_blob_name = f"{datestr}/input_state_member_{member:03d}.pkl"
+                        gcs_blob_name = f"{datestr}/input/input_state_member_{member:03d}.pkl"
                         upload_success = upload_to_gcs(filename, GCS_BUCKET, gcs_blob_name, GCS_SERVICE_ACCOUNT_KEY)
                         
                         # Clean up local file if upload successful and cleanup enabled
@@ -283,3 +283,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -7,4 +7,11 @@ ecmwf-opendata
 arraylake
 icechunk
 dask[distributed]
-coiled
+fastparquet 
+pyarrow 
+obstore 
+kerchunk
+cartopy
+matplotlib
+geopandas 
+
