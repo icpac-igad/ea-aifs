@@ -18,8 +18,8 @@ from google.cloud import storage
 
 
 # GCS configuration
-GCS_BUCKET = "hrrr_delete"
-GCS_SERVICE_ACCOUNT_KEY = "coiled-data-e4drr_202505.json"
+GCS_BUCKET = "aifs-aiquest-us-20251127"
+GCS_SERVICE_ACCOUNT_KEY = "coiled-data.json"
 
 
 def download_from_gcs(gcs_bucket, gcs_blob_name, local_file_path, service_account_key):
@@ -127,8 +127,8 @@ def main():
     for member in members:
         print(f"\nDownloading ensemble member {member}...")
         
-        # Define paths
-        gcs_blob_name = f"{args.date}/input_state_member_{member:03d}.pkl"
+        # Define paths (matches upload path: YYYYMMDD_0000/input/input_state_member_XXX.pkl)
+        gcs_blob_name = f"{args.date}/input/input_state_member_{member:03d}.pkl"
         local_file_path = os.path.join(args.output_dir, f"input_state_member_{member:03d}.pkl")
         
         # Skip if file already exists

@@ -140,8 +140,6 @@ def get_input_fields(date, number):
 
 def run_ensemble_member(runner, date, member, output_dir):
     """Run forecast for a single ensemble member and save to GRIB files every 72 hours."""
-    date_str = date.strftime("%Y%m%d_%H%M")
-
     # Get input fields (either from pickle or live download)
     if USE_PICKLE_FILES:
         print(f"Loading initial conditions from pickle for member {member}...")
@@ -152,6 +150,10 @@ def run_ensemble_member(runner, date, member, output_dir):
         print(f"Retrieving initial conditions for member {member}...")
         fields = get_input_fields(date, member)
         input_state = dict(date=date, fields=fields)
+
+    # Create date string AFTER determining the actual forecast date
+    # Format: YYYYMMDD_HHMM (e.g., 20251127_0000)
+    date_str = date.strftime("%Y%m%d_%H%M")
 
     # Set context properties on the runner (which extends Context)
     runner.time_step = 6  # 6-hour time step

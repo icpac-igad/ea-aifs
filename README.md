@@ -29,18 +29,18 @@ coiled notebook start --name aifs-etl --vm-type n2-standard-2 --software aifs-et
 - **Output:** Pickle files containing preprocessed input states
 - **Action:** Upload pickle files to GCS bucket for GPU access
 
-### Step 2: Transfer to GPU Environment 
-```bash 
-coiled notebook start --name p1-aifs-20250918 --vm-type a2-ultragpu-1g --software flashattn-dockerv1 --workspace=gcp-sewaa-nka --region europe-west4
+### Step 2: Transfer to GPU Environment
+```bash
+coiled notebook start --name p1-aifs-20250918 --vm-type a2-ultragpu-1g --software flashattn-dockerv1 --workspace=gcp-sewaa-nka --region us-east5
 ```
-In the GPU notebook bash 
-```bash 
-python download_pkl_from_gcs.py --date 20250828_0000 --members 1-25 --output-dir /scratch/input_states
+In the GPU notebook bash
+```bash
+python download_pkl_from_gcs.py --date 20251127_0000 --members 1-50 --output-dir /scratch/input_states
 ```
 **File:** `download_pkl_from_gcs.py`
 - **Purpose:** Download preprocessed input states to GPU machine
 - **Environment:** GPU machine
-- **Input:** Pickle files from GCS bucket
+- **Input:** Pickle files from GCS bucket (`gs://aifs-aiquest-us-20251127/YYYYMMDD_0000/input/`)
 - **Output:** Local input state files ready for model execution
 - **Action:** Avoids time-consuming data retrieval on expensive GPU instances
 
@@ -57,17 +57,17 @@ python multi_run_AIFS_ENS_v1.py
 - **Action:** Generate 792-hour forecasts using AI model
 
 ### Step 4: GPU Output Upload
-In the GPU notebook bash 
+In the GPU notebook bash
 ```bash
-python upload_aifs_gpu_output_grib_gcs.py --bucket aifs-aiquest --directory /scratch/ensemble_outputs/ --prefix forecasts/20250904/ --members 1-10 --threads 15
+python upload_aifs_gpu_output_grib_gcs.py --bucket aifs-aiquest-us-20251127 --directory /scratch/ensemble_outputs/ --prefix 20251127_0000/forecasts/ --members 1-50 --threads 15
 
-SHUTDOWN GPU notebook 
+SHUTDOWN GPU notebook
 ```
 **File:** `upload_aifs_gpu_output_grib_gcs.py`
-- **Purpose:** Upload generated GRIB files to cloud storage  
+- **Purpose:** Upload generated GRIB files to cloud storage
 - **Environment:** GPU machine
 - **Input:** GRIB forecast files from Step 3
-- **Output:** GRIB files uploaded to GCS bucket
+- **Output:** GRIB files uploaded to GCS bucket (`gs://aifs-aiquest-us-20251127/YYYYMMDD_0000/forecasts/`)
 - **Action:** Multi-threaded upload for faster transfer, then shutdown GPU
 
 ### Step 5: Forecast Download regrid from N320 into 1.5 deg (ETL Environment)
@@ -104,9 +104,9 @@ Use forecast_submission_20250918.ipynb
 ## Key Components
 
 ### Data Flow
-1. **ECMWF Open Data** → **Pickle Files** → **GCS Bucket**
-2. **GCS Bucket** → **GPU Input** → **AI Model** → **GRIB Output**
-3. **GRIB Output** → **GCS Bucket** → **ETL Environment** → **Analysis & Submission**
+1. **ECMWF Open Data** → **Pickle Files** → **GCS Bucket** (`YYYYMMDD_0000/input/`)
+2. **GCS Bucket** → **GPU Input** → **AI Model** → **GRIB Output** → **GCS Bucket** (`YYYYMMDD_0000/forecasts/`)
+3. **GCS Bucket** → **ETL Environment** → **NetCDF** → **GCS Bucket** (`YYYYMMDD_0000/1p5deg_nc/`) → **Analysis & Submission**
 
 ### Computing Environments
 - **CPU Machine:** Data preprocessing and initial condition preparation
@@ -114,9 +114,13 @@ Use forecast_submission_20250918.ipynb
 - **ETL Machine:** Post-processing, analysis, and submission (cost-effective)
 
 ### Storage Strategy
-- **GCS Buckets:** Intermediate storage between computing environments
+- **GCS Bucket:** `aifs-aiquest-us-20251127` (us-east5 region)
+- **Path Structure:**
+  - Input pickle files: `YYYYMMDD_0000/input/`
+  - GRIB forecasts: `YYYYMMDD_0000/forecasts/`
+  - NetCDF outputs: `YYYYMMDD_0000/1p5deg_nc/`
 - **Multi-threading:** Fast upload/download of large GRIB files
-- **Service Account:** Authentication for GCS access (`coiled-data-e4drr_202505.json`)
+- **Service Account:** Authentication for GCS access (`coiled-data.json`)
 
 ## Configuration Parameters
 

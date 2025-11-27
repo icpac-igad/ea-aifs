@@ -94,10 +94,10 @@ def download_all_quintiles(forecast_date, variables=None, password=None):
     return quintile_data
 
 def download_ensemble_nc_from_gcs_chunked(
-    forecast_date, 
-    members=None, 
-    gcs_bucket="aifs-aiquest", 
-    gcs_prefix="forecasts",
+    forecast_date,
+    members=None,
+    gcs_bucket="aifs-aiquest-us-20251127",
+    gcs_prefix=None,  # Will default to YYYYMMDD_0000/1p5deg_nc/
     service_account_path="coiled-data.json",
     local_dir="./ensemble_nc_files",
     icechunk_store_path="./ensemble_icechunk_store",
@@ -121,9 +121,10 @@ def download_ensemble_nc_from_gcs_chunked(
     """
     
     # Set default GCS prefix based on forecast date if not provided
+    # Path structure: YYYYMMDD_0000/1p5deg_nc/
     if gcs_prefix is None:
-        gcs_prefix = f"{forecast_date}/1p5deg_nc/"
-    
+        gcs_prefix = f"{forecast_date}_0000/1p5deg_nc/"
+
     print(f"📥 Downloading ensemble NetCDF files from GCS (Memory-Efficient)")
     print(f"   Bucket: gs://{gcs_bucket}/{gcs_prefix}")
     print(f"   Forecast date: {forecast_date}")
@@ -266,10 +267,10 @@ def download_ensemble_nc_from_gcs_chunked(
         return None
 
 def download_ensemble_nc_from_gcs(
-    forecast_date, 
-    members=None, 
-    gcs_bucket="aifs-aiquest", 
-    gcs_prefix="forecasts",
+    forecast_date,
+    members=None,
+    gcs_bucket="aifs-aiquest-us-20251127",
+    gcs_prefix=None,  # Will default to YYYYMMDD_0000/1p5deg_nc/
     service_account_path="coiled-data.json",
     local_dir="./ensemble_nc_files",
     skip_download_if_exists=True
@@ -291,13 +292,14 @@ def download_ensemble_nc_from_gcs(
     """
     
     # Set default GCS prefix based on forecast date if not provided
+    # Path structure: YYYYMMDD_0000/1p5deg_nc/
     if gcs_prefix is None:
         gcs_prefix = f"{forecast_date}_0000/1p5deg_nc/"
-    
+
     print(f"📥 Downloading ensemble NetCDF files from GCS")
     print(f"   Bucket: gs://{gcs_bucket}/{gcs_prefix}")
     print(f"   Forecast date: {forecast_date}")
-    
+
     try:
         # Initialize GCS client
         credentials = service_account.Credentials.from_service_account_file(service_account_path)
