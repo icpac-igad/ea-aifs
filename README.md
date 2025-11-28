@@ -132,6 +132,47 @@ Use forecast_submission_20250918.ipynb
 ### Meteorological Parameters
 - **Surface:** pr, mslp, tas
 
+### GPU Memory Optimization
+
+The AIFS-ENS model requires ~50GB VRAM at full precision, limiting it to high-end GPUs (A100, H100).
+The following settings in `multi_run_AIFS_ENS_v1.py` reduce memory usage to <24GB, enabling use on more
+accessible GPUs like RTX 4090 or A10G.
+
+**Reference:** [HuggingFace Discussion #17](https://huggingface.co/ecmwf/aifs-ens-1.0/discussions/17)
+
+#### Configuration Options
+
+```python
+# In multi_run_AIFS_ENS_v1.py
+GPU_MEMORY_OPTIMIZATION = True   # Enable memory optimizations
+INFERENCE_PRECISION = "16"       # "16" (FP16) or "32" (FP32)
+INFERENCE_NUM_CHUNKS = 16        # 8, 16, 32, or 64
+```
+
+#### Memory Reduction Techniques
+
+| Setting | Description | Memory Impact |
+|---------|-------------|---------------|
+| `INFERENCE_PRECISION="16"` | Use FP16 (half precision) inference | ~40-50% reduction |
+| `INFERENCE_NUM_CHUNKS=16` | Split computation into chunks | ~20-30% reduction |
+| `PYTORCH_CUDA_ALLOC_CONF` | Enable expandable memory segments | Reduces fragmentation |
+
+#### Recommended Configurations by GPU
+
+| GPU | VRAM | Settings |
+|-----|------|----------|
+| A100 (80GB) | 80GB | `GPU_MEMORY_OPTIMIZATION=False` (full precision) |
+| A100 (40GB) | 40GB | `PRECISION="16"`, `CHUNKS=8` |
+| A10G | 24GB | `PRECISION="16"`, `CHUNKS=16` |
+| RTX 4090 | 24GB | `PRECISION="16"`, `CHUNKS=16` |
+| RTX 3090 | 24GB | `PRECISION="16"`, `CHUNKS=32` |
+
+#### Trade-offs
+
+- **FP16 Precision:** Minimal accuracy impact for weather forecasting; slight differences in extreme values
+- **Chunking:** Higher chunk counts reduce memory but increase inference time (~5-15% slower)
+- **Recommended:** Start with `PRECISION="16"` and `CHUNKS=16`, adjust if needed
+
 ## Dependencies
 
 ### Core Packages
