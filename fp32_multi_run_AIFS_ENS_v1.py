@@ -34,12 +34,12 @@ LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
 SOIL_LEVELS = [1, 2]
 
 # Multi-run configuration
-ENSEMBLE_MEMBERS = list(range(1, 10))  # Members 1-50
+ENSEMBLE_MEMBERS = list(range(18, 26))  # Members 1-50
 LEAD_TIME = 792  # Hours
 OUTPUT_DIR = "/scratch/ensemble_outputs"
 
 # Pickle file configuration
-USE_PICKLE_FILES = False  # Set to True to use pre-downloaded pickle files
+USE_PICKLE_FILES = True  # Set to True to use pre-downloaded pickle files
 PICKLE_INPUT_DIR = "/scratch/input_states"  # Directory containing downloaded pickle files
 
 

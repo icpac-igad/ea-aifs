@@ -30,8 +30,8 @@ def get_quintile_clim(forecast_date, variable, password=None):
     
     fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
 
-    clim1 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date1, variable, password='')
-    clim2 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date2, variable, password='')
+    clim1 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date1, variable, password='NegF8LfwK')
+    clim2 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date2, variable, password='NegF8LfwK')
 
     return clim1, clim2
 
@@ -524,68 +524,99 @@ def calculate_ensemble_quintiles(forecast_ds, forecast_date, climatology_base_pa
             continue
         
         var_quintiles = []
-        
-        for time_idx, time_val in enumerate(forecast_ds.time):
-            print(f"  Processing time {time_idx + 1}/{len(forecast_ds.time)}")
-            
-            # Calculate weekly means/accumulations for different step ranges
-            week_configs = [
-                ("week1", slice(0, 7)),   # Days 19-25 (steps 0-6 for week 1)
-                ("week2", slice(7, 14))   # Days 26-32 (steps 7-13 for week 2)
-            ]
-            
-            for week_name, step_slice in week_configs:
-                
-                # Get the appropriate climatology file for this variable and week
-                clim_file = climatology_files[clim_var][week_name]
-                
-                try:
-                    # Check if file exists
-                    if not os.path.exists(clim_file):
-                        print(f"    Warning: Climatology file not found: {clim_file}")
-                        continue
-                    
-                    # Load climatology data
-                    clim_ds = xr.open_dataset(clim_file)
-                    
-                    if clim_var not in clim_ds.data_vars:
-                        print(f"    Warning: {clim_var} not found in {clim_file}")
-                        continue
-                    
-                    # Get climatology quintiles (assuming they're stored as percentiles)
-                    clim_quintiles = clim_ds[clim_var]  # Shape: (time, quantile, latitude, longitude)
-                    print(f"    Loaded climatology data with shape: {clim_quintiles.shape}")
-                    print(f"    Climatology dimensions: {clim_quintiles.dims}")
-                    print(f"    Climatology quantile values: {clim_quintiles.quantile}")
-                    
-                    # Calculate forecast weekly statistics
-                    forecast_data = forecast_ds[var_name].isel(time=time_idx, step=step_slice)
-                    
-                    if var_name == 'tp':
-                        # For precipitation, calculate weekly accumulation (sum)
-                        weekly_forecast = forecast_data.sum(dim='step')
-                        print(f"    Calculated weekly precipitation accumulation for {week_name}")
-                    else:
-                        # For other variables, calculate weekly mean
-                        weekly_forecast = forecast_data.mean(dim='step')
-                        print(f"    Calculated weekly mean for {week_name}")
-                    
-                    # Calculate quintile probabilities for each grid point
-                    quintile_probs = calculate_grid_quintiles(weekly_forecast, clim_quintiles)
-                    
-                    # Add coordinates
-                    quintile_probs = quintile_probs.assign_coords({
-                        'time': time_val,
-                        'week': week_name,
-                        'quintile': quintile_bounds
-                    })
-                    
-                    var_quintiles.append(quintile_probs)
-                    print(f"    ✓ Completed quintile calculation for {week_name}")
-                    
-                except Exception as e:
-                    print(f"    Error processing {week_name} for {var_name}: {e}")
+
+        # FIXED: Aggregate across time chunks to get proper 7-day windows
+        # The data structure has:
+        #   - time=0: steps 0-11 (days 18.2-21.0, ~3 days)
+        #   - time=1: steps 12-23 (days 21.2-24.0, ~3 days)
+        #   - time=2: steps 24-35 (days 24.2-27.0, ~3 days)
+        #   - time=3: steps 36-47 (days 27.2-30.0, ~3 days)
+        #   - time=4: steps 48-59 (days 30.2-33.0, ~3 days)
+        # Each step is 6 hours, so 28 steps = 7 days
+
+        # Week configurations: aggregate data across time chunks for proper 7-day periods
+        # Week 1 (valid date ~day 18-25): use time=0 + time=1 (days 18.2-24.0, ~6 days)
+        # Week 2 (valid date ~day 25-32): use time=2 + time=3 + part of time=4 (days 24.2-32)
+        week_configs = [
+            ("week1", [0, 1]),      # Aggregate time chunks 0 and 1 (days 18-24, ~6 days)
+            ("week2", [2, 3, 4])    # Aggregate time chunks 2, 3, 4 (days 24-33, ~9 days)
+        ]
+
+        for week_name, time_chunks in week_configs:
+            print(f"  Processing {week_name} using time chunks {time_chunks}")
+
+            # Get the appropriate climatology file for this variable and week
+            clim_file = climatology_files[clim_var][week_name]
+
+            try:
+                # Check if file exists
+                if not os.path.exists(clim_file):
+                    print(f"    Warning: Climatology file not found: {clim_file}")
                     continue
+
+                # Load climatology data
+                clim_ds = xr.open_dataset(clim_file)
+
+                if clim_var not in clim_ds.data_vars:
+                    print(f"    Warning: {clim_var} not found in {clim_file}")
+                    continue
+
+                # Get climatology quintiles (assuming they're stored as percentiles)
+                clim_quintiles = clim_ds[clim_var]  # Shape: (time, quantile, latitude, longitude)
+                print(f"    Loaded climatology data with shape: {clim_quintiles.shape}")
+
+                # Aggregate forecast data across the specified time chunks
+                # Each time chunk has 12 valid steps (indices 0-11 relative to chunk)
+                chunk_data = []
+                total_steps = 0
+                for t_idx in time_chunks:
+                    if t_idx < len(forecast_ds.time):
+                        # Get all 12 valid steps from this time chunk
+                        chunk = forecast_ds[var_name].isel(time=t_idx, step=slice(0, 12))
+                        chunk_data.append(chunk)
+                        total_steps += 12
+                        print(f"      Added time chunk {t_idx}: 12 steps")
+
+                if not chunk_data:
+                    print(f"    Warning: No valid data for {week_name}")
+                    continue
+
+                # Concatenate along step dimension
+                forecast_data = xr.concat(chunk_data, dim='step')
+                print(f"    Total steps aggregated: {total_steps} (= {total_steps * 6 / 24:.1f} days)")
+
+                if var_name == 'tp':
+                    # For precipitation, calculate weekly accumulation (sum)
+                    # CRITICAL: Convert from meters to millimeters!
+                    # ECMWF AIFS outputs precipitation in meters, but climatology is in mm
+                    # Scale to 7 days: multiply by (7 days / actual days)
+                    actual_days = total_steps * 6 / 24  # Each step is 6 hours
+                    scaling_factor = 7.0 / actual_days
+                    weekly_forecast = forecast_data.sum(dim='step') * 1000 * scaling_factor  # m -> mm, scaled to 7 days
+                    print(f"    Calculated weekly precipitation: sum * 1000 * {scaling_factor:.3f} (scaled to 7 days)")
+                else:
+                    # For other variables, calculate weekly mean (no scaling needed for mean)
+                    weekly_forecast = forecast_data.mean(dim='step')
+                    print(f"    Calculated weekly mean for {week_name}")
+
+                # Calculate quintile probabilities for each grid point
+                quintile_probs = calculate_grid_quintiles(weekly_forecast, clim_quintiles)
+
+                # Add coordinates
+                quintile_probs = quintile_probs.assign_coords({
+                    'time': 0,  # Single time value since we aggregated
+                    'week': week_name,
+                    'quintile': quintile_bounds
+                })
+
+                var_quintiles.append(quintile_probs)
+                print(f"    ✓ Completed quintile calculation for {week_name}")
+
+            except Exception as e:
+                print(f"    Error processing {week_name} for {var_name}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
         
         if var_quintiles:
             # Combine all time periods and weeks
@@ -816,7 +847,7 @@ def submit_forecast(quintile_file, variable, fc_start_date, fc_period, teamname,
 # Example usage
 if __name__ == "__main__":
     
-    forecast_date = '20250904'  # Updated to match your processing date
+    forecast_date = '20260101'  # Updated to match your processing date
     
     print("=" * 60)
     print("AIFS Ensemble Quintile Analysis Pipeline")
