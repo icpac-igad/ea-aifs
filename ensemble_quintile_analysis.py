@@ -566,38 +566,47 @@ def calculate_ensemble_quintiles(forecast_ds, forecast_date, climatology_base_pa
                 print(f"    Loaded climatology data with shape: {clim_quintiles.shape}")
 
                 # Aggregate forecast data across the specified time chunks
-                # Each time chunk has 12 valid steps (indices 0-11 relative to chunk)
-                chunk_data = []
+                # IMPORTANT: Each time chunk has valid data at DIFFERENT step indices:
+                #   - time=0: steps 0-11 have valid data
+                #   - time=1: steps 12-23 have valid data
+                #   - time=2: steps 24-35 have valid data
+                #   - etc.
+                # We sum over ALL steps with skipna=True, then combine time chunks
+
+                chunk_sums = []
                 total_steps = 0
                 for t_idx in time_chunks:
                     if t_idx < len(forecast_ds.time):
-                        # Get all 12 valid steps from this time chunk
-                        chunk = forecast_ds[var_name].isel(time=t_idx, step=slice(0, 12))
-                        chunk_data.append(chunk)
+                        # Sum all steps within this time chunk (NaN values ignored)
+                        chunk = forecast_ds[var_name].isel(time=t_idx)
+                        chunk_sum = chunk.sum(dim='step', skipna=True)
+                        chunk_sums.append(chunk_sum)
+                        # Count valid steps (each time chunk has 12 valid 6-hourly steps = 3 days)
                         total_steps += 12
-                        print(f"      Added time chunk {t_idx}: 12 steps")
+                        print(f"      Added time chunk {t_idx}: 12 valid steps (3 days)")
 
-                if not chunk_data:
+                if not chunk_sums:
                     print(f"    Warning: No valid data for {week_name}")
                     continue
 
-                # Concatenate along step dimension
-                forecast_data = xr.concat(chunk_data, dim='step')
-                print(f"    Total steps aggregated: {total_steps} (= {total_steps * 6 / 24:.1f} days)")
+                # Sum across time chunks (not concatenate)
+                forecast_sum = sum(chunk_sums)
+                actual_days = total_steps * 6 / 24  # Each step is 6 hours
+                print(f"    Total: {total_steps} steps = {actual_days:.1f} days of data")
 
                 if var_name == 'tp':
                     # For precipitation, calculate weekly accumulation (sum)
                     # CRITICAL: Convert from meters to millimeters!
                     # ECMWF AIFS outputs precipitation in meters, but climatology is in mm
                     # Scale to 7 days: multiply by (7 days / actual days)
-                    actual_days = total_steps * 6 / 24  # Each step is 6 hours
                     scaling_factor = 7.0 / actual_days
-                    weekly_forecast = forecast_data.sum(dim='step') * 1000 * scaling_factor  # m -> mm, scaled to 7 days
+                    weekly_forecast = forecast_sum * 1000 * scaling_factor  # m -> mm, scaled to 7 days
                     print(f"    Calculated weekly precipitation: sum * 1000 * {scaling_factor:.3f} (scaled to 7 days)")
                 else:
-                    # For other variables, calculate weekly mean (no scaling needed for mean)
-                    weekly_forecast = forecast_data.mean(dim='step')
-                    print(f"    Calculated weekly mean for {week_name}")
+                    # For other variables, calculate weekly mean
+                    # Since we summed across time chunks, divide by number of valid steps to get mean
+                    weekly_forecast = forecast_sum / total_steps
+                    print(f"    Calculated weekly mean for {week_name} (sum / {total_steps} steps)")
 
                 # Calculate quintile probabilities for each grid point
                 quintile_probs = calculate_grid_quintiles(weekly_forecast, clim_quintiles)
