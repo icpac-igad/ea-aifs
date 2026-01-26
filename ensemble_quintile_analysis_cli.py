@@ -51,12 +51,13 @@ except ImportError:
     AIWQ_AVAILABLE = False
     print("Warning: AI_WQ_package not available. Submission functions will not work.")
 
-# Try to import icechunk (optional)
+# Try to import icechunk (optional but recommended for memory efficiency)
 try:
     import icechunk
     ICECHUNK_AVAILABLE = True
 except ImportError:
     ICECHUNK_AVAILABLE = False
+    print("Warning: icechunk not available. Memory-efficient processing disabled.")
 
 
 def valid_dates(forecast_date: str):
@@ -77,7 +78,7 @@ def valid_dates(forecast_date: str):
     return fc_valid_date1, fc_valid_date2
 
 
-def get_quintile_clim(forecast_date: str, variable: str, password: Optional[str] = None):
+def get_quintile_clim(forecast_date: str, variable: str, password: Optional[str] = 'NegF8LfwK'):
     """Retrieve quintile climatology for a given forecast date and variable."""
     if not AIWQ_AVAILABLE:
         raise RuntimeError("AI_WQ_package is required for climatology retrieval")
@@ -124,6 +125,185 @@ def download_all_quintiles(forecast_date: str, variables: Optional[List[str]] = 
             quintile_data[variable] = None
 
     return quintile_data
+
+
+def download_ensemble_nc_from_gcs_chunked(
+    forecast_date: str,
+    members: Optional[List[int]] = None,
+    gcs_bucket: str = "aifs-aiquest-us-20251127",
+    gcs_prefix: Optional[str] = None,
+    service_account_path: str = "coiled-data.json",
+    local_dir: str = "./ensemble_nc_files",
+    icechunk_store_path: str = "./ensemble_icechunk_store",
+    skip_download_if_exists: bool = True,
+    fp16: bool = False
+):
+    """
+    Download ensemble NetCDF files from GCS and combine using icechunk for memory efficiency.
+
+    This function processes members one at a time and stores them in an icechunk store,
+    avoiding the memory issues that occur when loading all members into RAM at once.
+
+    Args:
+        forecast_date: Forecast date in YYYYMMDD format
+        members: List of member numbers to download. If None, downloads all available
+        gcs_bucket: GCS bucket name
+        gcs_prefix: GCS prefix where NetCDF files are stored. If None, uses forecast_date
+        service_account_path: Path to GCS service account key
+        local_dir: Local directory for temporary file downloads
+        icechunk_store_path: Path for icechunk store
+        skip_download_if_exists: If True, skip downloading files that already exist locally
+        fp16: If True, use fp16_1p5deg_nc/ path instead of 1p5deg_nc/
+
+    Returns:
+        xr.Dataset: Combined ensemble dataset with all members (lazy-loaded via icechunk)
+    """
+    if not ICECHUNK_AVAILABLE:
+        raise RuntimeError("icechunk is required for memory-efficient processing. Install with: pip install icechunk")
+
+    # Set GCS prefix based on fp16 flag
+    if gcs_prefix is None:
+        if fp16:
+            gcs_prefix = f"{forecast_date}_0000/fp16_1p5deg_nc/"
+        else:
+            gcs_prefix = f"{forecast_date}_0000/1p5deg_nc/"
+
+    mode_label = "FP16" if fp16 else "FP32"
+
+    print(f"📥 Downloading ensemble NetCDF files from GCS (Memory-Efficient Mode)")
+    print(f"   Bucket: gs://{gcs_bucket}/{gcs_prefix}")
+    print(f"   Forecast date: {forecast_date}")
+    print(f"   Mode: {mode_label}")
+    print(f"   Icechunk store: {icechunk_store_path}")
+
+    try:
+        # Initialize GCS client
+        credentials = service_account.Credentials.from_service_account_file(service_account_path)
+        client = storage.Client(credentials=credentials)
+        bucket = client.bucket(gcs_bucket)
+
+        # Create local directory and clean up existing icechunk store
+        os.makedirs(local_dir, exist_ok=True)
+        if os.path.exists(icechunk_store_path):
+            shutil.rmtree(icechunk_store_path)
+
+        # List available NetCDF files in GCS
+        print(f"   🔍 Scanning for available NetCDF files...")
+        blobs = bucket.list_blobs(prefix=gcs_prefix)
+
+        available_files = []
+        for blob in blobs:
+            if blob.name.endswith('.nc'):
+                # Extract member number from filename
+                filename = os.path.basename(blob.name)
+                match = re.search(r'member(\d+)\.nc', filename)
+                if match:
+                    member_num = int(match.group(1))
+                    if members is None or member_num in members:
+                        available_files.append({
+                            'blob_name': blob.name,
+                            'filename': filename,
+                            'member': member_num
+                        })
+
+        if not available_files:
+            print(f"   ❌ No NetCDF files found in {gcs_prefix}")
+            return None
+
+        available_files.sort(key=lambda x: x['member'])  # Sort by member number
+        print(f"   ✅ Found {len(available_files)} NetCDF files in GCS")
+
+        # Create local icechunk repository
+        local_storage = icechunk.local_filesystem_storage(icechunk_store_path)
+        repo = icechunk.Repository.create(local_storage)
+        session = repo.writable_session("main")
+
+        zarr_group = "ensemble_forecast"
+        processed_count = 0
+
+        # Process members one by one for memory efficiency
+        for i, file_info in enumerate(available_files):
+            member_num = file_info['member']
+            print(f"   📥 Processing member {member_num:03d} ({i+1}/{len(available_files)})")
+
+            # Download file if it doesn't exist locally
+            local_path = os.path.join(local_dir, file_info['filename'])
+            if not os.path.exists(local_path) or not skip_download_if_exists:
+                print(f"      Downloading {file_info['filename']}")
+                blob = bucket.blob(file_info['blob_name'])
+                blob.download_to_filename(local_path)
+            else:
+                print(f"      Using cached file: {file_info['filename']}")
+
+            # Load and process single member
+            try:
+                ds = xr.open_dataset(local_path, chunks={'member': 1, 'step': 10, 'latitude': 60, 'longitude': 120})
+
+                # Update member coordinate to the correct value
+                ds = ds.assign_coords(member=[member_num])
+
+                if i == 0:
+                    # First member - create the store structure
+                    print(f"      🏗️  Creating icechunk store with member {member_num:03d}")
+                    ds.to_zarr(session.store, group=zarr_group, mode='w', consolidated=False)
+                    print(f"      ✅ Created store with dimensions: {dict(ds.dims)}")
+                else:
+                    # Append subsequent members along member dimension
+                    print(f"      ➕ Appending member {member_num:03d} to icechunk store")
+                    ds.to_zarr(session.store, group=zarr_group, append_dim='member', consolidated=False)
+
+                processed_count += 1
+
+                # Clean up memory immediately
+                ds.close()
+                del ds
+                gc.collect()
+
+            except Exception as e:
+                print(f"      ❌ Error processing member {member_num:03d}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+
+        if processed_count == 0:
+            print(f"   ❌ No members could be processed")
+            return None
+
+        # Commit the session
+        session.commit(f"Processed {processed_count} ensemble members for {forecast_date}")
+        print(f"   ✅ Committed icechunk store with {processed_count} members")
+
+        # Open the final dataset for reading
+        print(f"   🔗 Opening final ensemble dataset from icechunk store...")
+        read_session = repo.readonly_session(branch="main")
+        ensemble_ds = xr.open_zarr(read_session.store, group=zarr_group,
+                                 chunks={'member': 1, 'step': 10, 'latitude': 60, 'longitude': 120})
+
+        # Add ensemble metadata
+        ensemble_ds.attrs.update({
+            'title': f'AIFS Ensemble Forecast - Icechunk Store ({mode_label})',
+            'description': f'Memory-efficient ensemble forecast with {processed_count} members',
+            'forecast_date': forecast_date,
+            'precision': mode_label,
+            'members': f'{available_files[0]["member"]}-{available_files[-1]["member"]}',
+            'source': 'ECMWF AIFS processed through icechunk for memory efficiency',
+            'processing_date': str(np.datetime64('now')),
+            'storage_backend': 'icechunk'
+        })
+
+        print(f"   ✅ Final ensemble dataset:")
+        print(f"      Members: {ensemble_ds.sizes['member']}")
+        print(f"      Variables: {list(ensemble_ds.data_vars)}")
+        print(f"      Dimensions: {dict(ensemble_ds.dims)}")
+        print(f"      Storage: icechunk (lazy-loaded, memory-efficient)")
+
+        return ensemble_ds
+
+    except Exception as e:
+        print(f"❌ Error in icechunk processing: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 
 def download_ensemble_nc_from_gcs(
@@ -253,6 +433,56 @@ def download_ensemble_nc_from_gcs(
         import traceback
         traceback.print_exc()
         return None
+
+
+def load_ensemble_from_gcs(
+    forecast_date: str,
+    members: Optional[List[int]] = None,
+    gcs_bucket: str = "aifs-aiquest-us-20251127",
+    service_account_path: str = "coiled-data.json",
+    use_icechunk: bool = True,
+    skip_download_if_exists: bool = True,
+    fp16: bool = False
+):
+    """
+    Convenience function to download and load ensemble data from GCS.
+
+    Args:
+        forecast_date: Forecast date in YYYYMMDD format
+        members: Specific members to download, or None for all
+        gcs_bucket: GCS bucket name
+        service_account_path: Path to GCS service account key
+        use_icechunk: If True, use memory-efficient icechunk approach (recommended)
+        skip_download_if_exists: If True, skip downloading files that already exist locally
+        fp16: If True, use FP16 paths
+
+    Returns:
+        xr.Dataset: Combined ensemble dataset
+    """
+    if use_icechunk:
+        if not ICECHUNK_AVAILABLE:
+            print("⚠️  icechunk not available, falling back to standard loading")
+            print("   Warning: This may cause memory issues with large ensembles!")
+            use_icechunk = False
+
+    if use_icechunk:
+        return download_ensemble_nc_from_gcs_chunked(
+            forecast_date=forecast_date,
+            members=members,
+            gcs_bucket=gcs_bucket,
+            service_account_path=service_account_path,
+            skip_download_if_exists=skip_download_if_exists,
+            fp16=fp16
+        )
+    else:
+        return download_ensemble_nc_from_gcs(
+            forecast_date=forecast_date,
+            members=members,
+            gcs_bucket=gcs_bucket,
+            service_account_path=service_account_path,
+            skip_download_if_exists=skip_download_if_exists,
+            fp16=fp16
+        )
 
 
 def calculate_grid_quintiles(ensemble_data, climatology_quintiles):
@@ -491,11 +721,14 @@ GCS Path Structure:
     FP16 (--fp16):  gs://bucket/{date}_0000/fp16_1p5deg_nc/
 
 Examples:
-    # Process FP32 forecasts
+    # Process FP32 forecasts (uses icechunk by default for memory efficiency)
     python ensemble_quintile_analysis_cli.py --date 20251127
 
     # Process FP16 forecasts
     python ensemble_quintile_analysis_cli.py --date 20251127 --fp16
+
+    # Disable icechunk (not recommended for large ensembles - may cause OOM killed)
+    python ensemble_quintile_analysis_cli.py --date 20251127 --no-icechunk
 
     # Skip redownloading existing files
     python ensemble_quintile_analysis_cli.py --date 20251127 --skip-existing
@@ -508,6 +741,8 @@ Examples:
                        help='Member range (e.g., 1-50, 1,2,3). If not specified, downloads all available.')
     parser.add_argument('--fp16', action='store_true',
                        help='Use FP16 paths (fp16_1p5deg_nc/)')
+    parser.add_argument('--no-icechunk', action='store_true',
+                       help='Disable icechunk memory-efficient loading (not recommended for large ensembles)')
     parser.add_argument('--skip-existing', action='store_true', default=True,
                        help='Skip downloading existing files (default: True)')
     parser.add_argument('--output-dir', default='./',
@@ -535,6 +770,13 @@ Examples:
             print(f"ERROR: Invalid member range: {e}")
             return 1
 
+    # Determine if we should use icechunk
+    use_icechunk = not args.no_icechunk
+    if use_icechunk and not ICECHUNK_AVAILABLE:
+        print("⚠️  icechunk not available, falling back to standard loading")
+        print("   Warning: This may cause memory issues (OOM killed) with large ensembles!")
+        use_icechunk = False
+
     print("=" * 60)
     print(f"AIFS Ensemble Quintile Analysis Pipeline ({mode_label})")
     print("=" * 60)
@@ -542,15 +784,23 @@ Examples:
     print(f"Precision mode: {mode_label}")
     print(f"Members: {args.members if args.members else 'all available'}")
     print(f"GCS bucket: {args.bucket}")
+    print(f"Memory-efficient mode (icechunk): {'ENABLED' if use_icechunk else 'DISABLED'}")
     print()
 
     # Step 1: Download ensemble NetCDF files
-    print("Step 1: Loading ensemble forecast from GCS...")
-    fds = download_ensemble_nc_from_gcs(
+    if use_icechunk:
+        print("📥 Step 1: Loading ensemble forecast from GCS (memory-efficient icechunk mode)...")
+        print("   This processes members one at a time to avoid OOM errors")
+    else:
+        print("📥 Step 1: Loading ensemble forecast from GCS...")
+        print("   ⚠️  Warning: Loading all members into RAM - may cause OOM killed!")
+
+    fds = load_ensemble_from_gcs(
         forecast_date,
         members=members,
         gcs_bucket=args.bucket,
         service_account_path=args.service_account,
+        use_icechunk=use_icechunk,
         skip_download_if_exists=args.skip_existing,
         fp16=args.fp16
     )

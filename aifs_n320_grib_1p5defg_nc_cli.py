@@ -24,6 +24,50 @@ import argparse
 from pathlib import Path
 from typing import List, Optional
 
+# -----------------------------------------------------------------------------
+# IMPORTANT: Configure paths and earthkit settings BEFORE importing earthkit
+# This ensures the cache settings are applied before the singleton is created
+# -----------------------------------------------------------------------------
+DEF_BASE = "/scratch/notebook"
+BASE_DIR = Path(os.environ.get("EARTHKIT_WORKDIR", DEF_BASE))
+TMP_DIR = BASE_DIR / "tmp"
+EK_CACHE_DIR = BASE_DIR / ".cache/earthkit-data"
+EK_TMP_DIR = BASE_DIR / "earthkit-tmp"
+HOME_CACHE_DIR = Path.home() / ".cache"
+EK_REGRID_CACHE = HOME_CACHE_DIR / "earthkit-regrid"
+
+# Ensure directories exist
+for p in [TMP_DIR, EK_CACHE_DIR, EK_TMP_DIR, EK_REGRID_CACHE]:
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+# Force env vars BEFORE importing earthkit
+os.environ["TMPDIR"] = str(TMP_DIR)
+os.environ["XDG_CACHE_HOME"] = str(BASE_DIR / ".cache")
+os.environ["ECCODES_TMPDIR"] = str(EK_TMP_DIR)
+# Disable tqdm progress bars which can hang in some terminal contexts
+os.environ["TQDM_DISABLE"] = "1"
+
+# Configure earthkit-regrid cache settings BEFORE importing earthkit.regrid
+# Use "user" cache policy with persistent storage - the matrix files will be cached
+# and reused across all members. We fixed cleanup_earthkit_dirs() to NOT delete
+# the regrid cache during processing, which was causing SQLite corruption.
+try:
+    from earthkit.regrid.utils import caching as regrid_caching
+    # Use persistent user cache (NOT "off") - matrix files cached on disk
+    regrid_caching.SETTINGS["cache-policy"] = "user"
+    regrid_caching.SETTINGS["user-cache-directory"] = str(EK_REGRID_CACHE)
+    # Increase download timeout for slow connections to ECMWF servers
+    regrid_caching.SETTINGS["url-download-timeout"] = 300  # 5 minutes instead of 30 seconds
+    # Enable in-memory caching of regrid matrices for faster repeated access
+    regrid_caching.SETTINGS["matrix-memory-cache-policy"] = "lru"
+    regrid_caching.SETTINGS["maximum-matrix-memory-cache-size"] = 2 * 1024 * 1024 * 1024  # 2GB
+except Exception:
+    pass
+
+# Now import the rest of the dependencies
 from google.cloud import storage
 import xarray as xr
 import numpy as np
@@ -31,34 +75,50 @@ import numpy as np
 import earthkit.data as ekd
 import earthkit.regrid as ekr
 
-
-# -----------------------------------------------------------------------------
-# Helper: choose safe local dirs for tmp/cache (avoids root overlay saturation)
-# -----------------------------------------------------------------------------
-DEF_BASE = "/scratch/notebook"
-BASE_DIR = Path(os.environ.get("EARTHKIT_WORKDIR", DEF_BASE))
-TMP_DIR = BASE_DIR / "tmp"
-EK_CACHE_DIR = BASE_DIR / ".cache/earthkit-data"
-EK_TMP_DIR = BASE_DIR / "earthkit-tmp"
-
-# Ensure directories exist
-for p in [TMP_DIR, EK_CACHE_DIR, EK_TMP_DIR]:
-    try:
-        p.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        pass
-
-# Steer Python and Earthkit/ecCodes temp/cache paths via env vars early
-os.environ.setdefault("TMPDIR", str(TMP_DIR))
-os.environ.setdefault("XDG_CACHE_HOME", str(BASE_DIR / ".cache"))
-os.environ.setdefault("ECCODES_TMPDIR", str(EK_TMP_DIR))
-
-# Earthkit settings (cache directory)
+# Earthkit-data settings (cache directory) - can be set after import
 try:
     from earthkit.data import settings as ek_settings
     ek_settings.set("cache.directory", str(EK_CACHE_DIR))
 except Exception:
     pass
+
+
+def get_disk_free_gb() -> float:
+    """Return free disk space in GB for the scratch partition."""
+    import subprocess
+    try:
+        result = subprocess.run(['df', '-BG', '/scratch'], capture_output=True, text=True)
+        # Parse output: Filesystem 1G-blocks Used Available Use% Mounted
+        lines = result.stdout.strip().split('\n')
+        if len(lines) >= 2:
+            parts = lines[1].split()
+            available = int(parts[3].rstrip('G'))
+            return available
+    except Exception:
+        pass
+    return -1
+
+
+def diagnose_disk_usage() -> None:
+    """Print top directories consuming disk space for debugging."""
+    import subprocess
+    print("    📊 Disk usage diagnosis:")
+    dirs_to_check = [
+        "/scratch/notebook/tmp",
+        "/scratch/notebook/.cache",
+        "/scratch/notebook/earthkit-tmp",
+        str(Path.home() / ".cache"),
+        "/tmp",
+        "/var/tmp",
+    ]
+    for d in dirs_to_check:
+        try:
+            result = subprocess.run(['du', '-sh', d], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                size = result.stdout.strip().split()[0]
+                print(f"       {d}: {size}")
+        except Exception:
+            pass
 
 
 def parse_member_range(member_str: str) -> List[int]:
@@ -75,9 +135,7 @@ def parse_member_range(member_str: str) -> List[int]:
 
 
 class GRIBToNetCDFProcessor:
-    def __init__(self, date_str: str, members: List[int], fp16: bool = False,
-                 bucket: str = "aifs-aiquest-us-20251127",
-                 service_account_key: str = "coiled-data.json"):
+    def __init__(self, date_str: str, members: List[int], fp16: bool = False, skip_upload: bool = False):
         """
         Initialize processor with configurable date, members, and precision mode.
 
@@ -85,12 +143,12 @@ class GRIBToNetCDFProcessor:
             date_str: Date string in format YYYYMMDD_0000
             members: List of ensemble member numbers (1-indexed)
             fp16: If True, use FP16 paths (fp16_forecasts/, fp16_1p5deg_nc/)
-            bucket: GCS bucket name
-            service_account_key: Path to GCS service account key
+            skip_upload: If True, skip uploading NetCDF files to GCS (for testing)
         """
+        self.skip_upload = skip_upload
         # GCS Configuration
-        self.gcs_bucket = bucket
-        self.service_account_key = service_account_key
+        self.gcs_bucket = "aifs-aiquest-us-20251127"
+        self.service_account_key = "coiled-data.json"
 
         # Parse date string
         if '_' in date_str:
@@ -198,57 +256,89 @@ class GRIBToNetCDFProcessor:
         except Exception:
             pass
 
-    def process_grib_to_netcdf(self, member: int, grib_files: List[str]) -> Optional[str]:
-        print("  🔄 Converting GRIB to NetCDF...")
+    def process_single_grib(self, grib_file: str) -> Optional[xr.Dataset]:
+        """Process a single GRIB file and return extracted dataset (loaded in memory)."""
+        fl = fl_ll_1p5 = None
+        ds = extracted_ds = result = None
+        try:
+            # Open GRIB (Earthkit FieldList)
+            fl = ekd.from_source("file", grib_file)
+
+            # Regrid from N320 to 1.5° regular lon/lat
+            fl_ll_1p5 = ekr.interpolate(
+                fl, in_grid={"grid": "N320"}, out_grid={"grid": [1.5, 1.5]}
+            )
+
+            # Convert to xarray and detach from files
+            ds = fl_ll_1p5.to_xarray()
+            ds.load()
+
+            available_vars = list(ds.data_vars)
+            target_vars = [
+                alt_name for _, alt_name in self.var_mapping.items() if alt_name in available_vars
+            ]
+
+            if target_vars:
+                extracted_ds = ds[target_vars]
+                extracted_ds.load()
+                # Make a copy to keep in memory after closing
+                result = extracted_ds.copy(deep=True)
+                print(f"      ✓ Extracted: {target_vars}")
+            else:
+                print("      ⚠️  No target variables found")
+
+        except Exception as e:
+            print(f"      ❌ Error processing GRIB: {e}")
+        finally:
+            self._safe_close(fl_ll_1p5)
+            self._safe_close(fl)
+            for obj in [extracted_ds, ds]:
+                try:
+                    if hasattr(obj, "close"):
+                        obj.close()
+                except Exception:
+                    pass
+            del extracted_ds, ds, fl_ll_1p5, fl
+            gc.collect()
+        return result
+
+    def process_grib_to_netcdf(self, member: int) -> Optional[str]:
+        """Download, process, and immediately delete each GRIB file to minimize disk usage."""
+        print("  🔄 Downloading and converting GRIB files one at a time...")
 
         member_datasets: List[xr.Dataset] = []
         try:
-            for grib_file in grib_files:
+            for i, time_range in enumerate(self.time_ranges):
+                # Download single GRIB file
+                grib_file = self.download_grib_file(member, time_range)
                 if not grib_file or not os.path.exists(grib_file):
+                    print(f"      ⚠️  Skipping time range {time_range}")
                     continue
 
-                print(f"    Processing: {os.path.basename(grib_file)}")
-                fl = fl_ll_1p5 = None
-                ds = extracted_ds = None
+                print(f"    Processing ({i+1}/{len(self.time_ranges)}): {os.path.basename(grib_file)}")
+
+                # Process and extract data to memory
+                extracted_ds = self.process_single_grib(grib_file)
+
+                # Immediately delete the GRIB file to free disk space
                 try:
-                    # Open GRIB (Earthkit FieldList)
-                    fl = ekd.from_source("file", grib_file)
-
-                    # Regrid from N320 to 1.5° regular lon/lat
-                    fl_ll_1p5 = ekr.interpolate(
-                        fl, in_grid={"grid": "N320"}, out_grid={"grid": [1.5, 1.5]}
-                    )
-
-                    # Convert to xarray and detach from files
-                    ds = fl_ll_1p5.to_xarray()
-                    ds.load()
-
-                    available_vars = list(ds.data_vars)
-                    target_vars = [
-                        alt_name for _, alt_name in self.var_mapping.items() if alt_name in available_vars
-                    ]
-
-                    if target_vars:
-                        extracted_ds = ds[target_vars]
-                        extracted_ds.load()
-                        member_datasets.append(extracted_ds)
-                        print(f"      ✓ Extracted: {target_vars}")
-                    else:
-                        print("      ⚠️  No target variables found")
-
+                    os.remove(grib_file)
+                    print(f"      🗑️  Removed GRIB file (freed ~1.4GB)")
                 except Exception as e:
-                    print(f"      ❌ Error processing GRIB: {e}")
-                finally:
-                    self._safe_close(fl_ll_1p5)
-                    self._safe_close(fl)
-                    for obj in [extracted_ds, ds]:
-                        try:
-                            if hasattr(obj, "close"):
-                                obj.close()
-                        except Exception:
-                            pass
-                    del extracted_ds, ds, fl_ll_1p5, fl
-                    gc.collect()
+                    print(f"      ⚠️  Could not remove {grib_file}: {e}")
+
+                # Clean earthkit temp dirs after each file (preserve regrid cache for next file)
+                self.cleanup_earthkit_dirs(verbose=False, full_cleanup=False)
+                gc.collect()
+
+                # Report disk space after each file
+                free_gb = get_disk_free_gb()
+                print(f"      💾 Disk free: {free_gb} GB")
+                if free_gb < 8:  # Diagnose if running low
+                    diagnose_disk_usage()
+
+                if extracted_ds is not None:
+                    member_datasets.append(extracted_ds)
 
             if not member_datasets:
                 print(f"    ⚠️  No valid datasets for member {member:03d}")
@@ -361,40 +451,121 @@ class GRIBToNetCDFProcessor:
             except Exception as e:
                 print(f"    ⚠️  Could not remove {file_path}: {e}")
 
+    def cleanup_earthkit_dirs(self, verbose: bool = True, full_cleanup: bool = True) -> None:
+        """Clean up earthkit cache and temp directories to free disk space.
+
+        Args:
+            verbose: Print cleanup messages
+            full_cleanup: If True, clean more aggressively. Note: we NEVER delete the
+                          earthkit-regrid cache directory because it uses a SQLite
+                          singleton that becomes corrupted if the directory is deleted
+                          while the process is running.
+        """
+        # Clean main earthkit directories (always clean these)
+        for dir_path, label in [
+            (EK_CACHE_DIR, "earthkit cache"),
+            (EK_TMP_DIR, "earthkit tmp"),
+        ]:
+            try:
+                if dir_path.exists():
+                    shutil.rmtree(dir_path)
+                    dir_path.mkdir(parents=True, exist_ok=True)
+                    if verbose:
+                        print(f"    🧹 Cleared {label} directory")
+            except Exception as e:
+                if verbose:
+                    print(f"    ⚠️  Could not clear {label}: {e}")
+
+        # IMPORTANT: Do NOT delete EK_REGRID_CACHE here!
+        # The earthkit-regrid Cache is a singleton with a persistent SQLite connection.
+        # Deleting the directory corrupts the singleton state, causing "readonly database"
+        # errors on subsequent members. The regrid matrices are needed for all members
+        # and use the same grid transformation, so caching them is beneficial.
+        #
+        # If disk space is critical, clean regrid cache only between separate script runs,
+        # not between members within a single run.
+
+        # Clean any earthkit/eccodes files in home .cache (but NOT earthkit-regrid)
+        try:
+            if HOME_CACHE_DIR.exists():
+                for item in HOME_CACHE_DIR.iterdir():
+                    # NEVER delete earthkit-regrid - it will corrupt the singleton
+                    if item.name == "earthkit-regrid":
+                        continue
+                    if item.name.startswith(("earthkit", "eccodes")):
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                        else:
+                            item.unlink()
+        except Exception:
+            pass
+
+        # Also clean system /tmp which ecCodes/earthkit may use
+        try:
+            for item in Path("/tmp").iterdir():
+                if item.name.startswith(("eccodes", "earthkit", "grib", "tmp")):
+                    if item.is_dir():
+                        shutil.rmtree(item)
+                    else:
+                        item.unlink()
+        except Exception:
+            pass
+
+        # Clean the TMP_DIR contents (our temp directory for downloads)
+        if full_cleanup:
+            try:
+                if TMP_DIR.exists():
+                    for item in TMP_DIR.iterdir():
+                        try:
+                            if item.is_dir():
+                                shutil.rmtree(item)
+                            else:
+                                item.unlink()
+                        except Exception:
+                            pass
+                    if verbose:
+                        print(f"    🧹 Cleared TMP_DIR contents")
+            except Exception:
+                pass
+
     def process_member(self, member: int) -> bool:
         print("\n" + "=" * 60)
         print(f"Processing Member {member:03d} ({self.mode_label})")
         print("=" * 60)
 
+        # Report disk space at start
+        free_gb = get_disk_free_gb()
+        print(f"💾 Disk space available: {free_gb} GB")
+
+        # Minimum disk space check - each GRIB file is ~1.4GB, need buffer for processing
+        MIN_DISK_GB = 3
+        if free_gb < MIN_DISK_GB:
+            print(f"❌ Insufficient disk space ({free_gb} GB < {MIN_DISK_GB} GB minimum)")
+            print("   Try running members in smaller batches or clearing disk space.")
+            diagnose_disk_usage()
+            return False
+
         success = False
-        grib_files: List[Optional[str]] = []
         nc_file: Optional[str] = None
 
         try:
-            # Step 1: Download GRIB files
-            print(f"📥 Step 1: Downloading GRIB files for member {member:03d}")
-            for time_range in self.time_ranges:
-                grib_files.append(self.download_grib_file(member, time_range))
-
-            valid_grib_files = [f for f in grib_files if f]
-            if not valid_grib_files:
-                print(f"  ❌ No valid GRIB files downloaded for member {member:03d}")
-                return False
-
-            print(f"  ✅ Downloaded {len(valid_grib_files)}/{len(self.time_ranges)} GRIB files")
-
-            # Step 2: Convert to NetCDF
-            print("🔄 Step 2: Converting to NetCDF")
-            nc_file = self.process_grib_to_netcdf(member, valid_grib_files)
+            # Step 1 & 2: Download and convert GRIB files one at a time
+            print(f"📥 Processing GRIB files for member {member:03d}")
+            nc_file = self.process_grib_to_netcdf(member)
             if not nc_file:
                 print(f"  ❌ NetCDF conversion failed for member {member:03d}")
                 return False
 
-            # Step 3: Upload NetCDF to GCS
-            print("☁️  Step 3: Uploading NetCDF to GCS")
-            if not self.upload_netcdf_to_gcs(nc_file, member):
-                print(f"  ❌ Upload failed for member {member:03d}")
-                return False
+            # Step 3: Upload NetCDF to GCS (skip if --no-upload flag is set)
+            if self.skip_upload:
+                print("☁️  Step 3: Skipping upload (--no-upload flag set)")
+                file_size = os.path.getsize(nc_file) / (1024 * 1024)
+                print(f"    📄 NetCDF file ready: {os.path.basename(nc_file)} ({file_size:.1f} MB)")
+            else:
+                print("☁️  Step 3: Uploading NetCDF to GCS")
+                if not self.upload_netcdf_to_gcs(nc_file, member):
+                    print(f"  ❌ Upload failed for member {member:03d}")
+                    return False
 
             success = True
             print(f"  ✅ Member {member:03d} processed successfully!")
@@ -403,11 +574,16 @@ class GRIBToNetCDFProcessor:
             print(f"  ❌ Error processing member {member:03d}: {e}")
             success = False
         finally:
-            # Step 4: Cleanup local files
-            print("🧹 Step 4: Cleaning up local files")
-            files_to_cleanup: List[Optional[str]] = grib_files + ([nc_file] if nc_file else [])
-            self.cleanup_local_files(files_to_cleanup)
+            # Step 4: Cleanup NetCDF file and earthkit directories
+            print("🧹 Step 4: Final cleanup")
+            if nc_file:
+                self.cleanup_local_files([nc_file])
+            self.cleanup_earthkit_dirs()
             gc.collect()
+
+            # Report disk space after cleanup
+            free_gb = get_disk_free_gb()
+            print(f"💾 Disk space after cleanup: {free_gb} GB")
 
         return success
 
@@ -422,6 +598,27 @@ class GRIBToNetCDFProcessor:
         print(f"Time ranges: {len(self.time_ranges)} periods")
         print(f"Forecast: {self.forecast_date} {self.forecast_time}")
         print(f"Precision: {self.mode_label}")
+        if self.skip_upload:
+            print(f"Upload: DISABLED (--no-upload flag)")
+
+        # Initial disk space and cleanup check
+        free_gb = get_disk_free_gb()
+        print(f"💾 Initial disk space: {free_gb} GB")
+        if free_gb < 5:
+            print("⚠️  Low disk space, performing initial cleanup...")
+            # Clear stale caches from previous runs (but NOT regrid cache - it has valuable matrix files)
+            for cleanup_dir in [EK_CACHE_DIR, EK_TMP_DIR, TMP_DIR]:
+                try:
+                    if cleanup_dir.exists():
+                        shutil.rmtree(cleanup_dir)
+                        cleanup_dir.mkdir(parents=True, exist_ok=True)
+                        print(f"    🧹 Cleared {cleanup_dir}")
+                except Exception:
+                    pass
+            # NOTE: Do NOT delete EK_REGRID_CACHE here - it contains cached regrid matrices
+            # that take a long time to download from ECMWF servers
+            free_gb = get_disk_free_gb()
+            print(f"💾 Disk space after cleanup: {free_gb} GB")
 
         if not self.initialize_gcs():
             return 1
@@ -494,6 +691,9 @@ Examples:
 
     # Process specific members
     python aifs_n320_grib_1p5defg_nc_cli.py --date 20251127_0000 --members 1,5,10,25
+
+    # Test processing without uploading to GCS
+    python aifs_n320_grib_1p5defg_nc_cli.py --date 20251127_0000 --members 1-3 --no-upload
         """
     )
 
@@ -503,6 +703,8 @@ Examples:
                        help='Member range (e.g., 1-50, 1,2,3)')
     parser.add_argument('--fp16', action='store_true',
                        help='Use FP16 paths (fp16_forecasts/ -> fp16_1p5deg_nc/)')
+    parser.add_argument('--no-upload', action='store_true',
+                       help='Skip uploading NetCDF files to GCS (for testing)')
     parser.add_argument('--bucket', default='aifs-aiquest-us-20251127',
                        help='GCS bucket name')
     parser.add_argument('--service-account', default='coiled-data.json',
@@ -523,8 +725,7 @@ Examples:
         date_str=args.date,
         members=members,
         fp16=args.fp16,
-        bucket=args.bucket,
-        service_account_key=args.service_account
+        skip_upload=args.no_upload
     )
     return processor.run()
 
