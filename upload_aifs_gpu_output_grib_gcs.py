@@ -25,41 +25,47 @@ from google.cloud.exceptions import GoogleCloudError
 
 class GCSGribUploaderMultiThreaded:
     """Handles uploading GRIB files to Google Cloud Storage with multi-threading support."""
-    
-    def __init__(self, bucket_name: str, project_id: Optional[str] = None, max_workers: int = 10):
+
+    def __init__(self, bucket_name: str, project_id: Optional[str] = None,
+                 max_workers: int = 10, service_account_key: Optional[str] = None):
         """
         Initialize the GCS uploader with threading support.
-        
+
         Args:
             bucket_name: Name of the GCS bucket
             project_id: GCP project ID (optional, uses default from environment)
             max_workers: Maximum number of concurrent upload threads
+            service_account_key: Path to service account JSON file (optional)
         """
         self.bucket_name = bucket_name
         self.project_id = project_id
         self.max_workers = max_workers
-        
+        self.service_account_key = service_account_key
+
         try:
-            if project_id:
-                self.client = storage.Client(project=project_id)
-            else:
-                self.client = storage.Client()
+            self.client = self._create_client()
             self.bucket = self.client.bucket(bucket_name)
         except GoogleCloudError as e:
             raise RuntimeError(f"Failed to initialize GCS client: {e}")
-        
+
         # Thread-safe counters
         self.upload_lock = threading.Lock()
         self.successful_uploads = 0
         self.failed_uploads = 0
         self.total_bytes_uploaded = 0
         self.start_time = None
-    
-    def _get_thread_safe_client(self) -> storage.Client:
-        """Create a new client for thread safety."""
-        if self.project_id:
+
+    def _create_client(self) -> storage.Client:
+        """Create a GCS client with appropriate credentials."""
+        if self.service_account_key and os.path.exists(self.service_account_key):
+            return storage.Client.from_service_account_json(self.service_account_key)
+        elif self.project_id:
             return storage.Client(project=self.project_id)
         return storage.Client()
+
+    def _get_thread_safe_client(self) -> storage.Client:
+        """Create a new client for thread safety."""
+        return self._create_client()
     
     def upload_file_thread_safe(self, local_path: str, gcs_path: str, 
                                remove_local: bool = False, thread_id: int = 0) -> Tuple[bool, float]:
