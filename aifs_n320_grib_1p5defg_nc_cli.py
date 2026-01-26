@@ -135,7 +135,8 @@ def parse_member_range(member_str: str) -> List[int]:
 
 
 class GRIBToNetCDFProcessor:
-    def __init__(self, date_str: str, members: List[int], fp16: bool = False, skip_upload: bool = False):
+    def __init__(self, date_str: str, members: List[int], fp16: bool = False, skip_upload: bool = False,
+                 bucket: str = "aifs-aiquest-us-20251127", service_account: str = "coiled-data.json"):
         """
         Initialize processor with configurable date, members, and precision mode.
 
@@ -144,11 +145,13 @@ class GRIBToNetCDFProcessor:
             members: List of ensemble member numbers (1-indexed)
             fp16: If True, use FP16 paths (fp16_forecasts/, fp16_1p5deg_nc/)
             skip_upload: If True, skip uploading NetCDF files to GCS (for testing)
+            bucket: GCS bucket name
+            service_account: Path to GCS service account key
         """
         self.skip_upload = skip_upload
         # GCS Configuration
-        self.gcs_bucket = "aifs-aiquest-us-20251127"
-        self.service_account_key = "coiled-data.json"
+        self.gcs_bucket = bucket
+        self.service_account_key = service_account
 
         # Parse date string
         if '_' in date_str:
@@ -503,7 +506,7 @@ class GRIBToNetCDFProcessor:
         # Also clean system /tmp which ecCodes/earthkit may use
         try:
             for item in Path("/tmp").iterdir():
-                if item.name.startswith(("eccodes", "earthkit", "grib", "tmp")):
+                if item.name.startswith(("eccodes", "earthkit", "grib")):
                     if item.is_dir():
                         shutil.rmtree(item)
                     else:
@@ -511,22 +514,10 @@ class GRIBToNetCDFProcessor:
         except Exception:
             pass
 
-        # Clean the TMP_DIR contents (our temp directory for downloads)
-        if full_cleanup:
-            try:
-                if TMP_DIR.exists():
-                    for item in TMP_DIR.iterdir():
-                        try:
-                            if item.is_dir():
-                                shutil.rmtree(item)
-                            else:
-                                item.unlink()
-                        except Exception:
-                            pass
-                    if verbose:
-                        print(f"    🧹 Cleared TMP_DIR contents")
-            except Exception:
-                pass
+        # NOTE: Do NOT clean TMP_DIR here!
+        # The processor's temp directory (grib_nc_processor_*) is inside TMP_DIR
+        # and is needed for all members. It will be cleaned up at the end of
+        # the entire run by cleanup_temp_directory().
 
     def process_member(self, member: int) -> bool:
         print("\n" + "=" * 60)
@@ -709,10 +700,32 @@ Examples:
                        help='GCS bucket name')
     parser.add_argument('--service-account', default='coiled-data.json',
                        help='Path to GCS service account key')
+    parser.add_argument('--single-member', type=int, default=None,
+                       help='Process only this single member (used internally for subprocess mode)')
 
     args = parser.parse_args()
 
-    # Parse members
+    # Single member mode (called by subprocess)
+    if args.single_member is not None:
+        processor = GRIBToNetCDFProcessor(
+            date_str=args.date,
+            members=[args.single_member],
+            fp16=args.fp16,
+            skip_upload=args.no_upload,
+            bucket=args.bucket,
+            service_account=args.service_account
+        )
+        # Process just this one member
+        if not processor.initialize_gcs():
+            return 1
+        processor.create_temp_directory()
+        try:
+            success = processor.process_member(args.single_member)
+            return 0 if success else 1
+        finally:
+            processor.cleanup_temp_directory()
+
+    # Parse members for normal multi-member mode
     try:
         members = parse_member_range(args.members)
         print(f"Processing {len(members)} members: {members[0]}-{members[-1]}")
@@ -720,14 +733,70 @@ Examples:
         print(f"ERROR: Invalid member range: {e}")
         return 1
 
-    # Create and run processor
-    processor = GRIBToNetCDFProcessor(
-        date_str=args.date,
-        members=members,
-        fp16=args.fp16,
-        skip_upload=args.no_upload
-    )
-    return processor.run()
+    # Multi-member mode: run each member in a subprocess to avoid file handle leaks
+    import subprocess
+    import sys
+
+    print("=" * 70)
+    print(f"GRIB to NetCDF Processor (FP32 Mode) - Subprocess Mode")
+    print("=" * 70)
+    print(f"Each member will be processed in a separate subprocess to ensure")
+    print(f"all file handles are properly closed and disk space is freed.")
+    print("=" * 70)
+
+    successful_members = []
+    failed_members = []
+    start_time = time.time()
+
+    for i, member in enumerate(members):
+        print(f"\n{'='*60}")
+        print(f"Processing member {member} ({i+1}/{len(members)}) in subprocess...")
+        print(f"{'='*60}")
+
+        # Build command for subprocess
+        cmd = [
+            sys.executable, __file__,
+            '--date', args.date,
+            '--single-member', str(member),
+            '--bucket', args.bucket,
+            '--service-account', args.service_account,
+        ]
+        if args.fp16:
+            cmd.append('--fp16')
+        if args.no_upload:
+            cmd.append('--no-upload')
+
+        # Run in subprocess
+        member_start = time.time()
+        result = subprocess.run(cmd)
+        member_time = time.time() - member_start
+
+        if result.returncode == 0:
+            successful_members.append(member)
+            print(f"✅ Member {member} completed successfully ({member_time/60:.1f} min)")
+        else:
+            failed_members.append(member)
+            print(f"❌ Member {member} failed ({member_time/60:.1f} min)")
+
+        # Show progress
+        elapsed = time.time() - start_time
+        avg_time = elapsed / (i + 1)
+        remaining = avg_time * (len(members) - i - 1)
+        print(f"⏱️  Estimated remaining: {remaining/60:.1f} min")
+
+    # Final summary
+    total_time = time.time() - start_time
+    print("\n" + "=" * 70)
+    print(f"PROCESSING SUMMARY")
+    print("=" * 70)
+    print(f"✅ Successful: {len(successful_members)}/{len(members)} members")
+    print(f"❌ Failed: {len(failed_members)} members")
+    print(f"⏱️  Total time: {total_time/60:.1f} minutes")
+
+    if failed_members:
+        print(f"\nFailed members: {failed_members}")
+
+    return 0 if not failed_members else 1
 
 
 if __name__ == "__main__":
