@@ -850,13 +850,25 @@ Examples:
     print(f"✅ Saved to {output_file} ({file_size:.1f} MB)")
 
     # Step 5: Summary
-    print("\n📊 Step 5: Summary")
+    print("\n📊 Step 5: Analysis Summary")
     print("-" * 40)
     print(f"Mode: {mode_label}")
-    print(f"Variables: {list(quintile_ds.data_vars)}")
-    print(f"Output: {output_file}")
-    print(f"\n📤 Ready for AI Weather Quest submission")
-    print(f"   Use submit_forecast() function with output file")
+    print(f"Processed variables: {list(quintile_ds.data_vars)}")
+    print(f"Time periods: {quintile_ds.sizes.get('time_week', 'N/A')}")
+    print(f"Grid resolution: {quintile_ds.sizes['latitude']}x{quintile_ds.sizes['longitude']}")
+
+    print("\nQuintile probability statistics:")
+    for var in quintile_ds.data_vars:
+        print(f"\n  {var}:")
+        var_data = quintile_ds[var]
+        for q_idx, q_val in enumerate([0.2, 0.4, 0.6, 0.8, 1.0]):
+            mean_prob = var_data.isel(quintile=q_idx).mean().values
+            print(f"    Q{q_idx+1} ({q_val}): {mean_prob:.3f} mean probability")
+
+    print(f"\n📤 Step 6: Ready for AI Weather Quest submission")
+    print(f"   Output file: {output_file}")
+    print(f"   Available variables: {list(quintile_ds.data_vars)}")
+    print(f"   Use submit_forecast() function to submit results")
 
     return 0
 
