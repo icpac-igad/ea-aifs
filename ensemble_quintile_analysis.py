@@ -10,6 +10,10 @@ import shutil
 from pathlib import Path
 from google.cloud import storage
 from google.oauth2 import service_account
+
+from dotenv import load_dotenv
+load_dotenv()
+
 from AI_WQ_package import retrieve_evaluation_data
 import icechunk
 
@@ -26,12 +30,12 @@ def get_quintile_clim(forecast_date, variable, password=None):
         tuple: (clim1, clim2) - The quintile climatologies for both valid dates.
     """
     if password is None:
-        password = os.getenv('AIWQ_SUBMIT_PWD')
-    
+        password = os.getenv('AIWQ_PASSWORD') or os.getenv('AIWQ_SUBMIT_PWD')
+
     fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
 
-    clim1 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date1, variable, password='NegF8LfwK')
-    clim2 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date2, variable, password='NegF8LfwK')
+    clim1 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date1, variable, password=password)
+    clim2 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(fc_valid_date2, variable, password=password)
 
     return clim1, clim2
 
