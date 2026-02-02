@@ -30,6 +30,13 @@ from typing import List, Optional
 from google.cloud import storage
 from google.oauth2 import service_account
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 def parse_member_range(member_str: str) -> List[int]:
     """Parse member range string like '1-50' or '1,2,3' into list of integers."""
     members = []
@@ -78,13 +85,13 @@ def valid_dates(forecast_date: str):
     return fc_valid_date1, fc_valid_date2
 
 
-def get_quintile_clim(forecast_date: str, variable: str, password: Optional[str] = 'NegF8LfwK'):
+def get_quintile_clim(forecast_date: str, variable: str, password: Optional[str] = None):
     """Retrieve quintile climatology for a given forecast date and variable."""
     if not AIWQ_AVAILABLE:
         raise RuntimeError("AI_WQ_package is required for climatology retrieval")
 
     if password is None:
-        password = os.getenv('AIWQ_SUBMIT_PWD')
+        password = os.getenv('AIWQ_PASSWORD') or os.getenv('AIWQ_SUBMIT_PWD')
 
     fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
 
@@ -105,7 +112,7 @@ def download_all_quintiles(forecast_date: str, variables: Optional[List[str]] = 
         variables = ['tas', 'mslp', 'pr']
 
     if password is None:
-        password = os.getenv('AIWQ_SUBMIT_PWD')
+        password = os.getenv('AIWQ_PASSWORD') or os.getenv('AIWQ_SUBMIT_PWD')
 
     fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
 
