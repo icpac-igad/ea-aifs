@@ -11,11 +11,8 @@ from pathlib import Path
 from google.cloud import storage
 from google.oauth2 import service_account
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+from dotenv import load_dotenv
+load_dotenv()
 
 from AI_WQ_package import retrieve_evaluation_data
 import icechunk

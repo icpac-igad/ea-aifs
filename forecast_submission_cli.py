@@ -31,13 +31,8 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 
 # Load environment variables from .env file
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-    DOTENV_AVAILABLE = True
-except ImportError:
-    DOTENV_AVAILABLE = False
-    print("Warning: python-dotenv not installed. Using environment variables directly.")
+from dotenv import load_dotenv
+load_dotenv()
 
 # Import submission function from ensemble_quintile_analysis_cli
 try:
@@ -246,8 +241,8 @@ Examples:
 
     args = parser.parse_args()
 
-    # Load .env file if specified and available
-    if DOTENV_AVAILABLE and os.path.exists(args.env_file):
+    # Load .env file if specified
+    if os.path.exists(args.env_file):
         load_dotenv(args.env_file)
         print(f"Loaded credentials from {args.env_file}")
 

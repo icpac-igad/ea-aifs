@@ -31,11 +31,8 @@ from google.cloud import storage
 from google.oauth2 import service_account
 
 # Load environment variables from .env file
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+from dotenv import load_dotenv
+load_dotenv()
 
 def parse_member_range(member_str: str) -> List[int]:
     """Parse member range string like '1-50' or '1,2,3' into list of integers."""
