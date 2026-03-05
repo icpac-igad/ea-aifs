@@ -1,0 +1,17 @@
+terraform/
+*.md
+*.txt
+*.yaml
+!cloudbuild.yaml
+run_aifs_ensemble.py
+.git
+.gitignore
+__pycache__
+*.pyc
+.terraform
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.env
+.env.example
+service_account/

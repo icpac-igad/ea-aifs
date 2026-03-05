@@ -1,0 +1,42 @@
+# Cloud Build configuration for AIFS GPU Cloud Run Worker
+#
+# Builds a thin layer on top of flash-attn-notebook:v1.0, adding Flask/gunicorn
+# for direct HTTP invocation. No CUDA compilation needed.
+#
+# Usage:
+#   gcloud builds submit \
+#     --config=cloudbuild.yaml \
+#     --project=YOUR_PROJECT_ID \
+#     --region=YOUR_REGION
+
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'europe-west4-docker.pkg.dev/$PROJECT_ID/coiled-aifs-europe/aifs-gpu-cloudrun:$BUILD_ID'
+      - '-t'
+      - 'europe-west4-docker.pkg.dev/$PROJECT_ID/coiled-aifs-europe/aifs-gpu-cloudrun:latest'
+      - '.'
+    timeout: 2400s  # 40 minutes (pip installs + HF model download, no CUDA)
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'europe-west4-docker.pkg.dev/$PROJECT_ID/coiled-aifs-europe/aifs-gpu-cloudrun:$BUILD_ID'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'europe-west4-docker.pkg.dev/$PROJECT_ID/coiled-aifs-europe/aifs-gpu-cloudrun:latest'
+
+images:
+  - 'europe-west4-docker.pkg.dev/$PROJECT_ID/coiled-aifs-europe/aifs-gpu-cloudrun:$BUILD_ID'
+  - 'europe-west4-docker.pkg.dev/$PROJECT_ID/coiled-aifs-europe/aifs-gpu-cloudrun:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: 200
+
+timeout: 3600s
