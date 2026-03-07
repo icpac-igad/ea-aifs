@@ -30,7 +30,7 @@ LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
 SOIL_LEVELS = [1, 2]
 
 # Test configuration
-ENSEMBLE_MEMBERS = list(range(1, 14))  # Test all 50 members
+ENSEMBLE_MEMBERS = list(range(1, 51))  # Test all 50 members
 OUTPUT_DIR = "test_input_states"
 SAVE_STATES = True  # Save input states to disk for verification
 
@@ -178,7 +178,7 @@ def upload_to_gcs(local_file_path, gcs_bucket, gcs_blob_name, service_account_ke
 def main():
     """Main function to test ensemble input state creation."""
     # Get latest date
-    DATE = datetime.datetime(2025, 11, 27, 0, 0)  # 2025-09-11 00:00 UTC
+    DATE = datetime.datetime(2026, 3, 5, 0, 0)  # 2025-09-11 00:00 UTC
     #DATE = OpendataClient("ecmwf").latest()
     datestr = DATE.strftime("%Y%m%d_%H%M")
     print(f"Initial date is {DATE}")
