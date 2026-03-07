@@ -543,7 +543,7 @@ def create_input_states(date):
         print(f"GCS key not found: {GCS_SERVICE_ACCOUNT_KEY}, disabling upload")
         upload_enabled = False
 
-    datestr = date.strftime("%Y%m%d_%H%M")
+    datestr = date.strftime("%Y%m%d")
 
     for i, member in enumerate(ENSEMBLE_MEMBERS):
         print(f"\n--- Member {member} ({i+1}/{len(ENSEMBLE_MEMBERS)}) ---")
@@ -583,7 +583,7 @@ def create_input_states(date):
                 print(f"  Saved to {filename}")
 
                 if upload_enabled:
-                    gcs_blob_name = f"{datestr}/input/input_state_member_{member:03d}.pkl"
+                    gcs_blob_name = f"era5t/{datestr}/input_state_member_{member:03d}.pkl"
                     if upload_to_gcs(filename, GCS_BUCKET, gcs_blob_name,
                                      GCS_SERVICE_ACCOUNT_KEY):
                         if CLEANUP_LOCAL_FILES:
