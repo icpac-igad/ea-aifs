@@ -9,7 +9,7 @@ Quest submission.
 ## AIFSgaia Input Requirements
 
 From the AIFSgaia model description:
-
+https://aiweatherquest.ecmwf.int/team/aifs/
 > For real-time forecasting, AIFSgaia uses two consecutive states (t, t-24h)
 > from ERA5T and its associated EDA as input.
 
@@ -158,6 +158,28 @@ inference pipeline:
     }
 }
 ```
+
+## Verified Output (2026-02-27 00:00, member 0)
+
+| Field | Shape | Range | Physical check |
+|-------|-------|-------|----------------|
+| 10u | (2, 542080) | [-19.4, 21.8] m/s | OK |
+| 10v | (2, 542080) | [-26.3, 23.2] m/s | OK |
+| 2t | (2, 542080) | [216.5, 311.8] K | OK |
+| msl | (2, 542080) | [95172, 105728] Pa | OK |
+| tcwv | (2, 542080) | [0.09, 72.9] kg/m^2 | OK |
+| t_1000 | (2, 542080) | [216.7, 310.4] K | OK |
+| t_50 | (2, 542080) | [196.8, 240.0] K | OK (stratosphere) |
+| z_1000 | (2, 542080) | [-1223, 56630] m^2/s^2 | OK |
+| z_50 | (2, 542080) | [188329, 203828] m^2/s^2 | OK (~19-21 km) |
+| q_1000 | (2, 542080) | [0, 0.022] kg/kg | OK |
+| u_50/v_50 | (2, 542080) | ~[-35, 48] m/s | OK (jet stream) |
+
+- Pkl file size: ~579 MB per member
+- PL interpolation: ~2.4 min (done once, shared across members)
+- Surface per member: ~40s (10 file downloads + N320 regrid)
+- Peak memory: ~4 GB (fits in 8 GB VM)
+- Total for 10 members: ~3 min PL + 10 x 40s sfc = ~10 min
 
 ## Comparison with ECMWF Open Data Approach
 
