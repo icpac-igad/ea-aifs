@@ -5,6 +5,7 @@
 #     "numpy",
 #     "xarray",
 #     "netCDF4",
+#     "earthkit-data",
 #     "earthkit-regrid",
 #     "python-dotenv",
 #     "google-cloud-storage",
@@ -25,6 +26,7 @@ Strategy:
   - Pressure level fields (t, q, z, u, v x 13 levels): deterministic from
     oper/an_ml, interpolated from 137 model levels to pressure levels using
     ECMWF L137 hybrid coefficients. Shared identically across all 10 members.
+  - Constant forcing fields (lsm, z, slor, sdor): from ECMWF Open Data
   - Two consecutive states: t and t-24h
 
 Usage:
@@ -40,6 +42,7 @@ import time
 
 import numpy as np
 import xarray as xr
+import earthkit.data as ekd
 import earthkit.regrid as ekr
 from dotenv import load_dotenv
 from google.cloud import storage
@@ -53,6 +56,7 @@ CEDA_OPER_ML_BASE = "https://data.ceda.ac.uk/badc/ecmwf-era5t/data/oper/an_ml"
 CEDA_TOKEN = os.environ.get("ceda_token", "")
 
 PARAM_SFC_EDA = ["10u", "10v", "2t", "msl", "tcwv"]
+PARAM_SFC_CONST = ["lsm", "z", "slor", "sdor"]  # Static forcing fields from ECMWF Open Data
 PARAM_PL = ["t", "q", "z", "u", "v"]
 LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
 
@@ -194,6 +198,30 @@ def read_sfc_nc(nc_path):
     values = ekr.interpolate(values, {"grid": (0.25, 0.25)}, {"grid": "N320"})
     ds.close()
     return values
+
+
+def get_constant_fields():
+    """Get static forcing fields (lsm, z, slor, sdor) from ECMWF Open Data.
+
+    These are time-invariant constants — downloaded once and shared across
+    all members and timesteps. Stacked as (2, N320) with identical values
+    in both timesteps to match the expected input shape.
+    """
+    print("    Downloading constant fields from ECMWF Open Data...")
+    data = ekd.from_source("ecmwf-open-data", param=PARAM_SFC_CONST)
+
+    fields = {}
+    for f in data:
+        values = f.to_numpy()
+        assert values.shape == (721, 1440), f"Unexpected shape: {values.shape}"
+        # ECMWF Open Data is -180 to 180, shift to 0-360
+        values = np.roll(values, -values.shape[1] // 2, axis=1)
+        values_1d = ekr.interpolate(values, {"grid": (0.25, 0.25)}, {"grid": "N320"})
+        # Stack same values for both timesteps (constants don't change)
+        fields[f.metadata("param")] = np.stack([values_1d, values_1d])
+        print(f"      {f.metadata('param')}: range=[{values_1d.min():.4f}, {values_1d.max():.4f}]")
+
+    return fields
 
 
 def get_enda_sfc_data(date, param, member):
@@ -495,8 +523,15 @@ def create_input_states(date):
         print(f"    {name}: shape={arr.shape}, range=[{arr.min():.2f}, {arr.max():.2f}]")
     print(f"    ... and {len(pl_fields) - 3} more")
 
+    # ── Constant forcing fields (lsm, z, slor, sdor) from ECMWF Open Data ──
+    print("\n  Fetching constant forcing fields...")
+    const_fields = get_constant_fields()
+    # Merge into shared PL fields (both are deterministic, shared across members)
+    pl_fields.update(const_fields)
+    print(f"  Total shared fields: {len(pl_fields)} ({len(pl_fields) - len(const_fields)} PL + {len(const_fields)} const)")
+
     print("\n" + "=" * 60)
-    print("PHASE 2: Surface fields per EDA member + combine with PL")
+    print("PHASE 2: Surface fields per EDA member + combine with shared fields")
     print("=" * 60)
 
     successful_members = []
@@ -528,10 +563,10 @@ def create_input_states(date):
             input_state = dict(date=date, fields=fields)
 
             # Verify
-            expected_count = len(PARAM_SFC_EDA) + len(PARAM_PL) * len(LEVELS)
+            expected_count = len(PARAM_SFC_EDA) + len(PARAM_PL) * len(LEVELS) + len(PARAM_SFC_CONST)
             actual_count = len(fields)
             print(f"  Fields: {actual_count}/{expected_count} "
-                  f"({len(PARAM_SFC_EDA)} sfc + {len(pl_fields)} pl)")
+                  f"({len(PARAM_SFC_EDA)} sfc + {len(PARAM_PL)*len(LEVELS)} pl + {len(PARAM_SFC_CONST)} const)")
 
             if actual_count == expected_count:
                 print(f"  All {expected_count} fields present!")
@@ -590,8 +625,9 @@ def main():
     print(f"Date: {DATE}")
     print(f"Previous state: {DATE - datetime.timedelta(hours=TIME_OFFSET_HOURS)}")
     print(f"Members: {len(ENSEMBLE_MEMBERS)} (mem{ENSEMBLE_MEMBERS[0]}-mem{ENSEMBLE_MEMBERS[-1]})")
-    print(f"Fields per member: {len(PARAM_SFC_EDA)} sfc + {len(PARAM_PL)*len(LEVELS)} pl = "
-          f"{len(PARAM_SFC_EDA) + len(PARAM_PL)*len(LEVELS)} total")
+    n_total = len(PARAM_SFC_EDA) + len(PARAM_PL) * len(LEVELS) + len(PARAM_SFC_CONST)
+    print(f"Fields per member: {len(PARAM_SFC_EDA)} sfc + {len(PARAM_PL)*len(LEVELS)} pl + "
+          f"{len(PARAM_SFC_CONST)} const = {n_total} total")
     print(f"Download dir: {DOWNLOAD_DIR}")
 
     if SAVE_STATES:
