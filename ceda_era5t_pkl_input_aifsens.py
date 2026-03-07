@@ -279,63 +279,139 @@ def interpolate_ml_to_pl_linear(ml_data, p_full, target_hpa):
     return result
 
 
+def compute_geopotential_on_ml(t_ml, q_ml, z_sfc, p_full, p_half):
+    """Compute geopotential at full model levels using the hypsometric equation.
+
+    Integrates upward from the surface using virtual temperature.
+    Phi(k) = Phi(k+1) + Rd * Tv * ln(p_full(k+1) / p_full(k))
+
+    Args:
+        t_ml: temperature on model levels, shape (137, lat, lon)
+        q_ml: specific humidity on model levels, shape (137, lat, lon)
+        z_sfc: surface geopotential, shape (lat, lon) in m^2/s^2
+        p_full: full-level pressures, shape (137, lat, lon) in Pa
+        p_half: half-level pressures, shape (138, lat, lon) in Pa
+
+    Returns:
+        geopotential on model levels, shape (137, lat, lon) in m^2/s^2
+    """
+    Rd = 287.058  # J/(kg*K), gas constant for dry air
+    eps = 0.621971  # Rd/Rv ratio
+
+    # Virtual temperature: Tv = T * (1 + ((1/eps - 1) * q))
+    tv = t_ml * (1.0 + (1.0 / eps - 1.0) * q_ml)
+
+    n_levels = t_ml.shape[0]
+    geo = np.zeros_like(t_ml)
+
+    # Start from the bottom (level 137, index 136)
+    # Geopotential at the bottom half-level is the surface geopotential
+    # geo_half(137) = z_sfc
+    # geo_full(137) = z_sfc + Rd * Tv(137) * ln(p_half(137) / p_full(137))
+    geo[n_levels - 1] = z_sfc + Rd * tv[n_levels - 1] * np.log(
+        p_half[n_levels] / p_full[n_levels - 1])
+
+    # Integrate upward: k = 136 down to 0 (level 136 to level 1)
+    for k in range(n_levels - 2, -1, -1):
+        # Geopotential at half-level k+1 (between full levels k and k+1)
+        geo_half_below = geo[k + 1] + Rd * tv[k + 1] * np.log(
+            p_full[k + 1] / p_half[k + 1])
+        # Geopotential at full level k
+        geo[k] = geo_half_below + Rd * tv[k] * np.log(
+            p_half[k + 1] / p_full[k])
+
+    return geo
+
+
 def get_pl_fields_from_ml(date):
     """Download oper/an_ml data and interpolate to pressure levels.
 
-    Downloads each parameter once and interpolates to all target levels.
+    Downloads t, q, u, v on 137 model levels plus lnsp and surface z.
+    Computes geopotential on model levels via hypsometric equation.
+    Interpolates all fields to target pressure levels.
+
     Returns dict of {param_level: (2, N320)} for all PL fields.
     """
     timestamps = [date - datetime.timedelta(hours=TIME_OFFSET_HOURS), date]
     fields = {}
 
-    # Download lnsp for both timesteps
-    print("    Downloading lnsp...")
-    lnsp_paths = []
+    # Download all needed files
+    print("    Downloading lnsp + z (surface)...")
+    lnsp_paths, z_sfc_paths = [], []
     for dt in timestamps:
         lnsp_paths.append(download_ceda_nc(dt, param="lnsp", base_url=CEDA_OPER_ML_BASE))
+        z_sfc_paths.append(download_ceda_nc(dt, param="z", base_url=CEDA_OPER_ML_BASE))
 
-    for param in PARAM_PL:
-        print(f"    {param} -> {len(LEVELS)} pressure levels...")
-
-        # Download model level file for both timesteps
-        ml_paths = []
+    # Download model-level params: t, q, u, v (z is computed, not directly available)
+    ml_params = ["t", "q", "u", "v"]
+    ml_paths = {}
+    for param in ml_params:
+        print(f"    Downloading {param} (137 model levels)...")
+        ml_paths[param] = []
         for dt in timestamps:
-            ml_paths.append(download_ceda_nc(dt, param=param, base_url=CEDA_OPER_ML_BASE))
+            ml_paths[param].append(
+                download_ceda_nc(dt, param=param, base_url=CEDA_OPER_ML_BASE))
 
-        # Interpolate each timestep
-        for level in LEVELS:
-            values_list = []
-            for i in range(2):
-                # Read model level data
-                ds = xr.open_dataset(ml_paths[i])
-                var_name = [v for v in ds.data_vars
-                            if v not in ('latitude', 'longitude', 'time', 'level')][0]
-                ml_data = ds[var_name].values.squeeze()  # (137, lat, lon)
-                ds.close()
+    # Process each timestep
+    for level in LEVELS:
+        print(f"    Interpolating to {level} hPa...")
 
-                # Read lnsp
-                ds_lnsp = xr.open_dataset(lnsp_paths[i])
-                lnsp_var = [v for v in ds_lnsp.data_vars
-                            if v not in ('latitude', 'longitude', 'time')][0]
-                lnsp_2d = ds_lnsp[lnsp_var].values.squeeze()  # (lat, lon)
-                ds_lnsp.close()
+    # Actually, process per-timestep to reuse loaded data efficiently
+    print("    Interpolating all fields to pressure levels...")
+    # Initialize: fields[param_level] will collect 2 timestep arrays
+    field_arrays = {
+        f"{'z' if p == 'z' else p}_{lev}": []
+        for p in PARAM_PL for lev in LEVELS
+    }
 
-                # Compute pressure on model levels
-                p_full = compute_pressure_on_model_levels(lnsp_2d)
+    for i, dt in enumerate(timestamps):
+        ts_label = "t-24h" if i == 0 else "t"
+        print(f"      Processing timestep {ts_label} ({dt})...")
 
-                # Interpolate to target pressure level
-                values_2d = interpolate_ml_to_pl_linear(ml_data, p_full, level)
+        # Read lnsp -> surface pressure
+        ds_lnsp = xr.open_dataset(lnsp_paths[i])
+        lnsp_var = [v for v in ds_lnsp.data_vars
+                    if v not in ('latitude', 'longitude', 'time')][0]
+        lnsp_2d = ds_lnsp[lnsp_var].values.squeeze()
+        ds_lnsp.close()
 
-                # CEDA is already 0-360 longitude; regrid to N320
-                values_1d = ekr.interpolate(values_2d, {"grid": (0.25, 0.25)}, {"grid": "N320"})
-                values_list.append(values_1d)
+        sp = np.exp(lnsp_2d)
+        p_half = A_HALF[:, None, None] + B_HALF[:, None, None] * sp[None, :, :]
+        p_full = (p_half[:-1] + p_half[1:]) / 2
 
-            stacked = np.stack(values_list)  # (2, N320)
+        # Read surface geopotential
+        ds_z = xr.open_dataset(z_sfc_paths[i])
+        z_var = [v for v in ds_z.data_vars
+                 if v not in ('latitude', 'longitude', 'time')][0]
+        z_sfc = ds_z[z_var].values.squeeze()  # (lat, lon) in m^2/s^2
+        ds_z.close()
 
-            # z in model levels is already geopotential (not height), but verify
-            # ECMWF an_ml 'z' is geopotential in m^2/s^2, same units AIFS expects
-            field_name = f"z_{level}" if param == "z" else f"{param}_{level}"
-            fields[field_name] = stacked
+        # Read model-level t and q (needed for geopotential computation)
+        ml_data = {}
+        for param in ml_params:
+            ds = xr.open_dataset(ml_paths[param][i])
+            var_name = [v for v in ds.data_vars
+                        if v not in ('latitude', 'longitude', 'time', 'level')][0]
+            ml_data[param] = ds[var_name].values.squeeze()  # (137, lat, lon)
+            ds.close()
+
+        # Compute geopotential on model levels
+        ml_data["z"] = compute_geopotential_on_ml(
+            ml_data["t"], ml_data["q"], z_sfc, p_full, p_half)
+
+        # Interpolate each param to each target pressure level
+        for param in PARAM_PL:
+            for level in LEVELS:
+                values_2d = interpolate_ml_to_pl_linear(
+                    ml_data[param], p_full, level)
+                values_1d = ekr.interpolate(
+                    values_2d, {"grid": (0.25, 0.25)}, {"grid": "N320"})
+                field_name = f"z_{level}" if param == "z" else f"{param}_{level}"
+                field_arrays[field_name].append(values_1d)
+
+    # Stack timesteps
+    for name, arrs in field_arrays.items():
+        fields[name] = np.stack(arrs)  # (2, N320)
 
     return fields
 
