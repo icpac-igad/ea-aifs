@@ -138,12 +138,13 @@ def parse_member_range(member_str: str) -> List[int]:
 class GRIBToNetCDFProcessor:
     def __init__(self, date_str: str, members: List[int], fp16: bool = True, skip_upload: bool = False,
                  bucket: str = "aifs-aiquest-us-20251127", service_account: str = "coiled-data.json",
-                 gcs_input_subpath: str = None, gcs_output_subpath: str = None):
+                 gcs_input_subpath: str = None, gcs_output_subpath: str = None,
+                 init_date: str = None):
         """
         Initialize ERA5T processor with configurable date, members, and GCS paths.
 
         Args:
-            date_str: Date string in format YYYYMMDD_0000
+            date_str: Date string in format YYYYMMDD_0000 (used for GCS folder path)
             members: List of ensemble member numbers (0-indexed for ERA5T)
             fp16: If True, use FP16 paths (default: True for ERA5T)
             skip_upload: If True, skip uploading NetCDF files to GCS (for testing)
@@ -151,19 +152,30 @@ class GRIBToNetCDFProcessor:
             service_account: Path to GCS service account key
             gcs_input_subpath: Custom GCS input subpath (default: era5t_fp16_forecasts)
             gcs_output_subpath: Custom GCS output subpath (default: era5t_fp16_1p5deg_nc)
+            init_date: ERA5T initialization date (YYYYMMDD) used in GRIB filenames.
+                       If None, uses date_str. For ERA5T this is typically different
+                       from date_str (e.g., init_date=20260227, date_str=20260305).
         """
         self.skip_upload = skip_upload
         # GCS Configuration
         self.gcs_bucket = bucket
         self.service_account_key = service_account
 
-        # Parse date string
+        # Parse date string (used for GCS folder path)
         if '_' in date_str:
             self.forecast_date = date_str.split('_')[0]
             self.forecast_time = date_str.split('_')[1]
         else:
             self.forecast_date = date_str
             self.forecast_time = "0000"
+
+        # Init date used in GRIB filenames (ERA5T init date, e.g. 20260227)
+        if init_date:
+            self.init_date = init_date.split('_')[0] if '_' in init_date else init_date
+            self.init_time = init_date.split('_')[1] if '_' in init_date else "0000"
+        else:
+            self.init_date = self.forecast_date
+            self.init_time = self.forecast_time
 
         self.date_prefix = f"{self.forecast_date}_{self.forecast_time}"
 
@@ -243,8 +255,9 @@ class GRIBToNetCDFProcessor:
 
     def download_grib_file(self, member: int, time_range) -> Optional[str]:
         start_hour, end_hour = time_range
+        # GRIB filenames use the ERA5T init date, not the forecast target date
         filename = (
-            f"aifs_ens_forecast_{self.forecast_date}_{self.forecast_time}_"
+            f"aifs_ens_forecast_{self.init_date}_{self.init_time}_"
             f"member{member:03d}_h{start_hour}-{end_hour}.grib"
         )
         blob_name = f"{self.gcs_input_prefix}{filename}"
@@ -600,6 +613,7 @@ class GRIBToNetCDFProcessor:
         print(f"Bucket: {self.gcs_bucket}")
         print(f"Input path: {self.gcs_input_prefix}")
         print(f"Output path: {self.gcs_output_prefix}")
+        print(f"GRIB init date: {self.init_date}_{self.init_time}")
         print(f"Members: {min(self.members)}-{max(self.members)} ({len(self.members)} total)")
         print(f"Time ranges: {len(self.time_ranges)} periods")
         print(f"Forecast: {self.forecast_date} {self.forecast_time}")
@@ -698,7 +712,10 @@ Examples:
     )
 
     parser.add_argument('--date', required=True,
-                       help='Date string (YYYYMMDD_0000 or YYYYMMDD)')
+                       help='Date string for GCS folder (YYYYMMDD_0000 or YYYYMMDD)')
+    parser.add_argument('--init-date', default=None,
+                       help='ERA5T init date used in GRIB filenames (e.g., 20260227). '
+                            'Defaults to --date if not specified.')
     parser.add_argument('--members', default='0-9',
                        help='Member range (default: 0-9 for ERA5T)')
     parser.add_argument('--fp16', action='store_true', default=True,
@@ -728,7 +745,8 @@ Examples:
             bucket=args.bucket,
             service_account=args.service_account,
             gcs_input_subpath=args.gcs_input_subpath,
-            gcs_output_subpath=args.gcs_output_subpath
+            gcs_output_subpath=args.gcs_output_subpath,
+            init_date=args.init_date
         )
         # Process just this one member
         if not processor.initialize_gcs():
@@ -784,6 +802,8 @@ Examples:
             cmd.extend(['--gcs-input-subpath', args.gcs_input_subpath])
         if args.gcs_output_subpath:
             cmd.extend(['--gcs-output-subpath', args.gcs_output_subpath])
+        if args.init_date:
+            cmd.extend(['--init-date', args.init_date])
 
         # Run in subprocess
         member_start = time.time()
