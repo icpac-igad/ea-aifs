@@ -77,9 +77,9 @@ def verify_pickle_file(file_path):
         if not isinstance(fields, dict) or len(fields) == 0:
             return False, "Invalid or empty fields"
         
-        # Check field count (should be around 90+ fields)
+        # Check field count (74 for ERA5T, 90+ for original format)
         field_count = len(fields)
-        if field_count < 80:
+        if field_count < 70:
             return False, f"Too few fields: {field_count}"
         
         return True, f"Valid input state with {field_count} fields"

@@ -104,12 +104,12 @@ def download_single_member(member: int, date_str: str, input_dir: str,
 def run_single_member(member: int, input_dir: str, output_dir: str,
                       runner, lead_time: int = LEAD_TIME) -> Tuple[bool, List[str]]:
     """Run AIFS model (FP16) for a single ensemble member."""
-    import fp16_multi_run_AIFS_ENS_v1
-    from fp16_multi_run_AIFS_ENS_v1 import run_ensemble_member
+    import era5t_fp16_multi_run_AIFS_ENS_v1
+    from era5t_fp16_multi_run_AIFS_ENS_v1 import run_ensemble_member
 
     # Override the hardcoded PICKLE_INPUT_DIR and LEAD_TIME with our values
-    fp16_multi_run_AIFS_ENS_v1.PICKLE_INPUT_DIR = input_dir
-    fp16_multi_run_AIFS_ENS_v1.LEAD_TIME = lead_time
+    era5t_fp16_multi_run_AIFS_ENS_v1.PICKLE_INPUT_DIR = input_dir
+    era5t_fp16_multi_run_AIFS_ENS_v1.LEAD_TIME = lead_time
 
     os.makedirs(output_dir, exist_ok=True)
 
