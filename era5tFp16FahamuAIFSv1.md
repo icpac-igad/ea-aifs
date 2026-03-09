@@ -3,6 +3,61 @@
 End-to-end pipeline for running AIFS ensemble forecasts using CEDA ERA5T data
 with FP16 precision inference. Covers pkl creation through AI Weather Quest submission.
 
+## Data Source & Availability
+
+### CEDA ERA5T Archive
+
+ERA5T (ERA5 Timely) is ECMWF's near-real-time reanalysis, available from CEDA
+(Centre for Environmental Data Analysis) at:
+https://data.ceda.ac.uk/badc/ecmwf-era5t/data/
+
+**Data lag**: ERA5T data on CEDA is available with approximately **one week lag**
+from real time. For example, data for March 1 typically becomes available around
+March 7-8. This lag determines the earliest initialization date available.
+
+**Ensemble of Data Assimilations (EDA)**: The 10-member EDA provides perturbed
+surface analyses, matching what AIFSgaia was trained on. Available under
+`enda/an_sfc/` with members `mem0` through `mem9`.
+
+| CEDA Path | Content | Resolution |
+|-----------|---------|------------|
+| `enda/an_sfc/YYYY/MM/DD/` | EDA surface analysis (10 members) | 0.25°, 3-hourly |
+| `oper/an_ml/YYYY/MM/DD/` | Operational model level analysis (137 levels) | 0.25°, hourly |
+
+Authentication: wget with Bearer token from `.env` (`ceda_token`).
+See: https://help.ceda.ac.uk/article/5191-downloading-multiple-files-with-wget
+
+### AIFSgaia Model
+
+This pipeline uses **AIFS-ENS-1.0** (AIFSgaia), developed by ECMWF. Key design:
+
+- **Architecture**: Transformer-based graph neural network (GNN) with sliding-window
+  attention along spiral longitudinal bands. 16 processor layers, 1024 embedding dim,
+  8 attention heads, ~230M parameters.
+- **Training**: ERA5 reanalysis 1979-2024, 6-hourly on O96 grid (~1°), using fairCRPS
+  loss over 4 ensemble members. 200k iterations, batch size 16.
+- **Ensemble generation**: Conditioned on random noise — independent samples from
+  standard normal distribution injected via conditional layer normalization.
+- **Input**: Two consecutive states (t, t-24h) from ERA5T + 10 EDA members.
+- **Reference**: Lang et al., *AIFS-CRPS* (2024), http://arxiv.org/abs/2412.15832
+- **Code**: Anemoi packages — https://github.com/ecmwf/anemoi-inference
+
+### Date Planning
+
+Because of the ~1 week CEDA lag, the initialization date is typically 6-7 days
+before the AI Weather Quest target date:
+
+```
+CEDA data available: up to ~T-7 days
+ERA5T init date:     e.g., 2026-02-27 (most recent available)
+Forecast target:     e.g., 2026-03-05 (6 days later)
+Forecast lead time:  960h (40 days) covers weeks 3-4 from target date
+```
+
+The `--lead-time 960` compensates for the gap between init and target dates,
+ensuring the forecast covers the required week 3 (days 15-21) and week 4
+(days 22-28) verification windows.
+
 ## Pipeline Overview
 
 ```
@@ -44,18 +99,45 @@ automatically derives the 18 missing fields at inference time:
 
 ## Step 1: Create pkl Files from CEDA ERA5T
 
-Downloads ERA5T EDA surface fields (per-member) and deterministic pressure level
-fields from CEDA, interpolates model levels to pressure levels, and packages
-into pkl files with 74 fields each.
+Downloads ERA5T data from CEDA and creates input state pkl files for each of
+the 10 EDA members.
+
+### Data Preparation Strategy
+
+1. **Surface fields (per-member)**: Downloaded from `enda/an_sfc` for each of
+   the 10 EDA members. Two timesteps: t and t-24h.
+2. **Pressure level fields (deterministic, shared)**: Downloaded from `oper/an_ml`
+   on 137 model levels, then interpolated to 13 standard pressure levels using
+   ECMWF L137 hybrid sigma-pressure coefficients. Geopotential computed via the
+   hypsometric equation from temperature, humidity, and surface geopotential.
+   These fields are identical across all 10 members.
+3. **Constant forcing fields**: `lsm`, `z` (orography), `slor`, `sdor` fetched
+   once from ECMWF Open Data (static, never change).
+
+### Pressure Level Interpolation
+
+The model level to pressure level interpolation uses:
+- **L137 hybrid coefficients**: `p_half(k) = a(k) + b(k) * sp` for 138 half-levels
+- **Log-pressure interpolation**: Linear interpolation between bracketing model
+  levels in log-pressure space for physical consistency
+- **Hypsometric equation** for geopotential: Integrates virtual temperature
+  upward from the surface, since CEDA only stores surface geopotential (not
+  geopotential on model levels)
+- **Float32 precision**: Keeps peak memory under 4GB for 8GB VMs
+
+### Running
 
 ```bash
-python ceda_era5t_pkl_input_aifsens.py
+uv run ceda_era5t_pkl_input_aifsens.py
 ```
 
-- **Input**: CEDA ERA5T archive (requires `ceda_token` env var)
+- **Input**: CEDA ERA5T archive (requires `ceda_token` in `.env`)
 - **Output**: `gs://aifs-aiquest-us-20251127/era5t/YYYYMMDD/input_state_member_000.pkl` ... `_009.pkl`
 - **Config**: Edit `DATE` in script (e.g., `datetime(2026, 2, 27, 0, 0)`)
 - **Fields**: 5 EDA surface + 65 PL (deterministic, shared) + 4 constants = 74
+- **Runtime**: ~10 min total (2.5 min PL interpolation + ~45s per member)
+- **Download size**: ~1.2 GB model level files (t, q, u, v) + ~20 MB surface files
+- **Output size**: ~612 MB per member pkl, ~6 GB total for 10 members
 
 ## Step 2: GPU Inference (pkl → GRIB)
 
