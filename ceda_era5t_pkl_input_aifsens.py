@@ -7,6 +7,7 @@
 #     "netCDF4",
 #     "earthkit-data",
 #     "earthkit-regrid",
+#     "ecmwf-opendata",
 #     "python-dotenv",
 #     "google-cloud-storage",
 # ]
@@ -144,10 +145,10 @@ def build_ceda_url(base_url, dt, member=None, param=None):
 
     if member is not None:
         filename = f"ecmwf-era5t_enda_an_sfc_{timestamp}.mem{member}.{param}.nc"
-        return f"{base_url}/{datestr}/{filename}"
+        return f"{base_url}/{datestr}/{filename}?download=1"
     else:
         filename = f"ecmwf-era5t_oper_an_ml_{timestamp}.{param}.nc"
-        return f"{base_url}/{datestr}/{filename}"
+        return f"{base_url}/{datestr}/{filename}?download=1"
 
 
 def wget_download(url, output_path, token):
@@ -159,7 +160,24 @@ def wget_download(url, output_path, token):
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     if result.returncode != 0:
+        # Clean up partial/error file
+        if os.path.exists(output_path):
+            os.remove(output_path)
         raise RuntimeError(f"wget failed for {url}: {result.stderr}")
+    # Validate download is not an HTML error page or empty
+    fsize = os.path.getsize(output_path)
+    if fsize == 0:
+        os.remove(output_path)
+        raise RuntimeError(f"Downloaded file is empty: {url}")
+    with open(output_path, 'rb') as f:
+        header = f.read(16)
+    # NetCDF files start with 'CDF' or '\x89HDF'; GRIB files start with 'GRIB'
+    if header[:3] not in (b'CDF', b'\x89HD') and header[:4] != b'GRIB':
+        os.remove(output_path)
+        # Show first bytes to help diagnose (likely HTML error page)
+        raise RuntimeError(
+            f"Downloaded file is not NetCDF/GRIB (got {header[:40]!r}): {url}"
+        )
     return output_path
 
 
@@ -190,7 +208,7 @@ def download_ceda_nc(dt, member=None, param=None, base_url=None):
 
 def read_sfc_nc(nc_path):
     """Read a CEDA surface NetCDF file -> 1D N320 array."""
-    ds = xr.open_dataset(nc_path)
+    ds = xr.open_dataset(nc_path, engine="netcdf4")
     data_vars = [v for v in ds.data_vars if v not in ('latitude', 'longitude', 'time')]
     values = ds[data_vars[0]].values.squeeze()
     assert values.ndim == 2, f"Expected 2D, got {values.shape}"
@@ -343,7 +361,7 @@ def compute_geopotential_on_target_levels(t_ml, q_ml, z_sfc, lnsp_2d, target_lev
 
 def _read_ml_var(nc_path):
     """Read a single model-level NetCDF file and return the data array."""
-    ds = xr.open_dataset(nc_path)
+    ds = xr.open_dataset(nc_path, engine="netcdf4")
     var_name = [v for v in ds.data_vars
                 if v not in ('latitude', 'longitude', 'time', 'level')][0]
     data = ds[var_name].values.squeeze()
@@ -353,7 +371,7 @@ def _read_ml_var(nc_path):
 
 def _read_sfc_var(nc_path):
     """Read a single surface NetCDF file and return the 2D data array."""
-    ds = xr.open_dataset(nc_path)
+    ds = xr.open_dataset(nc_path, engine="netcdf4")
     var_name = [v for v in ds.data_vars
                 if v not in ('latitude', 'longitude', 'time')][0]
     data = ds[var_name].values.squeeze()
@@ -523,6 +541,14 @@ def create_input_states(date):
         print(f"    {name}: shape={arr.shape}, range=[{arr.min():.2f}, {arr.max():.2f}]")
     print(f"    ... and {len(pl_fields) - 3} more")
 
+    # Clean up model level downloads to free disk space
+    import glob as _glob
+    ml_files = _glob.glob(os.path.join(DOWNLOAD_DIR, "oper_ml_*"))
+    if ml_files:
+        for f in ml_files:
+            os.remove(f)
+        print(f"  Cleaned up {len(ml_files)} model level files to free disk space")
+
     # ── Constant forcing fields (lsm, z, slor, sdor) from ECMWF Open Data ──
     print("\n  Fetching constant forcing fields...")
     const_fields = get_constant_fields()
@@ -621,7 +647,7 @@ def main():
         print("ERROR: ceda_token not found in .env file")
         return
 
-    DATE = datetime.datetime(2026, 2, 27, 0, 0)
+    DATE = datetime.datetime(2026, 3, 8, 0, 0)
     print(f"Date: {DATE}")
     print(f"Previous state: {DATE - datetime.timedelta(hours=TIME_OFFSET_HOURS)}")
     print(f"Members: {len(ENSEMBLE_MEMBERS)} (mem{ENSEMBLE_MEMBERS[0]}-mem{ENSEMBLE_MEMBERS[-1]})")
