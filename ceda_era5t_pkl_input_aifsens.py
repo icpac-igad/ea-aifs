@@ -30,8 +30,26 @@ Strategy:
   - Constant forcing fields (lsm, z, slor, sdor): from ECMWF Open Data
   - Two consecutive states: t and t-24h
 
+Configuration:
+  - Edit DATE in main() to set the initialization date
+  - Requires ceda_token in .env (Bearer token from CEDA)
+  - Token expires periodically; refresh at:
+    https://help.ceda.ac.uk/article/5100-archive-access-tokens#api
+  - CEDA ERA5T data has ~1 week lag from real time
+
+Output:
+  - Pickle files uploaded to GCS: gs://aifs-aiquest-us-20251127/era5t/YYYYMMDD/
+  - 10 members (mem0-mem9), 74 fields each (5 sfc + 65 pl + 4 const)
+  - Use with era5t_fp16_automate_aifs_gpu_pipeline.py for GPU inference:
+      python era5t_fp16_automate_aifs_gpu_pipeline.py \\
+          --date TARGETDATE_0000 --members 0-9 \\
+          --gcs-input-prefix era5t/YYYYMMDD \\
+          --gcs-output-subpath era5t_fp16_forecasts --lead-time 960
+
 Usage:
   uv run ceda_era5t_pkl_input_aifsens.py
+
+Full pipeline docs: era5tFp16FahamuAIFSv1.md
 """
 
 import datetime

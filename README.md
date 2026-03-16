@@ -245,6 +245,97 @@ ECMWF Open Data → Pickle Files → GCS (YYYYMMDD_0000/input/)
 - **Forecast Length:** 792 hours (33 days)
 - **Meteorological Parameters:** pr, mslp, tas
 
+---
+
+## ERA5T Pipeline (CEDA Data Source)
+
+An alternative pipeline using ERA5T data from the CEDA archive instead of ECMWF Open Data.
+This enables forecasts initialized from dates not covered by ECMWF Open Data (which only
+retains the most recent ~24h). ERA5T has a ~1 week lag from real time.
+
+For full technical documentation, see [`era5tFp16FahamuAIFSv1.md`](era5tFp16FahamuAIFSv1.md).
+
+### Key Differences from Standard Pipeline
+
+| Aspect | Standard (ECMWF Open Data) | ERA5T (CEDA) |
+|--------|---------------------------|--------------|
+| Input fields | 92 fields | 74 fields (adapted to 92 at inference) |
+| Members | 1-50 | 0-9 (10 EDA members) |
+| Lead time | 792h (33 days) | 960h (40 days) |
+| Data source | ECMWF Open Data (latest only) | CEDA ERA5T archive (~1 week lag) |
+| Auth | None | CEDA Bearer token (`ceda_token` in `.env`) |
+
+### ERA5T Workflow
+
+**Step 1: Create pkl files from CEDA** (ETL Machine)
+
+```bash
+uv run ceda_era5t_pkl_input_aifsens.py
+```
+
+Edit `DATE` in the script to set the initialization date. Requires `ceda_token` in `.env`.
+Output: `gs://aifs-aiquest-us-20251127/era5t/YYYYMMDD/input_state_member_00*.pkl`
+
+**Step 2: GPU Inference** (GPU Machine, >=24GB VRAM)
+
+```bash
+python era5t_fp16_automate_aifs_gpu_pipeline.py \
+    --date YYYYMMDD_0000 \
+    --members 0-9 \
+    --gcs-input-prefix era5t/YYYYMMDD \
+    --gcs-output-subpath era5t_fp16_forecasts \
+    --lead-time 960
+```
+
+Note: `--date` is the target forecast date folder, `--gcs-input-prefix` points to the
+ERA5T init date pkl files. For example, init date 20260227 → target date 20260305.
+
+**Step 3: GRIB to 1.5deg NetCDF** (ETL Machine)
+
+```bash
+python era5t_aifs_n320_grib_1p5deg_nc_cli.py \
+    --date YYYYMMDD_0000 \
+    --members 0-9 \
+    --gcs-input-subpath era5t_fp16_forecasts \
+    --gcs-output-subpath era5t_fp16_1p5deg_nc \
+    --init-date YYYYMMDD
+```
+
+`--init-date` must match the ERA5T initialization date used in the GRIB filenames.
+
+**Step 4: Quintile Analysis** (ETL Machine)
+
+```bash
+python era5t_ensemble_quintile_analysis_cli.py --date YYYYMMDD --members 0-9 --fp16
+```
+
+**Step 5: Submit** (ETL Machine)
+
+```bash
+python era5t_forecast_submission_cli.py --date YYYYMMDD
+```
+
+### ERA5T Scripts Reference
+
+| Script | Purpose |
+|--------|---------|
+| `ceda_era5t_pkl_input_aifsens.py` | CEDA ERA5T → pkl (74 fields, 10 members) |
+| `era5t_fp16_automate_aifs_gpu_pipeline.py` | GPU pipeline orchestrator (FP16) |
+| `era5t_fp16_multi_run_AIFS_ENS_v1.py` | FP16 inference with field adaptation (74→92) |
+| `era5t_aifs_n320_grib_1p5deg_nc_cli.py` | GRIB → 1.5deg NetCDF regridding |
+| `era5t_ensemble_quintile_analysis_cli.py` | Quintile probability calculation |
+| `era5t_forecast_submission_cli.py` | AI Weather Quest submission |
+
+### ERA5T Execution Times and Costs
+
+| Script | Time | Environment | Cost |
+|--------|------|-------------|------|
+| `ceda_era5t_pkl_input_aifsens.py` | ~14 min | CPU (n2-standard-2) | ~$0.04 |
+| `era5t_fp16_automate_aifs_gpu_pipeline.py` | ~2.5 hours | GPU (g2-standard-12) | ~$5-7 |
+| `era5t_aifs_n320_grib_1p5deg_nc_cli.py` | ~1 hour | CPU (n2-standard-2) | ~$0.24 |
+| `era5t_ensemble_quintile_analysis_cli.py` | ~10 min | CPU (n2-standard-2) | ~$0.04 |
+| `era5t_forecast_submission_cli.py` | ~5 min | CPU (n2-standard-2) | ~$0.02 |
+
 ## Dependencies
 
 ### Core Packages
@@ -270,6 +361,127 @@ ECMWF Open Data → Pickle Files → GCS (YYYYMMDD_0000/input/)
 | `aifs_n320_grib_1p5defg_nc_cli.py` | 4-4.5 hours | CPU (n2-standard-2) | ~$0.96-1.08 | GRIB regridding and processing |
 | `ensemble_quintile_analysis_cli.py` | 15 minutes | CPU (n2-standard-2) | ~$0.06 | Ensemble analysis |
 | `forecast_submission_cli.py` | 5 minutes | CPU (n2-standard-2) | ~$0.02 | Submission validation |
+
+## Troubleshooting: HuggingFace Model Download Hangs
+
+### Symptom
+
+The GPU inference pipeline hangs indefinitely at model checkpoint download:
+
+```
+Running forecast for member 0...
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]
+```
+
+This occurs inside `runner.run()` when the `anemoi-inference` library attempts to download the `ecmwf/aifs-ens-1.0` model weights (~3-4 GB) from HuggingFace Hub. The model metadata loads quickly during `SimpleRunner()` init, but the large checkpoint blob download stalls.
+
+### Root Cause
+
+The HuggingFace `huggingface_hub` downloader can hang due to:
+
+1. **Network throttling or rate limiting** on unauthenticated requests from cloud VMs
+2. **Incomplete downloads with stale lock files** preventing retry (a previous failed/killed download leaves `.incomplete` and `.lock` files in the cache)
+3. **No `HF_TOKEN` set**, causing anonymous download which is subject to stricter rate limits
+
+### Diagnosis
+
+```bash
+# Check for incomplete downloads and stale locks
+ls -la ~/.cache/huggingface/hub/models--ecmwf--aifs-ens-1.0/blobs/
+# Look for files ending in .incomplete
+
+ls -la ~/.cache/huggingface/hub/.locks/models--ecmwf--aifs-ens-1.0/
+# Look for .lock files with recent timestamps
+
+# Check HF token
+echo $HF_TOKEN
+```
+
+### Fix: Clear Stale Cache and Retry
+
+```bash
+# 1. Kill the stuck process
+kill $(pgrep -f era5t_fp16_automate_aifs_gpu_pipeline)
+
+# 2. Remove incomplete downloads and stale locks
+rm -f ~/.cache/huggingface/hub/models--ecmwf--aifs-ens-1.0/blobs/*.incomplete
+rm -f ~/.cache/huggingface/hub/.locks/models--ecmwf--aifs-ens-1.0/*.lock
+
+# 3. Set HF token to avoid rate limiting
+export HF_TOKEN="your_huggingface_token"
+
+# 4. Re-run the pipeline
+python era5t_fp16_automate_aifs_gpu_pipeline.py --date YYYYMMDD_0000 --members 0-4 ...
+```
+
+### Recommended: Pre-cache Model in Docker Image
+
+The most reliable solution is to bake the HuggingFace model into the Docker image used for GPU inference. This eliminates runtime downloads entirely, avoids network dependency during forecast runs, and ensures reproducible deployments.
+
+#### Approach 1: Dockerfile with Pre-downloaded Model
+
+Add the model download step to the GPU Docker image build:
+
+```dockerfile
+FROM your-base-gpu-image:latest
+
+# Install huggingface_hub for download
+RUN pip install huggingface_hub
+
+# Pre-download the AIFS-ENS model checkpoint into the HF cache
+# This caches all 7 files (~3-4 GB) at build time
+ARG HF_TOKEN
+RUN python -c "\
+from huggingface_hub import snapshot_download; \
+snapshot_download('ecmwf/aifs-ens-1.0', token='${HF_TOKEN}')"
+
+# The model is now cached at /root/.cache/huggingface/hub/models--ecmwf--aifs-ens-1.0/
+# anemoi-inference will find it automatically without any network calls
+```
+
+Build with:
+
+```bash
+docker build --build-arg HF_TOKEN=hf_your_token -t aifs-gpu-cached:latest .
+```
+
+#### Approach 2: Volume Mount from GCS
+
+If Docker image size is a concern (~3-4 GB added), pre-download the model to a persistent disk or GCS bucket and mount it:
+
+```bash
+# Pre-download once to a persistent location
+python -c "
+from huggingface_hub import snapshot_download
+snapshot_download('ecmwf/aifs-ens-1.0', cache_dir='/mnt/model-cache/huggingface')
+"
+
+# Mount at runtime
+export HF_HOME=/mnt/model-cache/huggingface
+python era5t_fp16_automate_aifs_gpu_pipeline.py ...
+```
+
+#### Approach 3: Coiled Software Environment with Cached Model
+
+For Coiled-managed GPU notebooks, include the model download in the software environment setup so it is available when the notebook starts:
+
+```bash
+# During software environment creation, ensure model is cached
+python -c "from huggingface_hub import snapshot_download; snapshot_download('ecmwf/aifs-ens-1.0')"
+```
+
+### Why Docker Pre-caching is Preferred
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| Runtime download | No image size increase | Slow startup (~10-30 min), network dependent, can hang |
+| Docker pre-cache | Zero startup delay, no network needed, fully reproducible | Larger image (~3-4 GB), requires rebuild for model updates |
+| Volume mount | Flexible, shared across instances | Requires persistent disk setup, mount configuration |
+
+For operational forecast pipelines where reliability and speed matter, **Docker pre-caching is strongly recommended**. It converts a flaky runtime network dependency into a deterministic build-time step.
+
+---
+
 
 ## Forecast Run History
 

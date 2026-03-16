@@ -1,27 +1,35 @@
 #!/usr/bin/env python3
 """
-Automated AIFS GPU Pipeline - FP16 (Half Precision) Version
+ERA5T Automated AIFS GPU Pipeline - FP16 (Half Precision) Version
 
 CRITICAL DESIGN: Processes ONE ensemble member at a time to avoid storage issues.
 
 For each member:
     1. Download single .pkl file from GCS
     2. Run GPU inference (FP16 precision) → generate .grib files
-    3. Upload .grib files to GCS (fp16_forecasts/)
+    3. Upload .grib files to GCS (era5t_fp16_forecasts/)
     4. Cleanup: delete BOTH .pkl AND .grib files locally
     → Repeat for next member
 
 This ensures minimal local storage usage on GPU machines.
 FP16 mode reduces VRAM usage from ~50GB to <24GB.
 
-Usage:
-    python fp16_automate_aifs_gpu_pipeline.py --date 20251127_0000 --members 1-50
+ERA5T Usage (10 EDA members, 960h forecast):
+    python era5t_fp16_automate_aifs_gpu_pipeline.py \\
+        --date 20260308_0000 --members 0-9 \\
+        --gcs-input-prefix era5t/20260308 \\
+        --gcs-output-subpath era5t_fp16_forecasts \\
+        --lead-time 960
 
-GCS Structure:
-    gs://aifs-aiquest-us-20251127/
-        YYYYMMDD_0000/
-            input/              <- pickle files
-            fp16_forecasts/     <- FP16 GRIB output files
+    --date:               Target forecast date (GCS folder name)
+    --gcs-input-prefix:   Points to pkl files from ceda_era5t_pkl_input_aifsens.py
+    --gcs-output-subpath: GRIB output subfolder under the --date folder
+    --lead-time:          960h (40 days) to cover the gap between init and target dates
+
+Input pkl files:  gs://aifs-aiquest-us-20251127/era5t/YYYYMMDD/input_state_member_00*.pkl
+Output GRIB:      gs://aifs-aiquest-us-20251127/YYYYMMDD_0000/era5t_fp16_forecasts/*.grib
+
+Full pipeline docs: era5tFp16FahamuAIFSv1.md
 """
 
 import os
