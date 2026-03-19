@@ -125,10 +125,26 @@ def adapt_era5t_fields(fields):
         fields["tcw"] = fields.pop("tcwv")
         added.append("tcw (from tcwv)")
 
-    # sp: approximate from msl (surface pressure ≈ mean sea level pressure)
+    # sp: derive from msl using the hypsometric equation
+    # SP = MSL * exp(-z_sfc / (R_d * T_virtual))
+    # where z_sfc is surface geopotential (m²/s²) and T_virtual ≈ 2t * (1 + 0.61*q)
+    # The constant field "z" in the pkl is surface geopotential (orography).
     if "sp" not in fields and "msl" in fields:
-        fields["sp"] = fields["msl"].copy()
-        added.append("sp (from msl)")
+        if "z" in fields:
+            Rd = 287.058  # J/(kg·K) specific gas constant for dry air
+            z_sfc = fields["z"]  # surface geopotential, m²/s²
+            t2m = fields["2t"]   # 2-meter temperature, K
+            # Use 2t as proxy for mean virtual temperature in the column
+            # between surface and sea level. Add small moisture correction.
+            T_mean = t2m * 1.003  # ~0.3% virtual temperature correction
+            # Avoid division by zero in extreme cold regions
+            T_mean = np.maximum(T_mean, 200.0)
+            fields["sp"] = fields["msl"] * np.exp(-z_sfc / (Rd * T_mean))
+            added.append("sp (from msl + z via hypsometric eq)")
+        else:
+            # Fallback: direct copy (better than nothing, but loses altitude correction)
+            fields["sp"] = fields["msl"].copy()
+            added.append("sp (from msl, WARNING: no orography correction)")
 
     # 2d: dewpoint ≈ 2t - 2K (conservative dewpoint depression)
     if "2d" not in fields and "2t" in fields:

@@ -89,7 +89,7 @@ automatically derives the 18 missing fields at inference time:
 | Derived Field | Source | Method |
 |---------------|--------|--------|
 | tcw | tcwv | Rename (vapor is dominant component) |
-| sp | msl | Copy (surface pressure ≈ mean sea level pressure) |
+| sp | msl + z | Hypsometric equation: SP = MSL × exp(−z_sfc/(R_d×T_v)) |
 | 2d | 2t | 2t - 2K (conservative dewpoint depression) |
 | skt | 2t | Copy (skin temp ≈ 2m temp) |
 | stl1, stl2 | 2t | Copy (soil temp ≈ surface temp) |
