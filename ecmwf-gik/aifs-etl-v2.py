@@ -32,8 +32,10 @@ import pandas as pd
 
 # Configuration
 PARAM_SFC = ["10u", "10v", "2d", "2t", "msl", "skt", "sp", "tcw"]
-PARAM_SFC_FC = ["lsm", "z", "slor", "sdor"]
-PARAM_SOIL = []
+PARAM_SFC_CONST = ["lsm", "z", "slor", "sdor"]  # Static forcing from ECMWF Open Data
+PARAM_SFC_FC = PARAM_SFC_CONST  # alias for verification
+PARAM_SOIL = ["sot"]
+SOIL_LEVELS = [1, 2]
 PARAM_PL = ["gh", "t", "u", "v", "w", "q"]
 LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
 
@@ -137,6 +139,8 @@ def get_variable_path_mapping():
         'v': 'v/instant/isobaricInhPa/v',
         'w': 'w/instant/isobaricInhPa/w',
         'q': 'q/instant/isobaricInhPa/q',
+        # Soil temperature
+        'sot': 'sot/instant/soilLayer/sot',
     }
 
 
@@ -248,7 +252,7 @@ def extract_variable_parallel(zstore, variable_path):
 
 
 def extract_pressure_level_coordinates(zstore, base_path):
-    """Extract pressure level coordinate values."""
+    """Extract pressure level coordinate values IN ARRAY ORDER (not sorted)."""
     levels = []
     coord_base = f"{base_path}/isobaricInhPa"
     zarray_key = f"{coord_base}/.zarray"
@@ -256,23 +260,102 @@ def extract_pressure_level_coordinates(zstore, base_path):
         try:
             metadata = json.loads(zstore[zarray_key]) if isinstance(zstore[zarray_key], str) else zstore[zarray_key]
             num_levels = metadata.get('shape', [0])[0]
+            # Try reading individual chunks first
             for i in range(num_levels):
                 coord_path = f"{coord_base}/{i}"
                 if coord_path in zstore:
                     val = zstore[coord_path]
                     if isinstance(val, str) and val.startswith('base64:'):
                         decoded = base64.b64decode(val[7:])
-                        levels.append(int(struct.unpack('<d', decoded)[0]))
+                        if len(decoded) == 8:
+                            # Single value per chunk
+                            levels.append(int(struct.unpack('<d', decoded)[0]))
+                        elif len(decoded) == num_levels * 8:
+                            # All values packed in one chunk (common case)
+                            all_vals = struct.unpack(f'<{num_levels}d', decoded)
+                            levels = [int(v) for v in all_vals]
+                            break
         except Exception:
             pass
-    return sorted(levels, reverse=True)
+    # Return in ARRAY ORDER — do NOT sort, as this matches the dimension index
+    return levels
 
 
-def extract_all_fields(zstore):
-    """Extract all AIFS fields from a single pre-loaded zstore. Returns fields dict."""
+def get_constant_fields():
+    """Get static forcing fields (lsm, z, slor, sdor) from ECMWF Open Data.
+
+    Same approach as ceda_era5t_pkl_input_aifsens.py — these are time-invariant
+    constants downloaded once and shared across all members. Not available in
+    the ensemble GRIB parquets, so fetched separately.
+
+    Returns dict of {param: np.array shape (2, 721, 1440)} at 0.25 deg.
+    Both timesteps contain identical values (constants don't change).
+    """
+    import earthkit.data as ekd
+
+    print("  Fetching constant fields (z, slor, sdor, lsm) from ECMWF Open Data...")
+    data = ekd.from_source("ecmwf-open-data", param=PARAM_SFC_CONST)
+
+    fields = {}
+    for f in data:
+        values = f.to_numpy()
+        assert values.shape == (721, 1440), f"Unexpected shape: {values.shape}"
+        # ECMWF Open Data is -180 to 180, shift to 0-360
+        values = np.roll(values, -values.shape[1] // 2, axis=1).astype(np.float32)
+        # Stack same values for both timesteps (constants don't change)
+        fields[f.metadata("param")] = np.stack([values, values])
+        print(f"    {f.metadata('param')}: shape={fields[f.metadata('param')].shape}, "
+              f"range=[{values.min():.4f}, {values.max():.4f}]")
+
+    return fields
+
+
+def get_soil_fields(date, member_num):
+    """Get soil temperature (stl1, stl2) from ECMWF Open Data for a specific member.
+
+    Soil temps are per-member ensemble fields (not constants), fetched from
+    ECMWF Open Data at two timesteps (t-6h and t). Same approach as
+    ecmwf_opendata_pkl_input_aifsens.py.
+
+    Returns dict {'stl1': array(2, 542080), 'stl2': array(2, 542080)} on N320 grid.
+    """
+    import earthkit.data as ekd
+    import earthkit.regrid as ekr
+    from collections import defaultdict
+
+    fields = defaultdict(list)
+    # Control member uses number=0 in ECMWF Open Data
+    number = 0 if member_num == -1 else member_num
+
+    for d in [date - datetime.timedelta(hours=6), date]:
+        data = ekd.from_source("ecmwf-open-data", date=d, param=PARAM_SOIL,
+                               levelist=SOIL_LEVELS, number=[number], stream='enfo')
+        for f in data:
+            values = f.to_numpy()
+            assert values.shape == (721, 1440), f"Unexpected shape: {values.shape}"
+            values = np.roll(values, -values.shape[1] // 2, axis=1)
+            values = ekr.interpolate(values, {"grid": (0.25, 0.25)}, {"grid": "N320"})
+            name = f"{f.metadata('param')}_{f.metadata('levelist')}"
+            fields[name].append(values)
+
+    result = {}
+    mapping = {'sot_1': 'stl1', 'sot_2': 'stl2'}
+    for k, v in fields.items():
+        new_name = mapping.get(k, k)
+        result[new_name] = np.stack(v)
+
+    return result
+
+
+def extract_all_fields(zstore, const_fields=None):
+    """Extract all AIFS fields from a single pre-loaded zstore. Returns fields dict.
+
+    const_fields: pre-fetched constant fields (lsm, z, slor, sdor) to merge in.
+    """
     var_paths = get_variable_path_mapping()
     fields = {}
-    all_params = PARAM_SFC + PARAM_SFC_FC + PARAM_PL
+    # Fetch dynamic params + soil from parquet; constants come from const_fields
+    all_params = PARAM_SFC + ['sot'] + PARAM_PL
 
     for p in all_params:
         if p not in var_paths:
@@ -325,10 +408,42 @@ def extract_all_fields(zstore):
         if gh_key in fields:
             fields[f"z_{level}"] = fields.pop(gh_key) * 9.80665
 
-    return fields
+    # Extract soil temperature from parquet if available
+    # The parquet has sot as a single layer; use for both stl1 and stl2
+    if 'sot' in fields:
+        sot_data = fields.pop('sot')
+        fields['stl1'] = sot_data
+        fields['stl2'] = sot_data.copy()
+        print(f"    sot -> stl1, stl2: shape {sot_data.shape}")
+
+    # Merge constant forcing fields (lsm, z, slor, sdor) from ECMWF Open Data
+    if const_fields:
+        for k, v in const_fields.items():
+            fields[k] = v
+
+    # Regrid all fields from 0.25° (721x1440) to N320 for AIFS
+    import earthkit.regrid as ekr
+    regridded = {}
+    for fname, fdata in fields.items():
+        if fdata.ndim == 2 and fdata.shape == (721, 1440):
+            regridded[fname] = ekr.interpolate(fdata, {"grid": (0.25, 0.25)}, {"grid": "N320"})
+        elif fdata.ndim == 2:
+            regridded[fname] = fdata  # already regridded (e.g. from constants)
+        else:
+            # Multi-timestep: regrid each timestep
+            steps = []
+            for t in range(fdata.shape[0]):
+                if fdata[t].shape == (721, 1440):
+                    steps.append(ekr.interpolate(fdata[t], {"grid": (0.25, 0.25)}, {"grid": "N320"}))
+                else:
+                    steps.append(fdata[t])
+            regridded[fname] = np.stack(steps)
+    print(f"    Regridded {len(regridded)} fields to N320")
+
+    return regridded
 
 
-def create_input_state_from_parquet(parquet_path, member, zstore=None):
+def create_input_state_from_parquet(parquet_path, member, zstore=None, const_fields=None):
     """Create input state from parquet. Accepts pre-loaded zstore to avoid re-reading."""
     member_label = "control" if member == -1 else f"ens_{member:02d}"
     print(f"\n  [{member_label}] Extracting fields...")
@@ -337,7 +452,7 @@ def create_input_state_from_parquet(parquet_path, member, zstore=None):
     if zstore is None:
         zstore = read_parquet_to_refs(parquet_path)
 
-    fields = extract_all_fields(zstore)
+    fields = extract_all_fields(zstore, const_fields=const_fields)
 
     # Extract date from path
     path_parts = Path(parquet_path).parts
@@ -358,7 +473,7 @@ def create_input_state_from_parquet(parquet_path, member, zstore=None):
 def verify_input_state(input_state, member):
     """Verify the input state has all required fields."""
     fields = input_state['fields']
-    expected_surface = PARAM_SFC + PARAM_SFC_FC
+    expected_surface = PARAM_SFC + PARAM_SFC_FC + ['stl1', 'stl2']
     expected_pressure = []
     for param in PARAM_PL:
         pname = 'z' if param == 'gh' else param
@@ -423,6 +538,16 @@ def main():
         if CLEANUP_LOCAL:
             print(f"  Local cleanup enabled — pkl deleted after GCS upload")
 
+    # Fetch constant fields once (lsm, z, slor, sdor) from ECMWF Open Data
+    # Same approach as ceda_era5t_pkl_input_aifsens.py
+    try:
+        const_fields = get_constant_fields()
+        print(f"  Constant fields: {list(const_fields.keys())}")
+    except Exception as e:
+        print(f"  Warning: Could not fetch constant fields: {e}")
+        print(f"  Continuing without z, slor, sdor (will have 87 fields instead of 90)")
+        const_fields = None
+
     successful = []
     failed = []
     total_start = time.time()
@@ -440,7 +565,7 @@ def main():
         try:
             # Single parquet read
             zstore = read_parquet_to_refs(parquet_file)
-            input_state = create_input_state_from_parquet(parquet_file, member=member, zstore=zstore)
+            input_state = create_input_state_from_parquet(parquet_file, member=member, zstore=zstore, const_fields=const_fields)
             is_valid = verify_input_state(input_state, member=member)
 
             if SAVE_STATES:
