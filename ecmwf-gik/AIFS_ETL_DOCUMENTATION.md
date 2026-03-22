@@ -341,6 +341,94 @@ pip install numpy pandas earthkit-regrid obstore fsspec s3fs
 - Earthkit Regrid: https://earthkit-regrid.readthedocs.io/
 - ECMWF Grid Specifications: https://confluence.ecmwf.int/display/UDOC/L137+model+level+definitions
 
+## GIK Pipeline Integration (grib-index-kerchunk)
+
+The [grib-index-kerchunk](https://github.com/icpac-igad/grib-index-kerchunk) repository provides an alternative parquet-based approach for creating AIFS input states. Instead of downloading full GRIB files, GIK creates lightweight parquet reference files containing `[url, byte_offset, byte_length]` triplets that point into remote GRIB files on S3, enabling on-demand byte-range reads.
+
+### Two ETL Approaches Compared
+
+| Aspect | ECMWF Open Data API (`ecmwf_opendata_pkl_input_aifsens.py`) | GIK Parquet Method (`aifs-etl-v2.py`) |
+|--------|-----------------------------------------------------------|---------------------------------------|
+| Data Source | ECMWF Open Data API via `earthkit.data` | S3 byte-range reads via parquet references |
+| Parquet Creation | Not needed | Required (3-stage pipeline) |
+| Grid Output | N320 (regridded inline) | 0.25° (requires separate regridding) |
+| Time per Member | ~1-2 minutes | ~15 minutes (extract + regrid) |
+| Dependencies | `earthkit-data`, `earthkit-regrid`, `ecmwf-opendata` | `kerchunk`, `fsspec`, `obstore` |
+| Missing Fields | None (z, slor, sdor, stl1, stl2 all available) | 5 missing (z, slor, sdor, stl1, stl2) |
+| Best For | Production ensemble runs | Research / offline batch processing |
+
+### GIK Three-Stage Pipeline
+
+The GIK method uses a three-stage pipeline to create parquet reference files:
+
+**Stage 1: Build Zarr Metadata (Template-Based)**
+- Loads zarr structure from pre-built HuggingFace template (`gik-fmrc-v2ecmwf_fmrc.tar.gz`)
+- Takes ~5 seconds (vs ~73 minutes with legacy `scan_grib`)
+- Template reference date: 2024-05-29
+
+**Stage 2: Index-Based Reference Building**
+- Reads `.index` files (JSON-lines) from `s3://ecmwf-forecasts/`
+- Each line: `{"_offset": N, "_length": M, "param": "tp", "number": 1, ...}`
+- Processes all 85 timestep index files per member
+- I/O-bound, parallelized via `ThreadPoolExecutor`
+- Time: ~5-15 minutes
+
+**Stage 3: Final Parquet Creation**
+- Merges zarr metadata + byte-range references → one parquet per member
+- Output: `{date}{run}z-{member}.parquet`
+
+### GIK Data Streaming Performance
+
+| Metric | Sequential | Parallel (8 threads) |
+|--------|-----------|---------------------|
+| 51 members, 12 vars, 9 timesteps | ~4 hours | ~24 minutes |
+| Decoder: gribberish (Rust) | ~25 ms/chunk | ~25 ms/chunk |
+| Decoder: cfgrib (Python) | ~2000 ms/chunk | ~2000 ms/chunk |
+| **Speedup (gribberish vs cfgrib)** | **~80x** | **~80x** |
+
+### GIK Parquet Creator (`ecmwf_ensemble_par_creator_efficient.py`)
+
+Creates parquet reference files for all 51 ensemble members:
+
+```bash
+# From grib-index-kerchunk/ecmwf/
+python ecmwf_ensemble_par_creator_efficient.py
+```
+
+- Scans each GRIB file once (not per-member)
+- Efficiency gain: 51x fewer file scans vs naive approach
+- Output: `ecmwf_{date}_{run}_efficient/members/ens_{NN}/ens_{NN}.parquet`
+
+### Recommended Workflow
+
+For **production ensemble runs** (current approach):
+```bash
+# Uses ECMWF Open Data API — all fields available, N320 output
+python ecmwf_opendata_pkl_input_aifsens.py
+```
+
+For **research/batch processing** with GIK parquets:
+```bash
+# Step 1: Create parquet references (once per date)
+python ecmwf_ensemble_par_creator_efficient.py
+
+# Step 2: Extract PKL from parquets
+python aifs-etl-v2.py
+
+# Step 3: Regrid to N320
+python aifs-regrid.py input.pkl output.pkl
+```
+
+### ECMWF S3 Data Structure
+
+- **Bucket**: `s3://ecmwf-forecasts/`
+- **Path**: `{YYYYMMDD}/{HH}z/ifs/0p25/enfo/{YYYYMMDDHH}0000-{H}h-enfo-ef.grib2`
+- **Index**: `.index` (JSON-lines with `_offset`, `_length`, `param`, `number`, `step`)
+- **Members**: 51 (1 control + 50 perturbed)
+- **Resolution**: 0.25° global
+- **File size**: ~3-4 GB per timestep (all 51 members in one file)
+- **Access**: Anonymous (`anon=True`)
+
 ## Future Improvements
 
 1. **Automated missing field retrieval**
@@ -361,7 +449,12 @@ pip install numpy pandas earthkit-regrid obstore fsspec s3fs
    - Optimize memory usage for large ensembles
    - Implement chunked processing for very large datasets
 
+5. **GIK Pipeline Migration**
+   - Evaluate template-based Stage 1 for faster parquet creation
+   - Integrate gribberish decoder for 80x faster data streaming
+   - Consider Lithops cloud deployment for multi-date parallel processing
+
 ---
 
-**Last Updated:** 2025-10-22
-**Version:** 2.0
+**Last Updated:** 2026-03-22
+**Version:** 2.1

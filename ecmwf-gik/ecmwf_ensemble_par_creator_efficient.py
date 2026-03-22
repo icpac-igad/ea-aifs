@@ -271,20 +271,22 @@ def extract_member_refs(all_refs: Dict, target_member: int) -> Dict:
     # Control member (-1) maps to index 0, perturbed members (1-50) map to indices 1-50
     member_index = 0 if target_member == -1 else target_member
 
-    # First, identify all variables that have ensemble dimension
+    # First, identify all variables that have ensemble dimension and find
+    # the position of the 'number' dimension in each variable's _ARRAY_DIMENSIONS.
+    # Surface vars have number at index 2: [time, step, number, lat, lon]
+    # Pressure vars have number at index 3: [time, step, isobaricInhPa, number, lat, lon]
     variables_with_ensemble = set()
+    ensemble_dim_position = {}  # var_path -> index of 'number' in _ARRAY_DIMENSIONS
     hierarchical_paths = set()
 
     for key in all_refs:
         if '/.zattrs' in key:
-            # Get the variable path (everything before /.zattrs)
             var_path = key.replace('/.zattrs', '')
             attrs = json.loads(all_refs[key]) if isinstance(all_refs[key], str) else all_refs[key]
 
-            # Check if this has number dimension
             if '_ARRAY_DIMENSIONS' in attrs and 'number' in attrs['_ARRAY_DIMENSIONS']:
                 variables_with_ensemble.add(var_path)
-                # Track hierarchical structure
+                ensemble_dim_position[var_path] = attrs['_ARRAY_DIMENSIONS'].index('number')
                 parts = var_path.split('/')
                 for i in range(1, len(parts) + 1):
                     hierarchical_paths.add('/'.join(parts[:i]))
@@ -297,39 +299,32 @@ def extract_member_refs(all_refs: Dict, target_member: int) -> Dict:
 
         # Determine the variable this key belongs to
         if '/' in key:
-            # Find the variable path by removing the last component
             key_parts = key.split('/')
 
             # Check if this is a chunk reference (contains dots in last part)
             is_chunk = '.' in key_parts[-1] and not key_parts[-1].startswith('.')
 
             if is_chunk:
-                # This is a data chunk
                 var_path = '/'.join(key_parts[:-1])
                 chunk_indices = key_parts[-1]
 
-                # Check if this variable has ensemble dimension
                 if var_path in variables_with_ensemble:
-                    # Parse chunk indices
                     indices = chunk_indices.split('.')
+                    # Use the ACTUAL position of the 'number' dimension for this variable
+                    num_dim_idx = ensemble_dim_position.get(var_path, 2)
 
-                    # The ensemble dimension is typically the 3rd one (index 2)
-                    # Structure: time.step.number.lat.lon or similar
-                    if len(indices) > 2:
+                    if len(indices) > num_dim_idx:
                         try:
-                            chunk_member_idx = int(indices[2])
+                            chunk_member_idx = int(indices[num_dim_idx])
 
-                            # Only include if it matches our target member
                             if chunk_member_idx == member_index:
-                                # Create new key without ensemble index
-                                new_indices = indices[:2] + indices[3:]
+                                # Remove the ensemble index at the correct position
+                                new_indices = indices[:num_dim_idx] + indices[num_dim_idx + 1:]
                                 new_key = f"{var_path}/{'.'.join(new_indices)}"
                                 member_refs[new_key] = value
                         except (ValueError, IndexError):
-                            # Can't parse member index, skip this chunk
                             pass
                 else:
-                    # Variable doesn't have ensemble dimension, copy as-is
                     member_refs[key] = value
 
             elif key.endswith('/.zattrs'):
@@ -467,22 +462,22 @@ def main():
 
     start_time = time.time()
 
-    # Configuration
-    date_str = '20251103'
-    dt = datetime.strptime(date_str, '%Y%m%d')
-    prev_dt = dt - timedelta(days=1)
-    prev_date_str = prev_dt.strftime('%Y%m%d')
+    # Configuration - two runs needed for AIFS input (t-6h and t)
+    # Run 1: 20260318 18z  (t-6h)
+    # Run 2: 20260319 00z  (t)
+    date_str = '20260319'
+    prev_date_str = '20260318'
     run = '00'
-    target_members = [-1, 1, 2, 3, 4, 5]  + list(range(6, 51))
+    target_members = [-1] + list(range(1, 51))  # Control + 50 perturbed = 51 total
 
     # Create output directory
     output_dir = Path(f"ecmwf_{date_str}_{run}_efficient")
     output_dir.mkdir(exist_ok=True)
     log_message(f"Output directory: {output_dir}")
 
-    # Define ECMWF files - just the first few timesteps for efficiency
+    # Define ECMWF files - 0h step from both runs (18z and 00z)
     ecmwf_files = [
-        f"s3://ecmwf-forecasts/{date_str}/{run}z/ifs/0p25/enfo/{prev_date_str}180000-0h-enfo-ef.grib2",
+        f"s3://ecmwf-forecasts/{prev_date_str}/18z/ifs/0p25/enfo/{prev_date_str}180000-0h-enfo-ef.grib2",
         f"s3://ecmwf-forecasts/{date_str}/{run}z/ifs/0p25/enfo/{date_str}{run}0000-0h-enfo-ef.grib2"
     ]
 

@@ -1,21 +1,15 @@
 #!/usr/bin/env python3
 """
-ECMWF Parquet to PKL Processor V2
+ECMWF Parquet to PKL Processor V2 - Optimized
 
-This script properly extracts ALL pressure levels from ECMWF parquet files.
-Phase 2 of ETL pipeline: Extract all levels WITHOUT regridding/interpolation.
+Extracts ALL pressure levels from ECMWF parquet files with parallel S3 fetches.
 
-Key improvements over v1:
-- Properly detects and extracts all 13 pressure levels from multi-dimensional arrays
-- Removes the faulty single-level fallback logic
-- Focuses on data extraction only (no regridding)
-- NOW INCLUDES static/constant fields (z, slor, sdor) that earthkit.data collects
-  These orography-related fields are critical for AIFS model compatibility
-
-Static variables added (matching earthkit.data behavior):
-- z: Surface geopotential (orography) - GRIB code 129
-- slor: Slope of sub-gridscale orography - GRIB code 161
-- sdor: Standard deviation of orography - GRIB code 160
+Optimizations over previous version:
+- Single parquet read per member (was 3x)
+- Parallel S3 byte-range fetches via ThreadPoolExecutor
+- Direct eccodes GRIB decoding (no temp files, no cfgrib overhead)
+- Cached obstore S3 connections
+- Both timesteps extracted as shape (2, lat, lon) for AIFS
 
 Usage:
     python aifs-etl-v2.py
@@ -23,341 +17,108 @@ Usage:
 
 import datetime
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import os
 import pickle
 import json
 import base64
-import tempfile
+import struct
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 import numpy as np
 import pandas as pd
 
-
 # Configuration
-# Surface parameters (time-varying)
 PARAM_SFC = ["10u", "10v", "2d", "2t", "msl", "skt", "sp", "tcw"]
-
-# Static/constant surface fields (orography-related)
-# These fields are collected by earthkit.data from ECMWF Open Data
-# GRIB parameter codes: z=129, slor=161, sdor=160
 PARAM_SFC_FC = ["lsm", "z", "slor", "sdor"]
-#   - lsm: Land-sea mask
-#   - z: Surface geopotential (orography) - CRITICAL for AIFS
-#   - slor: Slope of sub-gridscale orography
-#   - sdor: Standard deviation of orography
-
-PARAM_SOIL = []  # Not available in parquet
+PARAM_SOIL = []
 PARAM_PL = ["gh", "t", "u", "v", "w", "q"]
 LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
-SOIL_LEVELS = [1, 2]
 
-# Configuration
-date_str = '20251108'
+date_str = '20260319'
 run = '00'
-
-# Output configuration
 OUTPUT_DIR = f"{date_str}_{run}_ecmwf_pkl_par"
 SAVE_STATES = True
+ALL_MEMBERS = [-1] + list(range(1, 51))  # 51 total
 
+# Parallel fetch config
+MAX_WORKERS = 16
+
+# GCS config — upload each pkl then delete local to save disk
+GCS_BUCKET = "aifs-aiquest-us-20251127"
+GCS_SERVICE_ACCOUNT_KEY = "/scratch/notebook/ea-aifs/coiled-data.json"
+UPLOAD_TO_GCS = True
+CLEANUP_LOCAL = True
+
+
+# --- S3 fetch layer (cached stores, parallel-ready) ---
+
+_obstore_cache = {}
+
+def _get_obstore(bucket):
+    """Get or create a cached obstore S3 store."""
+    if bucket not in _obstore_cache:
+        from obstore.store import from_url
+        regions = {'ecmwf-forecasts': 'eu-central-1'}
+        region = regions.get(bucket, 'eu-central-1')
+        _obstore_cache[bucket] = from_url(f"s3://{bucket}", region=region, skip_signature=True)
+    return _obstore_cache[bucket]
+
+
+def fetch_s3_chunk(url, offset, length):
+    """Fetch a byte range from S3 using obstore (fast) with fsspec fallback."""
+    try:
+        import obstore as obs
+        parts = url[5:].split('/', 1)  # strip s3://
+        store = _get_obstore(parts[0])
+        result = obs.get_range(store, parts[1], start=offset, end=offset + length)
+        return bytes(result)
+    except Exception:
+        import fsspec
+        fs = fsspec.filesystem('s3', anon=True)
+        with fs.open(url[5:] if url.startswith('s3://') else url, 'rb') as f:
+            f.seek(offset)
+            return f.read(length)
+
+
+def decode_grib_bytes(data):
+    """Decode GRIB2 bytes directly with eccodes (no temp files)."""
+    import eccodes
+    msgid = eccodes.codes_new_from_message(data)
+    try:
+        ni = eccodes.codes_get(msgid, 'Ni')
+        nj = eccodes.codes_get(msgid, 'Nj')
+        values = eccodes.codes_get_array(msgid, 'values').astype(np.float32)
+        return values.reshape(nj, ni)
+    finally:
+        eccodes.codes_release(msgid)
+
+
+# --- Parquet reading (single read, reused) ---
 
 def read_parquet_to_refs(parquet_path):
-    """Read parquet file and extract zarr references."""
-    print(f"  📊 Reading parquet file: {parquet_path}")
+    """Read parquet file once and return zarr reference dict."""
     df = pd.read_parquet(parquet_path)
-
     zstore = {}
     for _, row in df.iterrows():
         key = row['key']
         value = row['value']
-
         if isinstance(value, bytes):
             value = value.decode('utf-8')
-
         if isinstance(value, str) and value.startswith('[') and value.endswith(']'):
             try:
                 value = json.loads(value)
-            except:
+            except Exception:
                 pass
-
         zstore[key] = value
-
-    if 'version' in zstore:
-        del zstore['version']
-
-    print(f"  ✅ Loaded {len(zstore)} references")
+    zstore.pop('version', None)
     return zstore
 
 
-def decode_chunk_reference(chunk_ref):
-    """Decode a chunk reference. Returns (type, data)."""
-    if isinstance(chunk_ref, str):
-        if chunk_ref.startswith('base64:'):
-            base64_str = chunk_ref[7:]
-            try:
-                decoded = base64.b64decode(base64_str)
-                return 'base64', decoded
-            except Exception as e:
-                print(f"    ⚠️ Error decoding base64: {e}")
-                return 'unknown', chunk_ref
-        else:
-            return 'unknown', chunk_ref
-
-    elif isinstance(chunk_ref, list):
-        if len(chunk_ref) >= 3:
-            url = chunk_ref[0]
-            offset = chunk_ref[1]
-            length = chunk_ref[2]
-
-            if isinstance(url, str) and ('s3://' in url or 's3.amazonaws.com' in url):
-                return 's3', (url, offset, length)
-
-    return 'unknown', chunk_ref
-
-
-def fetch_s3_byte_range_fsspec(url, offset, length, max_retries=3, retry_delay=2):
-    """Fetch a byte range from S3 using fsspec with retry logic."""
-    import time
-
-    for attempt in range(max_retries):
-        try:
-            import fsspec
-
-            if url.startswith('s3://'):
-                s3_path = url[5:]
-            else:
-                s3_path = url
-
-            fs = fsspec.filesystem('s3', anon=True)
-
-            with fs.open(s3_path, 'rb') as f:
-                f.seek(offset)
-                data = f.read(length)
-
-            return data
-
-        except Exception as e:
-            if attempt < max_retries - 1:
-                print(f"    ⚠️  fsspec attempt {attempt + 1}/{max_retries} failed: {e}")
-                print(f"    🔄 Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
-            else:
-                print(f"    ❌ Error fetching from S3 with fsspec after {max_retries} attempts: {e}")
-                return None
-
-    return None
-
-
-def fetch_s3_byte_range_obstore(url, offset, length):
-    """Fetch a byte range from S3 using obstore (if available)."""
-    try:
-        import obstore as obs
-        from obstore.store import from_url
-
-        # Parse bucket and key from URL
-        if url.startswith('s3://'):
-            url_parts = url[5:].split('/', 1)
-            bucket = url_parts[0]
-            key = url_parts[1] if len(url_parts) > 1 else ''
-        else:
-            raise ValueError(f"Invalid S3 URL: {url}")
-
-        # ECMWF buckets are in EU regions
-        bucket_regions = {
-            'ecmwf-forecasts': 'eu-central-1',
-        }
-        region = bucket_regions.get(bucket, 'eu-central-1')
-
-        # Create S3 store
-        bucket_url = f"s3://{bucket}"
-        store = from_url(bucket_url, region=region, skip_signature=True)
-
-        # Fetch byte range
-        result = obs.get_range(store, key, start=offset, end=offset + length)
-        data = bytes(result)
-
-        return data
-
-    except ImportError:
-        return fetch_s3_byte_range_fsspec(url, offset, length)
-    except Exception as e:
-        print(f"    ⚠️ obstore error: {e}, falling back to fsspec")
-        return fetch_s3_byte_range_fsspec(url, offset, length)
-
-
-def extract_variable_hybrid(zstore, variable_path, use_obstore=False):
-    """Extract a variable handling both base64 and S3 references."""
-    # Get metadata
-    zarray_key = f"{variable_path}/.zarray"
-    if zarray_key not in zstore:
-        print(f"    ⚠️ No metadata found for {variable_path}")
-        return None
-
-    metadata = json.loads(zstore[zarray_key]) if isinstance(zstore[zarray_key], str) else zstore[zarray_key]
-
-    shape = tuple(metadata['shape'])
-    dtype = np.dtype(metadata['dtype'])
-    chunks = tuple(metadata['chunks'])
-    compressor = metadata.get('compressor', None)
-
-    # Collect chunks
-    chunks_data = {}
-
-    for key in sorted(zstore.keys()):
-        if key.startswith(variable_path + "/") and not key.endswith(('.zarray', '.zattrs', '.zgroup')):
-            chunk_ref = zstore[key]
-            ref_type, ref_data = decode_chunk_reference(chunk_ref)
-
-            if ref_type == 'base64':
-                data = ref_data
-                if compressor is not None:
-                    try:
-                        import numcodecs
-                        codec = numcodecs.get_codec(compressor)
-                        data = codec.decode(data)
-                    except:
-                        try:
-                            import blosc
-                            data = blosc.decompress(data)
-                        except:
-                            pass
-                chunks_data[key] = data
-
-            elif ref_type == 's3':
-                url, offset, length = ref_data
-
-                # Fetch from S3
-                if use_obstore:
-                    data = fetch_s3_byte_range_obstore(url, offset, length)
-                else:
-                    data = fetch_s3_byte_range_fsspec(url, offset, length)
-
-                if data is None:
-                    print(f"      ⚠️  Skipping chunk {key} - could not fetch from S3")
-                    continue
-
-                if data is not None:
-                    # Check if it's GRIB2 data
-                    if data[:4] == b'GRIB':
-                        # Decode GRIB2 message
-                        try:
-                            import cfgrib
-                            import xarray as xr
-
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.grib2') as tmp:
-                                tmp.write(data)
-                                tmp_path = tmp.name
-
-                            ds = xr.open_dataset(tmp_path, engine='cfgrib', decode_timedelta=True)
-                            var_names = list(ds.data_vars)
-                            if var_names:
-                                var_data = ds[var_names[0]].values
-                                chunks_data[key] = var_data
-
-                            os.unlink(tmp_path)
-                            ds.close()
-
-                        except ImportError:
-                            print(f"      ⚠️ cfgrib not available, trying eccodes")
-                            try:
-                                import eccodes
-                                gid = eccodes.codes_new_from_message(data)
-                                values = eccodes.codes_get_array(gid, 'values')
-                                eccodes.codes_release(gid)
-                                chunks_data[key] = values
-                            except:
-                                print(f"      ❌ Cannot decode GRIB2 data")
-                        except Exception as e:
-                            print(f"      ❌ Error decoding GRIB2: {e}")
-                    else:
-                        # Try decompression if needed
-                        if compressor is not None:
-                            try:
-                                import numcodecs
-                                codec = numcodecs.get_codec(compressor)
-                                data = codec.decode(data)
-                                chunks_data[key] = data
-                            except:
-                                pass
-                        else:
-                            chunks_data[key] = data
-
-    if not chunks_data:
-        return None
-
-    # Reconstruct array
-    try:
-        if len(chunks_data) == 1:
-            chunk_data = list(chunks_data.values())[0]
-
-            if isinstance(chunk_data, np.ndarray):
-                array = chunk_data
-            else:
-                array = np.frombuffer(chunk_data, dtype=dtype)
-
-            if array.size == np.prod(shape):
-                array = array.reshape(shape)
-
-            return array
-
-        else:
-            # Multiple chunks - reassemble
-            first_chunk = list(chunks_data.values())[0]
-            if isinstance(first_chunk, np.ndarray):
-                actual_dtype = first_chunk.dtype
-            else:
-                actual_dtype = dtype
-
-            array = np.zeros(shape, dtype=actual_dtype)
-
-            for chunk_key, chunk_data in chunks_data.items():
-                chunk_idx_str = chunk_key.replace(variable_path + "/", "")
-                chunk_indices = tuple(int(x) for x in chunk_idx_str.split('.'))
-
-                if isinstance(chunk_data, np.ndarray):
-                    chunk_array = chunk_data
-                else:
-                    chunk_array = np.frombuffer(chunk_data, dtype=actual_dtype)
-
-                # GRIB2 data comes as 2D, but metadata expects 4D
-                if chunk_array.ndim == 2 and len(shape) == 4:
-                    time_idx = chunk_indices[0] if len(chunk_indices) > 0 else 0
-                    step_idx = chunk_indices[1] if len(chunk_indices) > 1 else 0
-                    array[time_idx, step_idx, :, :] = chunk_array
-                else:
-                    # Standard zarr chunk reassembly
-                    chunk_shape = []
-                    for i, (idx, chunk_size, dim_size) in enumerate(zip(chunk_indices, chunks, shape)):
-                        if (idx + 1) * chunk_size <= dim_size:
-                            chunk_shape.append(chunk_size)
-                        else:
-                            chunk_shape.append(dim_size - idx * chunk_size)
-
-                    if chunk_array.size == np.prod(chunk_shape):
-                        chunk_array = chunk_array.reshape(tuple(chunk_shape))
-
-                    slices = []
-                    for idx, chunk_size, dim_size in zip(chunk_indices, chunks, shape):
-                        start = idx * chunk_size
-                        end = min(start + chunk_size, dim_size)
-                        slices.append(slice(start, end))
-
-                    array[tuple(slices)] = chunk_array
-
-            return array
-
-    except Exception as e:
-        print(f"    ❌ Error reconstructing array: {e}")
-        return None
-
-
 def get_variable_path_mapping():
-    """Map parameter names to their paths in the zarr store."""
     return {
-        # Surface parameters
         '10u': 'u10/instant/heightAboveGround/u10',
         '10v': 'v10/instant/heightAboveGround/v10',
         '2t': 't2m/instant/heightAboveGround/t2m',
@@ -366,12 +127,10 @@ def get_variable_path_mapping():
         'sp': 'sp/instant/surface/sp',
         'skt': 'skt/instant/surface/skt',
         'tcw': 'tcw/instant/entireAtmosphere/tcw',
-        # Fixed fields (constants)
         'lsm': 'lsm/instant/surface/lsm',
-        'z': 'z/instant/surface/z',        # Surface geopotential (orography)
-        'slor': 'slor/instant/surface/slor',  # Slope of sub-gridscale orography
-        'sdor': 'sdor/instant/surface/sdor',  # Standard deviation of orography
-        # Pressure level parameters
+        'z': 'z/instant/surface/z',
+        'slor': 'slor/instant/surface/slor',
+        'sdor': 'sdor/instant/surface/sdor',
         'gh': 'gh/instant/isobaricInhPa/gh',
         't': 't/instant/isobaricInhPa/t',
         'u': 'u/instant/isobaricInhPa/u',
@@ -381,437 +140,345 @@ def get_variable_path_mapping():
     }
 
 
-def extract_pressure_level_coordinates(zstore, base_path):
-    """
-    Extract ALL pressure level coordinates from the zarr store.
-    Returns a list of pressure levels in hPa.
-    """
-    import struct
+# --- Parallel variable extraction ---
 
+def _collect_s3_refs(zstore, variable_path):
+    """Collect S3 chunk references, filtering out-of-bounds indices."""
+    # Get shape to filter invalid chunks
+    zarray_key = f"{variable_path}/.zarray"
+    shape = None
+    chunks = None
+    if zarray_key in zstore:
+        meta = json.loads(zstore[zarray_key]) if isinstance(zstore[zarray_key], str) else zstore[zarray_key]
+        shape = tuple(meta['shape'])
+        chunks = tuple(meta['chunks'])
+
+    refs = []
+    for key in sorted(zstore.keys()):
+        if key.startswith(variable_path + "/") and not key.endswith(('.zarray', '.zattrs', '.zgroup')):
+            val = zstore[key]
+            if isinstance(val, list) and len(val) >= 3:
+                url, offset, length = val[0], val[1], val[2]
+                if isinstance(url, str) and 's3://' in url:
+                    chunk_idx = key.replace(variable_path + "/", "")
+                    # Filter out-of-bounds chunks (from imperfect member extraction)
+                    if shape and chunks:
+                        indices = [int(x) for x in chunk_idx.split('.')]
+                        in_bounds = True
+                        for dim_i, (idx, cs, ds) in enumerate(zip(indices, chunks, shape)):
+                            if idx * cs >= ds:
+                                in_bounds = False
+                                break
+                        if not in_bounds:
+                            continue
+                    refs.append((chunk_idx, url, offset, length))
+    return refs
+
+
+def _fetch_and_decode(args):
+    """Fetch one S3 chunk and decode GRIB. Thread-safe."""
+    chunk_idx, url, offset, length = args
+    data = fetch_s3_chunk(url, offset, length)
+    if data[:4] == b'GRIB':
+        return chunk_idx, decode_grib_bytes(data)
+    return chunk_idx, np.frombuffer(data, dtype=np.float32)
+
+
+def extract_variable_parallel(zstore, variable_path):
+    """Extract a variable with parallel S3 fetches and GRIB decoding."""
+    zarray_key = f"{variable_path}/.zarray"
+    if zarray_key not in zstore:
+        return None
+
+    metadata = json.loads(zstore[zarray_key]) if isinstance(zstore[zarray_key], str) else zstore[zarray_key]
+    shape = tuple(metadata['shape'])
+    chunks = tuple(metadata['chunks'])
+
+    s3_refs = _collect_s3_refs(zstore, variable_path)
+    if not s3_refs:
+        return None
+
+    # Parallel fetch + decode
+    chunks_data = {}
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(_fetch_and_decode, ref): ref[0] for ref in s3_refs}
+        for future in as_completed(futures):
+            try:
+                chunk_idx, arr = future.result()
+                chunks_data[chunk_idx] = arr
+            except Exception as e:
+                print(f"      Chunk fetch failed: {e}")
+
+    if not chunks_data:
+        return None
+
+    # Reassemble array
+    if len(chunks_data) == 1:
+        arr = list(chunks_data.values())[0]
+        if isinstance(arr, np.ndarray) and arr.size == np.prod(shape):
+            return arr.reshape(shape)
+        return arr
+
+    # Multi-chunk reassembly
+    dtype = list(chunks_data.values())[0].dtype if isinstance(list(chunks_data.values())[0], np.ndarray) else np.float32
+    array = np.zeros(shape, dtype=dtype)
+
+    for chunk_idx_str, chunk_arr in chunks_data.items():
+        indices = tuple(int(x) for x in chunk_idx_str.split('.'))
+        if isinstance(chunk_arr, np.ndarray) and chunk_arr.ndim == 2 and len(shape) >= 4:
+            # GRIB2 2D -> fill into ND array
+            if len(shape) == 4:
+                array[indices[0], indices[1], :, :] = chunk_arr
+            elif len(shape) == 5:
+                array[indices[0], indices[1], indices[2] if len(indices) > 2 else 0, :, :] = chunk_arr
+        else:
+            if not isinstance(chunk_arr, np.ndarray):
+                chunk_arr = np.frombuffer(chunk_arr, dtype=dtype)
+            slices = []
+            for idx, cs, ds in zip(indices, chunks, shape):
+                start = idx * cs
+                end = min(start + cs, ds)
+                slices.append(slice(start, end))
+            chunk_shape = tuple(s.stop - s.start for s in slices)
+            if chunk_arr.size == np.prod(chunk_shape):
+                chunk_arr = chunk_arr.reshape(chunk_shape)
+            array[tuple(slices)] = chunk_arr
+
+    return array
+
+
+def extract_pressure_level_coordinates(zstore, base_path):
+    """Extract pressure level coordinate values."""
     levels = []
     coord_base = f"{base_path}/isobaricInhPa"
-
-    # Try to get metadata first to know how many levels
     zarray_key = f"{coord_base}/.zarray"
     if zarray_key in zstore:
         try:
             metadata = json.loads(zstore[zarray_key]) if isinstance(zstore[zarray_key], str) else zstore[zarray_key]
             num_levels = metadata.get('shape', [0])[0]
-
-            # Extract each level value
             for i in range(num_levels):
                 coord_path = f"{coord_base}/{i}"
                 if coord_path in zstore:
                     val = zstore[coord_path]
-
-                    # Handle different encoding types
-                    if isinstance(val, str):
-                        if val.startswith('base64:'):
-                            # Decode base64
-                            try:
-                                decoded = base64.b64decode(val[7:])
-                                level_value = struct.unpack('<d', decoded)[0]
-                                levels.append(int(level_value))
-                            except:
-                                pass
-                        elif len(val) == 8:
-                            # Raw bytes
-                            try:
-                                level_value = struct.unpack('<d', val.encode('latin1'))[0]
-                                levels.append(int(level_value))
-                            except:
-                                pass
-        except:
+                    if isinstance(val, str) and val.startswith('base64:'):
+                        decoded = base64.b64decode(val[7:])
+                        levels.append(int(struct.unpack('<d', decoded)[0]))
+        except Exception:
             pass
+    return sorted(levels, reverse=True)
 
-    return sorted(levels, reverse=True)  # Return in descending order (1000, 925, ...)
 
-
-def get_data_from_parquet_obstore(parquet_path, param, levelist=[], use_obstore=True):
-    """
-    Retrieve data from parquet files using obstore method.
-    V2 IMPROVEMENT: Properly extracts ALL pressure levels from multi-dimensional arrays.
-
-    Args:
-        parquet_path: Parquet file path
-        param: List of parameters to extract
-        levelist: List of pressure/soil levels (empty for surface variables)
-        use_obstore: Use obstore for S3 fetching (faster)
-
-    Returns:
-        Dictionary of {param_name: numpy_array}
-    """
-    fields = {}
-    print(f"    Retrieving {param} data" + (f" (requested levels: {levelist})" if levelist else ""))
-
-    # Read parquet to get references
-    zstore = read_parquet_to_refs(parquet_path)
-
-    # Get variable path mapping
+def extract_all_fields(zstore):
+    """Extract all AIFS fields from a single pre-loaded zstore. Returns fields dict."""
     var_paths = get_variable_path_mapping()
+    fields = {}
+    all_params = PARAM_SFC + PARAM_SFC_FC + PARAM_PL
 
-    # Process each parameter
-    for p in param:
+    for p in all_params:
         if p not in var_paths:
-            print(f"    ⚠️ Parameter {p} not in mapping")
+            continue
+        base_path = var_paths[p]
+        is_pressure = p in PARAM_PL
+
+        t0 = time.time()
+        array = extract_variable_parallel(zstore, base_path)
+        fetch_time = time.time() - t0
+
+        if array is None:
+            print(f"    {p}: not found in parquet")
             continue
 
-        base_path = var_paths[p]
+        if is_pressure:
+            actual_levels = extract_pressure_level_coordinates(zstore, base_path.rsplit('/', 1)[0])
+            level_mapping = actual_levels if actual_levels and len(actual_levels) == array.shape[2 if array.ndim == 5 else (1 if array.ndim == 4 else 0)] else LEVELS
 
-        # Extract the variable
-        print(f"    Extracting {p} from {base_path}")
-        array = extract_variable_hybrid(zstore, base_path, use_obstore=use_obstore)
+            if array.ndim == 5:
+                # (time=2, step=1, level=13, lat, lon)
+                for li, lv in enumerate(level_mapping):
+                    if lv in LEVELS:
+                        fields[f"{p}_{lv}"] = array[:, 0, li, :, :]
+            elif array.ndim == 4:
+                for li, lv in enumerate(level_mapping):
+                    if lv in LEVELS:
+                        fields[f"{p}_{lv}"] = array[:, li, :, :]
+            elif array.ndim == 3:
+                for li, lv in enumerate(level_mapping):
+                    if lv in LEVELS:
+                        fields[f"{p}_{lv}"] = array[li, :, :]
 
-        if array is not None:
-            print(f"      Raw array shape: {array.shape}")
-
-            # Handle multi-dimensional data
-            if levelist:
-                # This is a pressure level variable
-                # V2 IMPROVEMENT: Always try to extract coordinates first
-                actual_levels = extract_pressure_level_coordinates(zstore, base_path.rsplit('/', 1)[0])
-
-                # Determine the shape and extract levels
-                if array.ndim == 5:
-                    # Shape: (time, step, level, lat, lon) = (1, 2, 13, 721, 1440)
-                    num_levels = array.shape[2]
-                    print(f"      ✅ Found 5D array with {num_levels} levels at dimension 2")
-
-                    # If we have coordinate info, use it; otherwise use dimension indices
-                    if actual_levels and len(actual_levels) == num_levels:
-                        print(f"      📍 Coordinate levels: {actual_levels}")
-                        level_mapping = actual_levels
-                    else:
-                        print(f"      ⚠️ No coordinate info, using requested levels as mapping")
-                        level_mapping = levelist[:num_levels] if len(levelist) >= num_levels else list(range(num_levels))
-
-                    # Extract each level
-                    for level_idx in range(num_levels):
-                        level_value = level_mapping[level_idx] if level_idx < len(level_mapping) else level_idx
-
-                        # Only extract if this level is in the requested list
-                        if level_value in levelist or not actual_levels:
-                            data_2d = array[0, 0, level_idx, :, :]
-                            name = f"{p}_{level_value}"
-                            fields[name] = data_2d
-                            print(f"      ✅ {name}: shape={data_2d.shape}")
-
-                elif array.ndim == 4:
-                    # Shape: (time, step, level, lat, lon) = (1, 2, 13, 721, 1440)
-                    # OR: (time, level, lat, lon) = (1, 13, 721, 1440)
-                    # Check which dimension is the level dimension
-                    if array.shape[1] == len(levelist) or (actual_levels and array.shape[1] == len(actual_levels)):
-                        # Second dimension is levels
-                        num_levels = array.shape[1]
-                        level_dim_idx = 1
-                        print(f"      ✅ Found 4D array with {num_levels} levels at dimension 1")
-
-                        if actual_levels and len(actual_levels) == num_levels:
-                            print(f"      📍 Coordinate levels: {actual_levels}")
-                            level_mapping = actual_levels
-                        else:
-                            print(f"      ⚠️ No coordinate info, using requested levels as mapping")
-                            level_mapping = levelist[:num_levels]
-
-                        for level_idx in range(num_levels):
-                            level_value = level_mapping[level_idx] if level_idx < len(level_mapping) else level_idx
-                            if level_value in levelist or not actual_levels:
-                                data_2d = array[0, level_idx, :, :]
-                                name = f"{p}_{level_value}"
-                                fields[name] = data_2d
-                                print(f"      ✅ {name}: shape={data_2d.shape}")
-                    else:
-                        # Assume shape is (1, 2, 721, 1440) - single level
-                        data_2d = array[0, 0, :, :]
-                        name = f"{p}_{levelist[0] if levelist else 1000}"
-                        fields[name] = data_2d
-                        print(f"      ✅ {name}: shape={data_2d.shape} (single level)")
-
-                elif array.ndim == 3:
-                    # Shape: (level, lat, lon) = (13, 721, 1440)
-                    num_levels = array.shape[0]
-                    print(f"      ✅ Found 3D array with {num_levels} levels at dimension 0")
-
-                    if actual_levels and len(actual_levels) == num_levels:
-                        print(f"      📍 Coordinate levels: {actual_levels}")
-                        level_mapping = actual_levels
-                    else:
-                        print(f"      ⚠️ No coordinate info, using requested levels as mapping")
-                        level_mapping = levelist[:num_levels]
-
-                    for level_idx in range(num_levels):
-                        level_value = level_mapping[level_idx] if level_idx < len(level_mapping) else level_idx
-                        if level_value in levelist or not actual_levels:
-                            data_2d = array[level_idx, :, :]
-                            name = f"{p}_{level_value}"
-                            fields[name] = data_2d
-                            print(f"      ✅ {name}: shape={data_2d.shape}")
-
-                else:
-                    print(f"      ⚠️ Unexpected array dimensions: {array.ndim}, shape: {array.shape}")
-
-            else:
-                # Surface variable - no levels
-                if array.ndim == 4:
-                    data_2d = array[0, 0, :, :]
-                elif array.ndim == 3:
-                    data_2d = array[0, :, :]
-                elif array.ndim == 2:
-                    data_2d = array
-                else:
-                    data_2d = array.reshape(array.shape[-2:])
-
-                fields[p] = data_2d
-                print(f"      ✅ {p}: shape={data_2d.shape}")
+            print(f"    {p}: {len(LEVELS)} levels, shape {list(fields.values())[-1].shape} ({fetch_time:.1f}s)")
         else:
-            print(f"    ❌ Failed to extract {p}")
+            # Surface: (time=2, step=1, lat, lon) -> (2, lat, lon)
+            if array.ndim == 4:
+                fields[p] = array[:, 0, :, :]
+            elif array.ndim == 3:
+                fields[p] = array
+            elif array.ndim == 2:
+                fields[p] = array
+            else:
+                fields[p] = array.reshape(array.shape[-2:])
+            print(f"    {p}: shape {fields[p].shape} ({fetch_time:.1f}s)")
+
+    # Convert gh -> z (geopotential)
+    for level in LEVELS:
+        gh_key = f"gh_{level}"
+        if gh_key in fields:
+            fields[f"z_{level}"] = fields.pop(gh_key) * 9.80665
 
     return fields
 
 
-def create_input_state_from_parquet(parquet_path, member, use_obstore=True):
-    """
-    Create input state for a specific ensemble member using parquet file.
-    V2: Properly extracts ALL pressure levels.
-
-    Args:
-        parquet_path: Path to parquet file
-        member: Ensemble member number
-        use_obstore: Use obstore for faster S3 access
-
-    Returns:
-        Dictionary with 'date' and 'fields'
-    """
-    print(f"\n{'='*60}")
-    print(f"Creating input state for ensemble member {member}")
-    print(f"{'='*60}")
+def create_input_state_from_parquet(parquet_path, member, zstore=None):
+    """Create input state from parquet. Accepts pre-loaded zstore to avoid re-reading."""
+    member_label = "control" if member == -1 else f"ens_{member:02d}"
+    print(f"\n  [{member_label}] Extracting fields...")
     start_time = time.time()
 
-    fields = {}
+    if zstore is None:
+        zstore = read_parquet_to_refs(parquet_path)
 
-    # Check if obstore is available
-    try:
-        import obstore
-        if use_obstore:
-            print("  ✅ obstore available - using for S3 fetching")
-    except ImportError:
-        print("  ⚠️ obstore not available - using fsspec for S3 fetching")
-        use_obstore = False
+    fields = extract_all_fields(zstore)
 
-    # Add single level fields
-    print("\n  Getting surface fields...")
-    fields.update(get_data_from_parquet_obstore(parquet_path, param=PARAM_SFC, use_obstore=use_obstore))
-
-    print("\n  Getting constant surface fields...")
-    fields.update(get_data_from_parquet_obstore(parquet_path, param=PARAM_SFC_FC, use_obstore=use_obstore))
-
-    # Add soil fields (if available)
-    if PARAM_SOIL:
-        print("\n  Getting soil fields...")
-        soil = get_data_from_parquet_obstore(parquet_path, param=PARAM_SOIL, levelist=SOIL_LEVELS, use_obstore=use_obstore)
-
-        # Rename soil parameters
-        mapping = {'sot_1': 'stl1', 'sot_2': 'stl2'}
-        for k, v in mapping.items():
-            if k in soil:
-                fields[v] = soil[k]
-
-    # Add pressure level fields
-    print("\n  Getting pressure level fields...")
-    fields.update(get_data_from_parquet_obstore(parquet_path, param=PARAM_PL, levelist=LEVELS, use_obstore=use_obstore))
-
-    # Convert geopotential height to geopotential
-    print("\n  Converting geopotential height to geopotential...")
-    for level in LEVELS:
-        if f"gh_{level}" in fields:
-            gh = fields.pop(f"gh_{level}")
-            fields[f"z_{level}"] = gh * 9.80665
-            print(f"    ✅ z_{level}")
-
-    # Extract date from parquet path
-    # Path format: ecmwf_20251020_00_efficient/members/ens_01/ens_01.parquet
+    # Extract date from path
     path_parts = Path(parquet_path).parts
+    date = datetime.datetime.now()
     for part in path_parts:
         if 'ecmwf_' in part and '_efficient' in part:
-            date_parts = part.replace('ecmwf_', '').replace('_efficient', '').split('_')
-            if len(date_parts) >= 2:
-                date_str = date_parts[0]
-                hour_str = date_parts[1]
-                date = datetime.datetime.strptime(f"{date_str}_{hour_str}", "%Y%m%d_%H")
+            dp = part.replace('ecmwf_', '').replace('_efficient', '').split('_')
+            if len(dp) >= 2:
+                date = datetime.datetime.strptime(f"{dp[0]}_{dp[1]}", "%Y%m%d_%H")
                 break
-    else:
-        date = datetime.datetime.now()
 
-    input_state = dict(date=date, fields=fields)
+    elapsed = time.time() - start_time
+    print(f"  [{member_label}] {len(fields)} fields in {elapsed:.1f}s ({elapsed/60:.1f}m)")
 
-    elapsed_time = time.time() - start_time
-    print(f"\n  ✅ Completed in {elapsed_time:.2f} seconds")
-
-    # Print summary
-    print(f"\n📊 Summary:")
-    print(f"  Total fields: {len(fields)}")
-    if fields:
-        sample_shape = list(fields.values())[0].shape
-        print(f"  Sample field shape: {sample_shape}")
-
-        # Calculate memory usage
-        total_elements = sum(field.size for field in fields.values())
-        memory_mb = (total_elements * 4) / (1024 * 1024)
-        print(f"  Approximate memory: {memory_mb:.2f} MB")
-
-    return input_state
+    return dict(date=date, fields=fields)
 
 
 def verify_input_state(input_state, member):
     """Verify the input state has all required fields."""
     fields = input_state['fields']
-
-    # Expected fields
     expected_surface = PARAM_SFC + PARAM_SFC_FC
-    if PARAM_SOIL:
-        expected_surface += ['stl1', 'stl2']
-
     expected_pressure = []
     for param in PARAM_PL:
-        param_name = 'z' if param == 'gh' else param  # Converted to geopotential
+        pname = 'z' if param == 'gh' else param
         for level in LEVELS:
-            expected_pressure.append(f"{param_name}_{level}")
+            expected_pressure.append(f"{pname}_{level}")
 
     expected_total = expected_surface + expected_pressure
-
-    # Check what we actually have
     available = [f for f in expected_total if f in fields]
     missing = [f for f in expected_total if f not in fields]
 
-    print(f"\n  Verification for member {member}:")
-    print(f"    Expected: {len(expected_total)} fields")
-    print(f"    Available: {len(available)} fields")
-    print(f"    Missing: {len(missing)} fields")
-
     if missing:
-        # Group missing by type
-        missing_surface = [f for f in missing if '_' not in f]
-        missing_pressure = [f for f in missing if '_' in f]
-
-        if missing_surface:
-            print(f"    ⚠️  Missing surface fields ({len(missing_surface)}): {missing_surface}")
-        if missing_pressure:
-            print(f"    ⚠️  Missing pressure level fields ({len(missing_pressure)})")
-            print(f"         Sample: {missing_pressure[:10]}")
-
-    # Check completeness
-    surface_complete = all(f in fields for f in expected_surface)
-    pressure_complete = all(f in fields for f in expected_pressure)
-
-    if surface_complete and pressure_complete:
-        print(f"    ✅ Complete dataset - all fields present!")
-        return True
-    elif surface_complete:
-        print(f"    ⚠️  Surface data complete, but missing {len(missing_pressure)} pressure level fields")
-        return False
+        missing_sfc = [f for f in missing if '_' not in f]
+        missing_pl = [f for f in missing if '_' in f]
+        label = "control" if member == -1 else f"ens_{member:02d}"
+        parts = []
+        if missing_sfc:
+            parts.append(f"sfc:{missing_sfc}")
+        if missing_pl:
+            parts.append(f"pl:{len(missing_pl)}")
+        print(f"  [{label}] {len(available)}/{len(expected_total)} fields (missing: {', '.join(parts)})")
+        return len(missing_pl) == 0  # OK if only missing static sfc fields
     else:
-        print(f"    ⚠️  Incomplete dataset")
+        label = "control" if member == -1 else f"ens_{member:02d}"
+        print(f"  [{label}] {len(available)}/{len(expected_total)} fields - complete")
+        return True
+
+
+def upload_to_gcs(local_path, bucket_name, blob_name, sa_key):
+    """Upload file to GCS and return success."""
+    from google.cloud import storage
+    try:
+        client = storage.Client.from_service_account_json(sa_key)
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        blob.upload_from_filename(local_path)
+        print(f"  Uploaded to gs://{bucket_name}/{blob_name}")
+        return True
+    except Exception as e:
+        print(f"  GCS upload failed: {e}")
         return False
 
 
 def main():
-    """Main function to process ECMWF parquet files to PKL (V2)."""
+    """Process all 51 ensemble members: parquet -> PKL -> GCS."""
+    base_dir = f"ecmwf_{date_str}_{run}_efficient/members"
+    datestr = f"{date_str}_{run}00"
 
-    # Define the parquet file to process
-    parquet_file = f"ecmwf_{date_str}_{run}_efficient/members/ens_01/ens_01.parquet"
+    print("="*70)
+    print(f"ECMWF PARQUET->PKL V2 (Optimized) | {date_str} {run}z | {len(ALL_MEMBERS)} members")
+    print(f"Parallel S3 fetches: {MAX_WORKERS} workers | Output: {OUTPUT_DIR}/ -> GCS")
+    print("="*70)
 
-    print("="*80)
-    print("🌳 ECMWF PARQUET TO PKL PROCESSOR V2")
-    print("="*80)
-    print("Focus: Extract ALL pressure levels from parquet data")
-    print("Skipped: Regridding and interpolation (not needed for this phase)")
-    print("="*80)
-    print(f"\nProcessing parquet file: {parquet_file}")
-
-    # Create output directory if saving states
     if SAVE_STATES:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
-        print(f"Output directory: {OUTPUT_DIR}/")
 
-    # Check that file exists
-    if not Path(parquet_file).exists():
-        print(f"\n❌ File not found: {parquet_file}")
-        return
+    # Check GCS credentials
+    gcs_enabled = UPLOAD_TO_GCS and Path(GCS_SERVICE_ACCOUNT_KEY).exists()
+    if UPLOAD_TO_GCS and not gcs_enabled:
+        print(f"  GCS key not found: {GCS_SERVICE_ACCOUNT_KEY}, saving locally only")
+    if gcs_enabled:
+        print(f"  GCS: gs://{GCS_BUCKET}/{datestr}/input/")
+        if CLEANUP_LOCAL:
+            print(f"  Local cleanup enabled — pkl deleted after GCS upload")
 
-    try:
-        # Create input state from parquet file
-        input_state = create_input_state_from_parquet(parquet_file, member=1, use_obstore=True)
+    successful = []
+    failed = []
+    total_start = time.time()
 
-        # Verify the state
-        print(f"\n{'='*60}")
-        print("VERIFICATION")
-        print(f"{'='*60}")
-        is_valid = verify_input_state(input_state, member=1)
+    for i, member in enumerate(ALL_MEMBERS):
+        member_name = "control" if member == -1 else f"ens_{member:02d}"
+        member_num = 0 if member == -1 else member
+        parquet_file = f"{base_dir}/{member_name}/{member_name}.parquet"
 
-        if SAVE_STATES:
-            # Save the state as PKL
-            output_file = f"{OUTPUT_DIR}/input_state_member_001.pkl"
-            print(f"\n💾 Saving to: {output_file}")
+        if not Path(parquet_file).exists():
+            print(f"\n  [{member_name}] parquet not found, skipping")
+            failed.append(member_name)
+            continue
 
-            with open(output_file, 'wb') as f:
-                pickle.dump(input_state, f)
+        try:
+            # Single parquet read
+            zstore = read_parquet_to_refs(parquet_file)
+            input_state = create_input_state_from_parquet(parquet_file, member=member, zstore=zstore)
+            is_valid = verify_input_state(input_state, member=member)
 
-            # Show file size
-            file_size = Path(output_file).stat().st_size / (1024 * 1024)
-            print(f"✅ Saved successfully!")
-            print(f"📊 File size: {file_size:.2f} MB")
+            if SAVE_STATES:
+                output_file = f"{OUTPUT_DIR}/input_state_member_{member_num:03d}.pkl"
+                with open(output_file, 'wb') as f:
+                    pickle.dump(input_state, f)
+                file_size = Path(output_file).stat().st_size / (1024 * 1024)
+                print(f"  [{member_name}] Saved {output_file} ({file_size:.0f} MB)")
 
-        # Show field samples
-        if 'fields' in input_state and input_state['fields']:
-            print(f"\n{'='*60}")
-            print("FIELD SAMPLES")
-            print(f"{'='*60}")
-            field_names = sorted(input_state['fields'].keys())
+                # Upload to GCS and cleanup local
+                if gcs_enabled:
+                    gcs_blob = f"{datestr}/input/input_state_member_{member_num:03d}.pkl"
+                    uploaded = upload_to_gcs(output_file, GCS_BUCKET, gcs_blob, GCS_SERVICE_ACCOUNT_KEY)
+                    if uploaded and CLEANUP_LOCAL:
+                        os.remove(output_file)
+                        print(f"  [{member_name}] Local file removed")
 
-            surface_fields = [f for f in field_names if '_' not in f]
-            pressure_fields = [f for f in field_names if '_' in f]
+            successful.append(member_name)
 
-            print(f"Surface fields ({len(surface_fields)}): {surface_fields}")
-            print(f"Pressure level fields ({len(pressure_fields)})")
+            # ETA
+            elapsed_total = time.time() - total_start
+            avg_per_member = elapsed_total / (i + 1)
+            remaining = avg_per_member * (len(ALL_MEMBERS) - i - 1)
+            print(f"  Progress: {i+1}/{len(ALL_MEMBERS)} | ETA: {remaining/60:.0f} min")
 
-            # Group by parameter
-            from collections import defaultdict
-            by_param = defaultdict(list)
-            for pf in pressure_fields:
-                param = pf.rsplit('_', 1)[0]
-                by_param[param].append(pf)
+        except Exception as e:
+            print(f"\n  [{member_name}] ERROR: {e}")
+            import traceback
+            traceback.print_exc()
+            failed.append(member_name)
 
-            for param in sorted(by_param.keys()):
-                print(f"  {param}: {len(by_param[param])} levels - {by_param[param]}")
-
-            # Show shapes
-            print(f"\nField shapes (sample):")
-            for i, (fname, fdata) in enumerate(list(input_state['fields'].items())[:5]):
-                print(f"  {fname}: {fdata.shape}, dtype={fdata.dtype}")
-
-    except Exception as e:
-        print(f"\n❌ Error processing parquet file: {e}")
-        import traceback
-        traceback.print_exc()
-        return
-
-    print("\n" + "="*80)
-    if is_valid:
-        print("✅ V2 PROCESSING COMPLETE - ALL LEVELS EXTRACTED!")
-    else:
-        print("⚠️  V2 PROCESSING COMPLETE - PARTIAL DATA")
-    print("="*80)
-
-    if not is_valid:
-        print("\n⚠️  Some data may still be missing:")
-        print("  Check the verification section above for details")
-
-    print("\n💡 Next steps:")
-    print("  - Review extracted fields to confirm all levels are present")
-    print("  - If regridding is needed, implement in a separate phase")
-    print("  - Use this PKL as input for AI-FS or further processing")
+    total_time = time.time() - total_start
+    print(f"\n{'='*70}")
+    print(f"DONE | {len(successful)}/{len(ALL_MEMBERS)} successful | {total_time/60:.1f} min total")
+    if failed:
+        print(f"Failed: {failed}")
+    print(f"{'='*70}")
 
 
 if __name__ == "__main__":
     main()
-
