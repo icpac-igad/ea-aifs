@@ -353,28 +353,21 @@ def extract_member_refs(all_refs: Dict, target_member: int) -> Dict:
 
                 zarray = json.loads(value) if isinstance(value, str) else value
 
-                # Modify shape and chunks if this variable has ensemble dimension
+                # Remove the ensemble (number) axis from shape & chunks at the
+                # SAME position used for chunk de-indexing (ensemble_dim_position,
+                # from _ARRAY_DIMENSIONS.index('number')). The old code searched
+                # for a hardcoded size of 51 (control + 50); real runs can have
+                # 50 (perturbed only) or other sizes, which left .zarray 5-D
+                # while the chunk keys were already de-numbered to 4-D.
                 if var_path in variables_with_ensemble:
-                    if 'shape' in zarray:
-                        # Find and remove dimension with size 51
-                        new_shape = []
-                        ensemble_dim_idx = None
-
-                        for idx, dim in enumerate(zarray['shape']):
-                            if dim == 51:
-                                ensemble_dim_idx = idx
-                            else:
-                                new_shape.append(dim)
-
-                        zarray['shape'] = new_shape
-
-                        # Update chunks if present
-                        if ensemble_dim_idx is not None and 'chunks' in zarray:
-                            new_chunks = []
-                            for idx, chunk in enumerate(zarray['chunks']):
-                                if idx != ensemble_dim_idx:
-                                    new_chunks.append(chunk)
-                            zarray['chunks'] = new_chunks
+                    ens_idx = ensemble_dim_position.get(var_path)
+                    if ens_idx is not None:
+                        if 'shape' in zarray and ens_idx < len(zarray['shape']):
+                            zarray['shape'] = [d for i, d in enumerate(zarray['shape'])
+                                               if i != ens_idx]
+                        if 'chunks' in zarray and ens_idx < len(zarray['chunks']):
+                            zarray['chunks'] = [c for i, c in enumerate(zarray['chunks'])
+                                                if i != ens_idx]
 
                 member_refs[key] = json.dumps(zarray)
 
