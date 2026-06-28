@@ -28,13 +28,43 @@ from typing import List, Optional
 # IMPORTANT: Configure paths and earthkit settings BEFORE importing earthkit
 # This ensures the cache settings are applied before the singleton is created
 # -----------------------------------------------------------------------------
-DEF_BASE = "/scratch/notebook"
-BASE_DIR = Path(os.environ.get("EARTHKIT_WORKDIR", DEF_BASE))
+def _pick_base_dir() -> Path:
+    """Choose a writable working directory for GRIB→NetCDF processing.
+
+    Order of preference:
+      1. $EARTHKIT_WORKDIR              — explicit override
+      2. /scratch/notebook             — original notebook/cluster layout, only when
+                                         /scratch is actually present and writable
+      3. ~/scratch/notebook            — writable fallback on a plain VM (no /scratch mount)
+      4. <system-temp>/aifs_grib_nc    — last resort
+    """
+    env = os.environ.get("EARTHKIT_WORKDIR")
+    if env:
+        return Path(env)
+    scratch = Path("/scratch")
+    if scratch.is_dir() and os.access(scratch, os.W_OK):
+        return scratch / "notebook"
+    home = Path.home()
+    if os.access(home, os.W_OK):
+        return home / "scratch" / "notebook"
+    return Path(tempfile.gettempdir()) / "aifs_grib_nc"
+
+
+BASE_DIR = _pick_base_dir()
 TMP_DIR = BASE_DIR / "tmp"
 EK_CACHE_DIR = BASE_DIR / ".cache/earthkit-data"
 EK_TMP_DIR = BASE_DIR / "earthkit-tmp"
 HOME_CACHE_DIR = Path.home() / ".cache"
-EK_REGRID_CACHE = HOME_CACHE_DIR / "earthkit-regrid"
+# Regrid matrix cache. Persistent in HOME by default (reused across runs). BUT the
+# cache is a SQLite DB — sharing one across concurrent processes causes
+# "database is locked"/corruption. So when a per-worker EARTHKIT_WORKDIR is set
+# (parallel mode, one slot per worker), isolate the regrid cache under that workdir
+# so each slot gets its OWN SQLite. Each slot then downloads the N320→1.5° matrix
+# once on its first member and reuses it (one download per slot, not per member).
+if os.environ.get("EARTHKIT_WORKDIR"):
+    EK_REGRID_CACHE = BASE_DIR / ".cache" / "earthkit-regrid"
+else:
+    EK_REGRID_CACHE = HOME_CACHE_DIR / "earthkit-regrid"
 
 # Ensure directories exist
 for p in [TMP_DIR, EK_CACHE_DIR, EK_TMP_DIR, EK_REGRID_CACHE]:
@@ -84,19 +114,19 @@ except Exception:
 
 
 def get_disk_free_gb() -> float:
-    """Return free disk space in GB for the scratch partition."""
-    import subprocess
+    """Return free disk space in GB for the filesystem holding BASE_DIR.
+
+    Uses shutil.disk_usage on the working directory (or its nearest existing
+    parent) instead of a hardcoded `df /scratch`, so it works on any machine
+    regardless of where BASE_DIR lives.
+    """
     try:
-        result = subprocess.run(['df', '-BG', '/scratch'], capture_output=True, text=True)
-        # Parse output: Filesystem 1G-blocks Used Available Use% Mounted
-        lines = result.stdout.strip().split('\n')
-        if len(lines) >= 2:
-            parts = lines[1].split()
-            available = int(parts[3].rstrip('G'))
-            return available
+        path = BASE_DIR
+        while not path.exists() and path != path.parent:
+            path = path.parent
+        return round(shutil.disk_usage(str(path)).free / (1024 ** 3), 1)
     except Exception:
-        pass
-    return -1
+        return -1
 
 
 def diagnose_disk_usage() -> None:
@@ -104,9 +134,10 @@ def diagnose_disk_usage() -> None:
     import subprocess
     print("    📊 Disk usage diagnosis:")
     dirs_to_check = [
-        "/scratch/notebook/tmp",
-        "/scratch/notebook/.cache",
-        "/scratch/notebook/earthkit-tmp",
+        str(TMP_DIR),
+        str(EK_CACHE_DIR),
+        str(EK_TMP_DIR),
+        str(EK_REGRID_CACHE),
         str(Path.home() / ".cache"),
         "/tmp",
         "/var/tmp",
@@ -659,6 +690,62 @@ class GRIBToNetCDFProcessor:
         return 0 if not failed_members else 1
 
 
+# Measured 2026-06-14 on this VM: per-member peak RSS (VmHWM) ≈ 1.3 GiB.
+# Default the RAM guard a bit above that for headroom.
+DEFAULT_MEM_PER_WORKER_GB = 1.6
+
+
+def _available_ram_gb() -> float:
+    """Available RAM in GiB from /proc/meminfo (MemAvailable), or -1 if unknown."""
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) / (1024 * 1024)
+    except Exception:
+        pass
+    return -1
+
+
+def _run_member_subprocess(member: int, args, base_workdir: str, slot=None):
+    """Run one member as an isolated `--single-member` subprocess.
+
+    When slot is given (parallel mode), the member runs with EARTHKIT_WORKDIR set
+    to a per-SLOT directory (base_workdir/slot<k>). A slot is held by exactly one
+    worker thread at a time, so each slot has fully isolated tmp / earthkit-data /
+    earthkit-regrid caches — no two concurrent members ever share an earthkit-regrid
+    SQLite DB (which is what caused "database is locked"). Slots are reused across
+    members, so each slot downloads the regrid matrix only once.
+
+    slot=None (sequential mode) leaves the default workdir + HOME regrid cache,
+    preserving the original single-process behavior.
+
+    Returns (member, returncode, seconds).
+    """
+    import subprocess
+    import sys
+
+    cmd = [
+        sys.executable, __file__,
+        '--date', args.date,
+        '--single-member', str(member),
+        '--bucket', args.bucket,
+        '--service-account', args.service_account,
+    ]
+    if args.fp16:
+        cmd.append('--fp16')
+    if args.no_upload:
+        cmd.append('--no-upload')
+
+    env = os.environ.copy()
+    if slot is not None:
+        env['EARTHKIT_WORKDIR'] = os.path.join(base_workdir, f"slot{slot}")
+
+    t0 = time.time()
+    rc = subprocess.run(cmd, env=env).returncode
+    return member, rc, time.time() - t0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="GRIB to NetCDF Processor with CLI arguments",
@@ -702,6 +789,14 @@ Examples:
                        help='Path to GCS service account key')
     parser.add_argument('--single-member', type=int, default=None,
                        help='Process only this single member (used internally for subprocess mode)')
+    parser.add_argument('--max-workers', type=int, default=1,
+                       help='Process this many members concurrently (default 1 = sequential). '
+                            'Each worker is an isolated subprocess with its own EARTHKIT_WORKDIR. '
+                            'This work is RAM-bound, not CPU-bound: keep max-workers × peak RSS '
+                            '(~1.3 GiB/member) within available memory (no swap = OOM if exceeded).')
+    parser.add_argument('--mem-per-worker-gb', type=float, default=DEFAULT_MEM_PER_WORKER_GB,
+                       help=f'Estimated peak RSS per member (GiB) for the RAM-safety guard '
+                            f'(default {DEFAULT_MEM_PER_WORKER_GB}).')
 
     args = parser.parse_args()
 
@@ -733,68 +828,96 @@ Examples:
         print(f"ERROR: Invalid member range: {e}")
         return 1
 
-    # Multi-member mode: run each member in a subprocess to avoid file handle leaks
-    import subprocess
-    import sys
+    # Multi-member mode: each member runs as an isolated subprocess (clean file
+    # handles + disk reclaim). With --max-workers > 1, members run concurrently.
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    max_workers = max(1, args.max_workers)
+    base_workdir = str(BASE_DIR)
+    total = len(members)
+
+    # RAM guard — this work is memory-bound, not CPU-bound. Warn (don't block) if
+    # workers × per-member peak would exceed available RAM (no swap → OOM kill).
+    avail = _available_ram_gb()
+    if max_workers > 1 and avail > 0:
+        need = max_workers * args.mem_per_worker_gb
+        safe = max(1, int(avail / args.mem_per_worker_gb))
+        print(f"💾 RAM: {avail:.1f} GiB available; ~{args.mem_per_worker_gb:.1f} GiB/worker × "
+              f"{max_workers} workers ≈ {need:.1f} GiB needed.")
+        if need > avail:
+            print(f"⚠️  May OOM (no swap). Safe worker count at this estimate: {safe}. "
+                  f"Continuing as requested — reduce --max-workers if members get killed.")
 
     print("=" * 70)
-    print(f"GRIB to NetCDF Processor (FP32 Mode) - Subprocess Mode")
-    print("=" * 70)
-    print(f"Each member will be processed in a separate subprocess to ensure")
-    print(f"all file handles are properly closed and disk space is freed.")
+    print(f"GRIB to NetCDF Processor ({'FP16' if args.fp16 else 'FP32'} Mode) — "
+          f"{max_workers}-way subprocess mode")
     print("=" * 70)
 
     successful_members = []
     failed_members = []
     start_time = time.time()
+    done = 0
 
-    for i, member in enumerate(members):
-        print(f"\n{'='*60}")
-        print(f"Processing member {member} ({i+1}/{len(members)}) in subprocess...")
-        print(f"{'='*60}")
-
-        # Build command for subprocess
-        cmd = [
-            sys.executable, __file__,
-            '--date', args.date,
-            '--single-member', str(member),
-            '--bucket', args.bucket,
-            '--service-account', args.service_account,
-        ]
-        if args.fp16:
-            cmd.append('--fp16')
-        if args.no_upload:
-            cmd.append('--no-upload')
-
-        # Run in subprocess
-        member_start = time.time()
-        result = subprocess.run(cmd)
-        member_time = time.time() - member_start
-
-        if result.returncode == 0:
+    def _record(member, rc, secs):
+        nonlocal done
+        done += 1
+        if rc == 0:
             successful_members.append(member)
-            print(f"✅ Member {member} completed successfully ({member_time/60:.1f} min)")
+            status = "✅"
         else:
             failed_members.append(member)
-            print(f"❌ Member {member} failed ({member_time/60:.1f} min)")
-
-        # Show progress
+            status = "❌"
         elapsed = time.time() - start_time
-        avg_time = elapsed / (i + 1)
-        remaining = avg_time * (len(members) - i - 1)
-        print(f"⏱️  Estimated remaining: {remaining/60:.1f} min")
+        avg = elapsed / done
+        remaining = avg * (total - done)
+        print(f"{status} Member {member} done ({secs/60:.1f} min)  "
+              f"[{done}/{total}]  est. remaining ~{remaining/60:.1f} min")
+
+    if max_workers == 1:
+        for member in members:
+            print(f"\n{'='*60}\nProcessing member {member} ({done+1}/{total})...\n{'='*60}")
+            _record(*_run_member_subprocess(member, args, base_workdir, slot=None))
+    else:
+        # One reusable workdir slot per worker, each with its OWN isolated
+        # earthkit-regrid cache (see EK_REGRID_CACHE). A member acquires a free slot,
+        # runs, then returns it — so at most max_workers slots exist and no two
+        # concurrent members ever share a regrid SQLite DB ("database is locked").
+        import queue as _queue
+        slots = _queue.Queue()
+        for k in range(max_workers):
+            slots.put(k)
+
+        def _task(m):
+            s = slots.get()
+            try:
+                return _run_member_subprocess(m, args, base_workdir, slot=s)
+            finally:
+                slots.put(s)
+
+        print(f"\n🚀 Dispatching {total} members at {max_workers}-way concurrency "
+              f"(per-slot isolated regrid cache)...")
+        try:
+            with ThreadPoolExecutor(max_workers=max_workers) as ex:
+                futures = [ex.submit(_task, m) for m in members]
+                for fut in as_completed(futures):
+                    _record(*fut.result())
+        finally:
+            for k in range(max_workers):
+                shutil.rmtree(os.path.join(base_workdir, f"slot{k}"), ignore_errors=True)
 
     # Final summary
     total_time = time.time() - start_time
     print("\n" + "=" * 70)
-    print(f"PROCESSING SUMMARY")
+    print(f"PROCESSING SUMMARY ({max_workers}-way)")
     print("=" * 70)
-    print(f"✅ Successful: {len(successful_members)}/{len(members)} members")
+    print(f"✅ Successful: {len(successful_members)}/{total} members")
     print(f"❌ Failed: {len(failed_members)} members")
     print(f"⏱️  Total time: {total_time/60:.1f} minutes")
-
+    if successful_members:
+        print(f"⏱️  Avg wall-clock per member: {total_time/max(1,total):.0f}s "
+              f"(throughput, not per-member compute)")
     if failed_members:
-        print(f"\nFailed members: {failed_members}")
+        print(f"\nFailed members: {sorted(failed_members)}")
 
     return 0 if not failed_members else 1
 

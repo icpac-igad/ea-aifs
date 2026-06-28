@@ -39,6 +39,9 @@ import argparse
 from pathlib import Path
 from typing import List, Tuple
 
+# Import shared helpers from ../shared (this script lives in a model subfolder)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
+
 # Import from existing scripts
 from download_pkl_from_gcs import (
     download_from_gcs,

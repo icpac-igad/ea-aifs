@@ -1,4 +1,16 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "numpy",
+#     "obstore",
+#     "fsspec",
+#     "s3fs",
+#     "gribberish",
+#     "earthkit-regrid",
+#     "google-cloud-storage",
+# ]
+# ///
 """
 S3 GRIB -> AIFS ENS input-state pkl, WITHOUT kerchunk.
 
@@ -31,13 +43,21 @@ member restartable from whatever partials already exist.
 import argparse
 import datetime
 import gc
+import json
 import os
 import pickle
 import time
+import traceback
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import earthkit.regrid as ekr
+import fsspec
+import gribberish
 import numpy as np
+import obstore as obs
+from google.cloud import storage
+from obstore.store import from_url
 
 
 # ---------------------------------------------------------------- configuration
@@ -51,14 +71,18 @@ SOIL_MAP = {"sot_1": "stl1", "sot_2": "stl2"}
 
 N320_NPOINTS = 542080
 RAW_SHAPE = (721, 1440)            # ECMWF 0p25, lat 90->-90, lon0=180
-MAX_WORKERS = 16
+# Overridable so a member can be throttled (S3 SlowDown) or run single-threaded
+# to warm the earthkit-regrid matrix cache without a concurrent-download race.
+MAX_WORKERS = int(os.environ.get("S3_PKL_MAX_WORKERS", "16"))
 
 S3_BUCKET = "ecmwf-forecasts"
 S3_REGION = "eu-central-1"
 
 # GCS (mirrors ecmwf_opendata_pkl_input_aifsens.py; off by default for validation)
 GCS_BUCKET = "aifs-aiquest-us-20251127"
-GCS_SERVICE_ACCOUNT_KEY = "/scratch/notebook/ea-aifs/coiled-data.json"
+# key sits next to this script; resolve from __file__ so cwd doesn't matter
+GCS_SERVICE_ACCOUNT_KEY = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "coiled-data.json")
 
 
 # ---------------------------------------------------------------- S3 fetch layer
@@ -67,7 +91,6 @@ _obstore_cache = {}
 
 def _get_store():
     if "s" not in _obstore_cache:
-        from obstore.store import from_url
         _obstore_cache["s"] = from_url(
             f"s3://{S3_BUCKET}", region=S3_REGION, skip_signature=True)
     return _obstore_cache["s"]
@@ -76,21 +99,17 @@ def _get_store():
 def fetch_range(key, offset, length):
     """Byte range from s3://ecmwf-forecasts/<key> (obstore, fsspec fallback)."""
     try:
-        import obstore as obs
         return bytes(obs.get_range(_get_store(), key,
                                    start=offset, end=offset + length))
     except Exception:
-        import fsspec
         fs = fsspec.filesystem("s3", anon=True)
         return fs.read_block(f"{S3_BUCKET}/{key}", offset, length)
 
 
 def load_index(key):
     """Read+parse the JSON-lines .index sidecar (small, cached per key)."""
-    import json
     if key in _obstore_cache:
         return _obstore_cache[key]
-    import fsspec
     fs = fsspec.filesystem("s3", anon=True)
     raw = fs.cat_file(f"{S3_BUCKET}/{key}").decode()
     recs = [json.loads(ln) for ln in raw.splitlines() if ln.strip()]
@@ -124,7 +143,6 @@ def decode_grib_bytes(raw):
     so it begins at 0 deg, matching what the open-data pipeline produces and
     what earthkit.regrid / the AIFS checkpoint expect.
     """
-    import gribberish
     msg = gribberish.parse_grib_message(raw, 0)
     # float64 throughout to match the known-good open-data pkl exactly
     # (earthkit's to_numpy()/regrid produce float64; the AIFS ENS checkpoint
@@ -135,7 +153,6 @@ def decode_grib_bytes(raw):
 
 def to_n320(arr2d):
     """Interpolate a (721,1440) 0.25deg field to the AIFS N320 grid (1-D)."""
-    import earthkit.regrid as ekr
     return ekr.interpolate(arr2d, {"grid": (0.25, 0.25)}, {"grid": "N320"})
 
 
@@ -328,7 +345,6 @@ def verify(out_pkl):
 
 # ---------------------------------------------------------------- GCS upload
 def upload_to_gcs(local_path, blob_name):
-    from google.cloud import storage
     client = storage.Client.from_service_account_json(GCS_SERVICE_ACCOUNT_KEY)
     client.bucket(GCS_BUCKET).blob(blob_name).upload_from_filename(local_path)
     print(f"    uploaded gs://{GCS_BUCKET}/{blob_name}")
@@ -385,7 +401,6 @@ def main():
                     out_pkl, f"{datestr}/input/input_state_member_{m:03d}.pkl")
                 os.remove(out_pkl)
         except Exception as e:
-            import traceback
             traceback.print_exc()
             print(f"  member {m} ERROR: {e}")
             fail.append(m)

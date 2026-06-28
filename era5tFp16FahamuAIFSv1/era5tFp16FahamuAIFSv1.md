@@ -281,8 +281,8 @@ gs://aifs-aiquest-us-20251127/
 | `era5t_aifs_n320_grib_1p5deg_nc_cli.py` | GRIB → 1.5° NetCDF regridding |
 | `era5t_ensemble_quintile_analysis_cli.py` | Quintile probability calculation |
 | `era5t_forecast_submission_cli.py` | AI Weather Quest submission |
-| `download_pkl_from_gcs.py` | Shared: pkl download + verification (threshold ≥70) |
-| `upload_aifs_gpu_output_grib_gcs.py` | Shared: multi-threaded GRIB upload |
+| `../shared/download_pkl_from_gcs.py` | Shared: pkl download + verification (threshold ≥70) |
+| `../shared/upload_aifs_gpu_output_grib_gcs.py` | Shared: multi-threaded GRIB upload |
 
 ## Quick Run (All Steps)
 
