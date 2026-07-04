@@ -140,7 +140,8 @@ def download_ensemble_nc_from_gcs_chunked(
     local_dir: str = "./ensemble_nc_files",
     icechunk_store_path: str = "./ensemble_icechunk_store",
     skip_download_if_exists: bool = True,
-    fp16: bool = False
+    fp16: bool = False,
+    v2: bool = False
 ):
     """
     Download ensemble NetCDF files from GCS and combine using icechunk for memory efficiency.
@@ -165,14 +166,16 @@ def download_ensemble_nc_from_gcs_chunked(
     if not ICECHUNK_AVAILABLE:
         raise RuntimeError("icechunk is required for memory-efficient processing. Install with: pip install icechunk")
 
-    # Set GCS prefix based on fp16 flag
+    # Set GCS prefix based on v2 / fp16 flag (v2 takes precedence)
     if gcs_prefix is None:
-        if fp16:
+        if v2:
+            gcs_prefix = f"{forecast_date}_0000/fp16_v2_1p5deg_nc/"
+        elif fp16:
             gcs_prefix = f"{forecast_date}_0000/fp16_1p5deg_nc/"
         else:
             gcs_prefix = f"{forecast_date}_0000/1p5deg_nc/"
 
-    mode_label = "FP16" if fp16 else "FP32"
+    mode_label = "FP16-v2" if v2 else ("FP16" if fp16 else "FP32")
 
     print(f"📥 Downloading ensemble NetCDF files from GCS (Memory-Efficient Mode)")
     print(f"   Bucket: gs://{gcs_bucket}/{gcs_prefix}")
@@ -318,7 +321,8 @@ def download_ensemble_nc_from_gcs(
     service_account_path: str = "coiled-data.json",
     local_dir: str = "./ensemble_nc_files",
     skip_download_if_exists: bool = True,
-    fp16: bool = False
+    fp16: bool = False,
+    v2: bool = False
 ):
     """
     Download ensemble NetCDF files from GCS and combine into a single dataset.
@@ -336,14 +340,16 @@ def download_ensemble_nc_from_gcs(
     Returns:
         xr.Dataset: Combined ensemble dataset
     """
-    # Set GCS prefix based on fp16 flag
+    # Set GCS prefix based on v2 / fp16 flag (v2 takes precedence)
     if gcs_prefix is None:
-        if fp16:
+        if v2:
+            gcs_prefix = f"{forecast_date}_0000/fp16_v2_1p5deg_nc/"
+        elif fp16:
             gcs_prefix = f"{forecast_date}_0000/fp16_1p5deg_nc/"
         else:
             gcs_prefix = f"{forecast_date}_0000/1p5deg_nc/"
 
-    mode_label = "FP16" if fp16 else "FP32"
+    mode_label = "FP16-v2" if v2 else ("FP16" if fp16 else "FP32")
 
     print(f"📥 Downloading ensemble NetCDF files from GCS ({mode_label})")
     print(f"   Bucket: gs://{gcs_bucket}/{gcs_prefix}")
@@ -446,7 +452,8 @@ def load_ensemble_from_gcs(
     service_account_path: str = "coiled-data.json",
     use_icechunk: bool = True,
     skip_download_if_exists: bool = True,
-    fp16: bool = False
+    fp16: bool = False,
+    v2: bool = False
 ):
     """
     Convenience function to download and load ensemble data from GCS.
@@ -476,7 +483,8 @@ def load_ensemble_from_gcs(
             gcs_bucket=gcs_bucket,
             service_account_path=service_account_path,
             skip_download_if_exists=skip_download_if_exists,
-            fp16=fp16
+            fp16=fp16,
+            v2=v2
         )
     else:
         return download_ensemble_nc_from_gcs(
@@ -485,7 +493,8 @@ def load_ensemble_from_gcs(
             gcs_bucket=gcs_bucket,
             service_account_path=service_account_path,
             skip_download_if_exists=skip_download_if_exists,
-            fp16=fp16
+            fp16=fp16,
+            v2=v2
         )
 
 
@@ -745,6 +754,9 @@ Examples:
                        help='Member range (e.g., 1-50, 1,2,3). If not specified, downloads all available.')
     parser.add_argument('--fp16', action='store_true',
                        help='Use FP16 paths (fp16_1p5deg_nc/)')
+    parser.add_argument('--v2', action='store_true',
+                       help='Use AIFS-ENS-2.0 paths (fp16_v2_1p5deg_nc/); '
+                            'writes ..._{date}_v2.nc. Takes precedence over --fp16.')
     parser.add_argument('--no-icechunk', action='store_true',
                        help='Disable icechunk memory-efficient loading (not recommended for large ensembles)')
     parser.add_argument('--skip-existing', action='store_true', default=True,
@@ -762,7 +774,7 @@ Examples:
 
     # Clean date format (remove _0000 if present)
     forecast_date = args.date.split('_')[0] if '_' in args.date else args.date
-    mode_label = "FP16" if args.fp16 else "FP32"
+    mode_label = "FP16-v2" if args.v2 else ("FP16" if args.fp16 else "FP32")
 
     # Parse members if specified
     members = None
@@ -806,7 +818,8 @@ Examples:
         service_account_path=args.service_account,
         use_icechunk=use_icechunk,
         skip_download_if_exists=args.skip_existing,
-        fp16=args.fp16
+        fp16=args.fp16,
+        v2=args.v2
     )
 
     if fds is None:
@@ -841,7 +854,10 @@ Examples:
 
     # Step 4: Save results
     print("\n💾 Step 4: Saving results...")
-    if args.fp16:
+    if args.v2:
+        output_file = os.path.join(args.output_dir,
+                                   f'ensemble_quintile_probabilities_{forecast_date}_v2.nc')
+    elif args.fp16:
         output_file = os.path.join(args.output_dir,
                                    f'ensemble_quintile_probabilities_{forecast_date}_fp16.nc')
     else:

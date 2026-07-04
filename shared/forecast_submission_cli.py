@@ -47,12 +47,14 @@ except ImportError:
         print("Warning: submit_forecast not available. Install AI_WQ_package.")
 
 
-def get_credentials(fp16: bool = False) -> Tuple[str, str, str]:
+def get_credentials(fp16: bool = False, v2: bool = False) -> Tuple[str, str, str]:
     """
     Load credentials from environment variables.
 
     Args:
         fp16: If True, try to use FP16-specific model name if available
+        v2: If True (AIFS-ENS-2.0), prefer AIWQ_MODEL_NAME_V2, falling back to
+            AIWQ_MODEL_NAME_FP16 then AIWQ_MODEL_NAME. Takes precedence over fp16.
 
     Returns:
         Tuple of (team_name, model_name, password)
@@ -60,8 +62,12 @@ def get_credentials(fp16: bool = False) -> Tuple[str, str, str]:
     team_name = os.getenv('AIWQ_TEAM_NAME')
     password = os.getenv('AIWQ_PASSWORD')
 
-    # Use FP16-specific model name if available and fp16 mode is enabled
-    if fp16:
+    # Select model name: v2 > fp16 > default
+    if v2:
+        model_name = (os.getenv('AIWQ_MODEL_NAME_V2')
+                      or os.getenv('AIWQ_MODEL_NAME_FP16')
+                      or os.getenv('AIWQ_MODEL_NAME'))
+    elif fp16:
         model_name = os.getenv('AIWQ_MODEL_NAME_FP16') or os.getenv('AIWQ_MODEL_NAME')
     else:
         model_name = os.getenv('AIWQ_MODEL_NAME')
@@ -84,7 +90,7 @@ def get_credentials(fp16: bool = False) -> Tuple[str, str, str]:
     return team_name, model_name, password
 
 
-def get_output_file(date_str: str, output_dir: str, fp16: bool) -> str:
+def get_output_file(date_str: str, output_dir: str, fp16: bool, v2: bool = False) -> str:
     """
     Determine the quintile output file path.
 
@@ -92,6 +98,8 @@ def get_output_file(date_str: str, output_dir: str, fp16: bool) -> str:
         date_str: Forecast date (YYYYMMDD)
         output_dir: Directory containing output files
         fp16: If True, look for FP16 output file
+        v2: If True, look for the AIFS-ENS-2.0 output file (..._v2.nc). Takes
+            precedence over fp16.
 
     Returns:
         Path to the quintile NC file
@@ -99,7 +107,9 @@ def get_output_file(date_str: str, output_dir: str, fp16: bool) -> str:
     # Clean date format
     date_clean = date_str.split('_')[0] if '_' in date_str else date_str
 
-    if fp16:
+    if v2:
+        filename = f'ensemble_quintile_probabilities_{date_clean}_v2.nc'
+    elif fp16:
         filename = f'ensemble_quintile_probabilities_{date_clean}_fp16.nc'
     else:
         filename = f'ensemble_quintile_probabilities_{date_clean}.nc'
@@ -224,6 +234,10 @@ Examples:
                        help='Forecast date (YYYYMMDD format)')
     parser.add_argument('--fp16', action='store_true',
                        help='Use FP16 output file and model name')
+    parser.add_argument('--v2', action='store_true',
+                       help='Use AIFS-ENS-2.0 output file (..._v2.nc) and the v2 model '
+                            'name (AIWQ_MODEL_NAME_V2, falling back to AIWQ_MODEL_NAME_FP16). '
+                            'Takes precedence over --fp16.')
     parser.add_argument('--output-dir', default='./',
                        help='Directory containing quintile output files')
     parser.add_argument('--output-file', default=None,
@@ -254,7 +268,7 @@ Examples:
 
     # Clean date format
     date_str = args.date.split('_')[0] if '_' in args.date else args.date
-    mode_label = "FP16" if args.fp16 else "FP32"
+    mode_label = "FP16-v2" if args.v2 else ("FP16" if args.fp16 else "FP32")
 
     print("=" * 60)
     print(f"AI Weather Quest Forecast Submission ({mode_label})")
@@ -262,7 +276,7 @@ Examples:
 
     # Get credentials
     try:
-        team_name, model_name, password = get_credentials(args.fp16)
+        team_name, model_name, password = get_credentials(args.fp16, args.v2)
     except ValueError as e:
         print(f"ERROR: {e}")
         return 1
@@ -271,13 +285,15 @@ Examples:
     if args.output_file:
         output_file = args.output_file
     else:
-        output_file = get_output_file(date_str, args.output_dir, args.fp16)
+        output_file = get_output_file(date_str, args.output_dir, args.fp16, args.v2)
 
     # Check if output file exists
     if not os.path.exists(output_file):
         print(f"ERROR: Output file not found: {output_file}")
         print(f"\nRun ensemble_quintile_analysis_cli.py first:")
-        if args.fp16:
+        if args.v2:
+            print(f"  python ensemble_quintile_analysis_cli.py --date {date_str} --v2")
+        elif args.fp16:
             print(f"  python ensemble_quintile_analysis_cli.py --date {date_str} --fp16")
         else:
             print(f"  python ensemble_quintile_analysis_cli.py --date {date_str}")

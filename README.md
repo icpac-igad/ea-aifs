@@ -55,6 +55,18 @@ micromamba create -n aifs-etl -c conda-forge python=3.12.7 \
   && sudo apt update && sudo apt install nano
 ```
 
+> **AIFS-ENS-2.0 (`fp16FahamuAIFSv2`, `--v2`):** the v2 pipeline standardises on
+> **`earthkit-regrid 0.5.1`** (vs 0.4.0 above). Use the v2 ETL env-creation command in
+> [`fp16FahamuAIFSv2/README.md`](fp16FahamuAIFSv2/README.md#run) for Steps 3–5.
+>
+> **Pin `earthkit-data<1.0.0`.** The `earthkit-data` above is unpinned and now resolves to
+> **1.0.0**, whose changed source API breaks the ETL scripts: `from_source(...)` returns a
+> non-iterable `GribData` (`TypeError: 'GribData' object is not iterable`; `len()` raises
+> `ImportError: cannot import name 'convert_array'` against earthkit-utils 0.3.0). Pin
+> `"earthkit-data<1.0.0"` (solves to 0.20.0). Repair an already-drifted env with
+> `micromamba install -n aifs-etl -c conda-forge 'earthkit-data<1.0.0' 'earthkit-regrid=0.5.1'`.
+> See *Troubleshooting: Open-Data Input Prep Hangs* below.
+
 ### Credentials Setup
 
 Copy the `.env.example` file to `.env` and fill in your credentials:
@@ -176,10 +188,13 @@ python shared/aifs_n320_grib_1p5defg_nc_cli.py --date 20260129
 
 # For FP16:
 python shared/aifs_n320_grib_1p5defg_nc_cli.py --date 20260129 --fp16
+
+# For AIFS-ENS-2.0 (fp16FahamuAIFSv2):
+python shared/aifs_n320_grib_1p5defg_nc_cli.py --date 20260129 --v2
 ```
 
 - **Purpose:** Download GRIB files from GCS and regrid from N320 to 1.5 degree NetCDF
-- **Output:** NetCDF files in `gs://aifs-aiquest-us-20251127/YYYYMMDD_0000/1p5deg_nc/` (or `fp16_1p5deg_nc/`)
+- **Output:** NetCDF files in `gs://aifs-aiquest-us-20251127/YYYYMMDD_0000/1p5deg_nc/` (or `fp16_1p5deg_nc/`, or `fp16_v2_1p5deg_nc/` with `--v2`)
 
 #### Parallel processing — `--max-workers`
 
@@ -208,6 +223,17 @@ python shared/aifs_n320_grib_1p5defg_nc_cli.py --date 20260129 --fp16 --max-work
   once and reuses it. Override the workdir root with `EARTHKIT_WORKDIR=/path`.
 - **Don't double-launch.** Two parent runs over the same `--members` just duplicate
   work and race on GCS output — run one launcher with `--max-workers`, not two.
+- **Surface-only regrid (~7× faster, all modes).** The script now selects the 3 target
+  surface params (`msl/tp/2t`) **before** N320→1.5° interpolation instead of regridding
+  the whole GRIB and extracting afterwards. `earthkit-regrid` does a matrix multiply per
+  field, so regridding 36 surface fields instead of the full ~1416-field GRIB (mostly
+  pressure levels) cut per-member time from **~7.6 min → ~1.1 min** (measured on the v2
+  50-member run; same 5.7→1.1 min drop on one member in a controlled same-env test). It
+  falls back to the full FieldList if the select fails, so v1/fp16/fp32 are unaffected in
+  output and get the same speedup. This change was required for `--v2` (aifs-ens-2.0 GRIB
+  can't be `to_xarray()`'d whole — see
+  [`fp16FahamuAIFSv2/README.md`](fp16FahamuAIFSv2/README.md#why-v2-regrid-is-7-faster-than-the-old-v1-timing)).
+  The 4–4.5 h figure in the cost table below predates this and now overestimates.
 
 ### Step 3b: Ensemble Quintile Analysis
 
@@ -219,10 +245,13 @@ python shared/ensemble_quintile_analysis_cli.py --date 20260129
 
 # FP16 mode
 python shared/ensemble_quintile_analysis_cli.py --date 20260129 --fp16
+
+# AIFS-ENS-2.0 mode (reads fp16_v2_1p5deg_nc/)
+python shared/ensemble_quintile_analysis_cli.py --date 20260129 --v2
 ```
 
 - **Purpose:** Download ensemble NetCDF from GCS, retrieve climatology, calculate quintile probabilities
-- **Output:** `ensemble_quintile_probabilities_YYYYMMDD.nc` (or `_fp16.nc`)
+- **Output:** `ensemble_quintile_probabilities_YYYYMMDD.nc` (or `_fp16.nc`, or `_v2.nc` with `--v2`)
 - **Requires:** `.env` file with `AIWQ_PASSWORD` for climatology retrieval, `coiled-data.json` for GCS access
 
 ### Step 3c: Forecast Submission
@@ -236,12 +265,16 @@ python shared/forecast_submission_cli.py --date 20260129
 # FP16 submission
 python shared/forecast_submission_cli.py --date 20260129 --fp16
 
+# AIFS-ENS-2.0 submission (uses ..._v2.nc + AIWQ_MODEL_NAME_V2/AIWQ_MODEL_NAME_FP16)
+python shared/forecast_submission_cli.py --date 20260129 --v2
+
 # Dry run (validate without submitting)
 python shared/forecast_submission_cli.py --date 20260129 --dry-run
 ```
 
 - **Purpose:** Submit quintile probabilities to AI Weather Quest competition
 - **Requires:** `.env` file with `AIWQ_TEAM_NAME`, `AIWQ_MODEL_NAME`, and `AIWQ_PASSWORD`
+  (for `--v2`, `AIWQ_MODEL_NAME_V2` or `AIWQ_MODEL_NAME_FP16`)
 - **Submits:** 3 variables (mslp, pr, tas) x 2 weeks = 6 forecasts per run
 - **Submission window:** AI-WQ accepts a forecast only within **init date → init+3 days**
   (e.g. `20260611` was open `20260611`–`20260614`). Outside it the server rejects with
@@ -562,6 +595,65 @@ python -c "from huggingface_hub import snapshot_download; snapshot_download('ecm
 | Volume mount | Flexible, shared across instances | Requires persistent disk setup, mount configuration |
 
 For operational forecast pipelines where reliability and speed matter, **Docker pre-caching is strongly recommended**. It converts a flaky runtime network dependency into a deterministic build-time step.
+
+---
+
+
+## Troubleshooting: Open-Data Input Prep Hangs at "surface fields..."
+
+### Symptom
+
+`ecmwf_opendata_pkl_input_aifsens_v2.py` (Step 1, ETL) prints the first line and then
+hangs indefinitely with no further output:
+
+```
+Creating v2.0 input state for ensemble member 1
+  surface fields...
+```
+
+### Root Cause
+
+Two independent issues, both unrelated to the `--source` mirror (AWS/ECMWF/Azure/Google):
+
+1. **`earthkit-data` drifted to 1.0.0.** Its changed source API returns a non-iterable
+   `GribData`, so the script's `for f in data:` loop dies (`TypeError: 'GribData' object is
+   not iterable`; `len()` → `ImportError: cannot import name 'convert_array'`). Pin
+   `earthkit-data<1.0.0` (see *Software Installation*).
+2. **A suspended (`^Z`) or wedged prep process holds the open-data download lock.**
+   `earthkit-data` serialises downloads with a file lock
+   (`/tmp/earthkit-data-*/e-odretriever-*.cache.lock`). Ctrl-Z **suspends** the process
+   without releasing the lock, so every *new* run blocks forever at the first download.
+   **Stop runs with Ctrl-C (SIGINT), never Ctrl-Z.**
+
+The first `ekr.interpolate` call also does a one-time N320 matrix download (tens of
+seconds) — that is normal, not a hang.
+
+### Diagnosis
+
+```bash
+# Env drift — should be earthkit-data 0.20.x / earthkit-regrid 0.5.1
+python -c "import earthkit.data as d, earthkit.regrid as r; print(d.__version__, r.__version__)"
+
+# Suspended/stuck prep processes ('T' = stopped) and the stale lock
+ps -o pid,stat,cmd $(pgrep -f ecmwf_opendata_pkl_input_aifsens_v2)
+ls -la /tmp/earthkit-data-*/*.cache.lock
+```
+
+### Fix: Kill Stuck Jobs, Clear the Lock, Retry
+
+```bash
+# 1. Kill any suspended/stuck prep processes (SIGCONT so a stopped proc can receive SIGKILL)
+for p in $(pgrep -f ecmwf_opendata_pkl_input_aifsens_v2); do kill -CONT $p; kill -9 $p; done
+
+# 2. Remove the stale download lock(s)
+rm -f /tmp/earthkit-data-*/*.cache.lock
+
+# 3. Repair the env if drifted
+micromamba install -n aifs-etl -c conda-forge 'earthkit-data<1.0.0' 'earthkit-regrid=0.5.1'
+
+# 4. Re-run (defaults to the AWS mirror; ~3 min/member once the N320 matrix is cached)
+python fp16FahamuAIFSv2/ecmwf_opendata_pkl_input_aifsens_v2.py --date YYYYMMDD --members 1-50
+```
 
 ---
 

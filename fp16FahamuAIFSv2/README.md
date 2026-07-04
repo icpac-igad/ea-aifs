@@ -61,12 +61,110 @@ python fp16FahamuAIFSv2/fp16_automate_aifs_gpu_pipeline_v2.py \
 
 - **Step 1 output:** `gs://aifs-aiquest-us-20251127/<date>_0000/input_v2/input_state_member_NNN.pkl`
   (kept separate from v1's `input/` so both versions coexist). Requires `coiled-data.json`
-  unless `--no-upload`. CPU only. `--source` picks the mirror (`ecmwf`/`azure`/`aws`/`google`).
+  unless `--no-upload`. CPU only. `--source` picks the mirror
+  (**default `aws`**; also `ecmwf`/`azure`/`google`). The direct `ecmwf` portal is throttled
+  to 500 simultaneous connections, so the routine defaults to the **AWS S3** replica — pass
+  `--source ecmwf` only if you specifically need the primary portal.
 - **Step 2 output:** `gs://…/<date>_0000/fp16_v2_forecasts/aifs_ens_forecast_<date>_memberNNN_h*.grib`.
   Needs an Ampere+ GPU and the v2 software env (below).
-- **Steps 3–5:** reuse `shared/aifs_n320_grib_1p5defg_nc_cli.py` (point
-  `--gcs-input-subpath fp16_v2_forecasts`), then the `shared/` quintile + submission CLIs
-  (submit under a new `AIWQ_MODEL_NAME_V2`).
+- **Steps 3–5:** reuse the `shared/` CLIs with the **`--v2`** flag (added for this model).
+  It switches the GCS subpaths to the `fp16_v2_*` namespace and the submission model name,
+  leaving v1/fp16 behaviour untouched.
+
+  **ETL software env (Steps 3–5).** Build a CPU env pinned to the **v2 `earthkit-regrid
+  0.5.1`** (the same regrid version the v2 input-prep/inference uses; the v1 `aifs-etl`
+  env's 0.4.0 also works for regrid but the v2 pipeline standardises on 0.5.1):
+
+  ```bash
+  micromamba create -y -n aifs-etl -c conda-forge python=3.12.7 \
+      "earthkit-data<1.0.0" "earthkit-regrid=0.5.1" google-cloud-storage xarray netcdf4 icechunk python-dotenv
+  micromamba activate aifs-etl
+
+  # REQUIRED for the quintile (3b) + submission (3c/3d) steps — not on conda-forge:
+  pip install AI_WQ_package python-dotenv
+  ```
+
+  > **Pin `earthkit-data<1.0.0`.** earthkit-data 1.0.0 changed the source API — `from_source(...)`
+  > returns a non-iterable `GribData`, so the input-prep's `for f in data:` loop breaks
+  > (`TypeError: 'GribData' object is not iterable`; `len()` raises `ImportError: cannot import
+  > name 'convert_array'` against earthkit-utils 0.3.0). The unpinned `earthkit-data` in the
+  > create line silently resolves to 1.0.0. Pin `<1.0.0` (solves to 0.20.0) as above.
+  > Fix an already-drifted env with:
+  > `micromamba install -n aifs-etl -c conda-forge 'earthkit-data<1.0.0' 'earthkit-regrid=0.5.1'`.
+
+  > **If a run hangs at `surface fields...` (input prep), don't `^Z` it — that's the cause.**
+  > earthkit-data serialises open-data downloads with a file lock
+  > (`/tmp/earthkit-data-cloudenv/e-odretriever-*.cache.lock`). A **suspended** (`^Z`) or wedged
+  > prep process keeps that lock, so every *new* run blocks forever at the first download with no
+  > output. Recover with: `pgrep -af ecmwf_opendata_pkl_input_aifsens_v2` → `kill -CONT <pid>;
+  > kill -9 <pid>` for any stuck/stopped jobs, then `rm -f /tmp/earthkit-data-cloudenv/*.cache.lock`,
+  > then re-run. To stop a run cleanly use Ctrl-C (SIGINT), not Ctrl-Z. The first `ekr.interpolate`
+  > call also does a one-time N320 matrix download (tens of seconds) — that's normal, not a hang.
+
+  > **Why this matters:** the quintile CLI (3b) needs `AI_WQ_package` to fetch the 20-yr
+  > quintile **climatology** from the AI-WQ server (`ftp.ecmwf.int`, public — no password).
+  > If the package is missing it does **not** error loudly — it prints
+  > `AI_WQ_package not available, using local climatology files`, silently falls back to
+  > local files that don't exist, and ends with `No quintile data calculated`. If you see
+  > that, the fix is `pip install AI_WQ_package`, **not** a server/FTP problem.
+
+  Then run from this folder so `coiled-data.json` and `.env` resolve:
+
+  ```bash
+  # 3a — regrid:  reads <date>_0000/fp16_v2_forecasts/  ->  writes <date>_0000/fp16_v2_1p5deg_nc/
+  python ../shared/aifs_n320_grib_1p5defg_nc_cli.py --date 20260625_0000 --members 1-50 --v2
+
+  # 3b — quintiles:  reads fp16_v2_1p5deg_nc/  ->  writes ensemble_quintile_probabilities_20260625_v2.nc
+  python ../shared/ensemble_quintile_analysis_cli.py --date 20260625 --v2
+
+  # 3c — submit:  uses ..._v2.nc + the v2 model name
+  python ../shared/forecast_submission_cli.py --date 20260625 --v2          # add --dry-run to validate
+
+  # 3d — out-of-window only:  build + zip the per-variable/week AI-WQ files for a manual upload
+  python ../shared/aiwq_individual_files_cli.py --date 20260625 --v2
+  ```
+
+  > **Submission window:** the live endpoint (3c) only accepts a forecast start date within
+  > its window (`start_date` → `start_date + 3 days`). Outside it you get
+  > *"You are not allowed to submit a forecast for … at this point in time"* — this is a
+  > closed window, not an auth/FTP failure. For archival or a manual portal upload of a
+  > past-window date, use **3d**: it reuses the exact submission prep but writes each
+  > populated DataArray to `{var}_{date}_p{week}_{team}_{model}.nc` under
+  > `./aiwq_individual_<date>/` and bundles them into
+  > `aiwq_submission_<date>_<team>_<model>.zip` (it does **not** submit).
+
+  Submission model name resolves as `AIWQ_MODEL_NAME_V2` → `AIWQ_MODEL_NAME_FP16` →
+  `AIWQ_MODEL_NAME`. This folder's `.env` sets `AIWQ_MODEL_NAME_FP16=fp16FahamuAIFSv2`, so
+  `--v2` submits under **`fp16FahamuAIFSv2`** without needing `AIWQ_MODEL_NAME_V2`.
+  The Coiled service account `coiled-data.json` (here:
+  `coiled-data@sewaa-416306`) provides GCS access; AI-WQ climatology + submission use `.env`.
+
+  > **v2 regrid note (handled in code):** aifs-ens-2.0 GRIB has an inconsistent
+  > pressure-level dimension (`t/u/v/w/z` = 14 levels incl. 10 hPa, but `q` = 13 because
+  > `q_10` is dropped). A naïve full `to_xarray()` fails with *"inconsistent dimension
+  > levelist 13 != 14"*. `aifs_n320_grib_1p5defg_nc_cli.py` selects the surface params
+  > (`msl/tp/2t`) **before** conversion, which avoids the conflict.
+
+### Why v2 regrid is ~7× faster than the old v1 timing
+
+Selecting the 3 surface params before interpolation is also a large speedup, and explains
+the big drop in per-member wall-clock vs the historical v1 figure:
+
+| Regrid path | Fields interpolated per 72 h file | Per-member time |
+|-------------|-----------------------------------|-----------------|
+| Original (full FieldList → extract after) | **~1416** (mostly pressure levels: `q/t/u/v/w/z` × 13–14 lvl × 12 steps) | **~7.6 min** (v1 doc) / 5.7 min (v2 env, member 001) |
+| Surface-only (`fl.sel(param=['msl','tp','2t'])` → interpolate) | **36** (3 vars × 12 steps) | **~1.1 min** (measured, 50-member run) |
+
+`earthkit-regrid` applies a sparse N320→1.5° matrix multiply **per field**, so cost scales
+with field count. The old path regridded the *entire* GRIB (~1416 fields) and only then
+kept `tp/msl/2t` — ~40× more interpolation than needed. Selecting the 3 surface params up
+front makes GCS download the new floor. Measured on the same 2-vCPU ETL box: member 001
+went **5.7 → 1.1 min** (full vs surface-only, identical env), and the full 50-member v2 run
+held a steady **1.1–1.3 min/member**.
+
+**This is not a v1-vs-v2 model difference** — it's the pre-selection optimisation in the
+shared CLI. It falls back to the full FieldList only if the select fails, so **v1/fp16
+runs get the same speedup** if re-run on the current script.
 
 ## GPU software environment (Step 2)
 

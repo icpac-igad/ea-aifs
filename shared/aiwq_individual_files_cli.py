@@ -38,8 +38,10 @@ def main() -> int:
     ap.add_argument('--date', required=True, help='Forecast start date YYYYMMDD, e.g. 20260611')
     ap.add_argument('--fp16', action='store_true', default=False,
                     help='Use FP16 credentials + default quintile filename')
+    ap.add_argument('--v2', action='store_true', default=False,
+                    help='AIFS-ENS-2.0: use v2 credentials + _v2 quintile filename (takes precedence over --fp16)')
     ap.add_argument('--quintile-file', default=None,
-                    help='Quintile probabilities .nc (default: ./ensemble_quintile_probabilities_<date>[_fp16].nc)')
+                    help='Quintile probabilities .nc (default: ./ensemble_quintile_probabilities_<date>[_v2|_fp16].nc)')
     ap.add_argument('--variables', nargs='+', default=['tas', 'pr', 'mslp'],
                     choices=['tas', 'pr', 'mslp'])
     ap.add_argument('--weeks', nargs='+', default=['1', '2'])
@@ -49,9 +51,9 @@ def main() -> int:
                     help='Output zip path (default ./aiwq_submission_<date>_<team>_<model>.zip)')
     args = ap.parse_args()
 
-    team, model, password = get_credentials(fp16=args.fp16)
+    team, model, password = get_credentials(fp16=args.fp16, v2=args.v2)
 
-    suffix = '_fp16' if args.fp16 else ''
+    suffix = '_v2' if args.v2 else ('_fp16' if args.fp16 else '')
     qfile = args.quintile_file or f"./ensemble_quintile_probabilities_{args.date}{suffix}.nc"
     if not os.path.exists(qfile):
         print(f"ERROR: quintile file not found: {qfile}")

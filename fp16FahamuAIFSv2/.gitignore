@@ -1,0 +1,25 @@
+# Secrets / credentials — never commit
+.env
+coiled-data.json
+
+# Generated ETL / submission outputs
+input_states_v2/
+input_state_member_*.pkl
+ensemble_icechunk_store/
+ensemble_nc_files/
+ensemble_quintile_probabilities_*.nc
+*_20yrCLIM_*_quintiles_*.nc
+aiwq_individual_*/
+aiwq_plots_*/
+aiwq_submission_*.zip
+*.grib
+
+# Plots / scratch test artifacts
+*.png
+test.txt
+
+# Exported conversation transcripts
+20*-aifs-*.txt
+
+# Notebook checkpoints
+.ipynb_checkpoints/

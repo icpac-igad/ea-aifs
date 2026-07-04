@@ -55,7 +55,7 @@ G = 9.80665                       # standard gravity, for gh → z
 
 
 def get_open_data(date, param, levelist=[], number=None, constant=False,
-                  source="ecmwf", **kwargs):
+                  source="aws", **kwargs):
     """Retrieve + N320-interpolate ECMWF Open Data for a (param, level) group.
 
     Returns a dict ``name -> ndarray`` stacked over [date-6h, date] (2 timesteps).
@@ -101,7 +101,7 @@ def get_open_data(date, param, levelist=[], number=None, constant=False,
     return fields
 
 
-def create_input_state(date, number, source="ecmwf"):
+def create_input_state(date, number, source="aws"):
     """Build the v2.0 input_state dict for one ensemble member."""
     print(f"\nCreating v2.0 input state for ensemble member {number}")
     t0 = time.time()
@@ -214,9 +214,10 @@ def main():
                                     "(default: latest open-data)")
     ap.add_argument("--members", default="1-50",
                     help="ensemble members, e.g. '1-50', '1,5,10', '3' (default 1-50)")
-    ap.add_argument("--source", default="ecmwf",
+    ap.add_argument("--source", default="aws",
                     choices=["ecmwf", "azure", "aws", "google"],
-                    help="ECMWF open-data mirror (default ecmwf)")
+                    help="ECMWF open-data mirror (default aws; the direct "
+                         "'ecmwf' portal is throttled to 500 connections)")
     ap.add_argument("--gcs-subpath", default=GCS_SUBPATH,
                     help=f"GCS subfolder under the date (default {GCS_SUBPATH})")
     ap.add_argument("--no-upload", action="store_true", help="skip GCS upload")
