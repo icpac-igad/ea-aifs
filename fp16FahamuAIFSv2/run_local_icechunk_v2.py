@@ -156,7 +156,8 @@ def run(date_str, members, input_dir, store_path, lead_time,
         num_chunks=INFERENCE_NUM_CHUNKS, float_size="f4", tag=True,
         commit_every=1, skip_existing=False, write_hours=None,
         gcs_fetch=False, bucket=None, gcs_prefix=None, service_account_key=None,
-        cleanup_pkl=False, grid="n320", native_store=None, native_vars=None):
+        cleanup_pkl=False, grid="n320", native_store=None, native_vars=None,
+        native_write_hours=None):
 
     # VRAM knobs must be set before the model / CUDA context is created.
     os.environ["ANEMOI_INFERENCE_NUM_CHUNKS"] = str(num_chunks)
@@ -184,6 +185,25 @@ def run(date_str, members, input_dir, store_path, lead_time,
                          f"lead-time {lead_time}h")
     last_kept_index = kept[-1] - 1        # absolute 0-based index of final stored step
 
+    # The sidecar may need a DIFFERENT window from the main store: the O96 corpus wants
+    # every step (MJO needs day 8 and 15, which a 432-792 h window cannot reach) while the
+    # N320 sidecar only needs the downstream window it feeds. Omitted -> inherit the main
+    # window, which is the behaviour every existing command line already has.
+    if native_write_hours is None:
+        nh_lo, nh_hi, native_window_src = h_lo, h_hi, write_hours
+    else:
+        nh_lo, nh_hi = parse_write_hours(native_write_hours)
+        native_window_src = native_write_hours
+
+    def keep_native(hour):
+        return (nh_lo is None or hour >= nh_lo) and (nh_hi is None or hour <= nh_hi)
+
+    kept_native = [s for s in range(1, n_steps + 1) if keep_native(s * TIME_STEP_HOURS)]
+    if native_store and not kept_native:
+        raise ValueError(f"--native-write-hours {native_write_hours} selects no step "
+                         f"within lead-time {lead_time}h")
+    last_kept_native_index = (kept_native[-1] - 1) if kept_native else None
+
     print("=" * 70)
     print("AIFS-ENS-2.0 FP16  ->  LOCAL Icechunk store (no GCS, no GRIB)")
     print("=" * 70)
@@ -207,6 +227,12 @@ def run(date_str, members, input_dir, store_path, lead_time,
               f"~13.4x smaller); N320 never hits disk")
     if native_store:
         print(f"Sidecar:     {','.join(native_vars)} kept on native N320 -> {native_store}")
+        if nh_lo is None:
+            print(f"Sidecar window: ALL {n_steps} steps stored")
+        else:
+            print(f"Sidecar window: {nh_lo}-{nh_hi}h -> storing {len(kept_native)}/"
+                  f"{n_steps} steps ({100*len(kept_native)/n_steps:.0f}%)"
+                  + ("" if native_write_hours is None else "  [--native-write-hours]"))
     if gcs_fetch:
         print(f"Input:       fetch from gs://{bucket}/{gcs_prefix}/ (prefetch next member)"
               + (" | delete pkl after each member" if cleanup_pkl else ""))
@@ -243,8 +269,15 @@ def run(date_str, members, input_dir, store_path, lead_time,
     # never cost a GCS transfer.
     todo = []
     for member in members:
-        if skip_existing and schema_exists(repo) and member_written(repo, member - 1,
-                                                                    last_kept_index):
+        done = (skip_existing and schema_exists(repo)
+                and member_written(repo, member - 1, last_kept_index))
+        # A member is only complete if the sidecar has it too, at the sidecar's own final
+        # step -- otherwise adding a sidecar to an existing run would silently skip every
+        # member and leave it empty.
+        if done and native_repo is not None:
+            done = (schema_exists(native_repo)
+                    and member_written(native_repo, member - 1, last_kept_native_index))
+        if done:
             print(f"--- Member {member:03d}: [SKIP] already complete in store")
             skipped.append(member)
         else:
@@ -335,8 +368,8 @@ def run(date_str, members, input_dir, store_path, lead_time,
             hour = step * TIME_STEP_HOURS
             if keep(hour):
                 writer.write_step(state, time_index=step - 1)   # keep ALL fields
-                if native_writer is not None:
-                    native_writer.write_step(state, time_index=step - 1)
+            if native_writer is not None and keep_native(hour):
+                native_writer.write_step(state, time_index=step - 1)
             if step % 20 == 0:
                 print(f"    {hour}h / {lead_time}h "
                       f"(stored {writer.n}/{len(kept)}, {len(writer.snapshots)} commits)")
@@ -347,6 +380,9 @@ def run(date_str, members, input_dir, store_path, lead_time,
 
         if writer.n != len(kept):
             print(f"    [WARN] stored {writer.n} steps, expected {len(kept)}")
+        if native_writer is not None and native_writer.n != len(kept_native):
+            print(f"    [WARN] sidecar stored {native_writer.n} steps, "
+                  f"expected {len(kept_native)}")
         snap = writer.finalize()                 # flush any uncommitted tail steps
         if native_writer is not None:
             native_writer.finalize()
@@ -446,6 +482,13 @@ def main():
                          "bit-identical for ~13 GB while the 120-var corpus goes coarse.")
     ap.add_argument("--native-vars", default="msl,tp,2t",
                     help="variables for --native-store (default: the three AI-WQ ones)")
+    ap.add_argument("--native-write-hours", default=None,
+                    help="write window for --native-store, if it should differ from "
+                         "--write-hours. The case this exists for: keep the O96 corpus "
+                         "complete (no --write-hours, so day 8/15 are present for MJO) "
+                         "while the N320 sidecar carries only the downstream window, "
+                         f"e.g. --native-write-hours {DOWNSTREAM_WINDOW}. Omitted, the "
+                         "sidecar inherits --write-hours exactly as before.")
     args = ap.parse_args()
 
     gcs_prefix = args.gcs_input_prefix or f"{args.date}/input_v2"
@@ -465,7 +508,8 @@ def main():
              if args.gcs_fetch else None,
              cleanup_pkl=args.cleanup_pkl, grid=args.grid,
              native_store=args.native_store,
-             native_vars=[v.strip() for v in args.native_vars.split(",") if v.strip()])
+             native_vars=[v.strip() for v in args.native_vars.split(",") if v.strip()],
+             native_write_hours=args.native_write_hours)
     return 0 if ok else 1
 
 
