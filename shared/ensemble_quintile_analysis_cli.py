@@ -326,6 +326,13 @@ def download_ensemble_nc_from_gcs_chunked(
 
         zarr_group = "ensemble_forecast"
         processed_count = 0
+        # (icechunk_store, icechunk_ref) seen per member. Collected across ALL
+        # members rather than read once off the store, because the group attrs
+        # only retain the LAST member written -- which would silently present a
+        # mixed-source ensemble as single-source. A cycle can hold two forecast
+        # stores (N320 and O96, or a tier-B corpus and its sidecar), so members
+        # built from different stores is a real failure, not a hypothetical.
+        member_provenance = set()
 
         # Process members one by one for memory efficiency
         for i, file_info in enumerate(available_files):
@@ -346,6 +353,9 @@ def download_ensemble_nc_from_gcs_chunked(
             # Load and process single member
             try:
                 ds = xr.open_dataset(local_path, chunks={'member': 1, 'step': 10, 'latitude': 60, 'longitude': 120})
+
+                member_provenance.add((ds.attrs.get("icechunk_store", ""),
+                                       ds.attrs.get("icechunk_ref", "")))
 
                 # Update member coordinate to the correct value
                 ds = ds.assign_coords(member=[member_num])
@@ -398,6 +408,24 @@ def download_ensemble_nc_from_gcs_chunked(
             'processing_date': str(np.datetime64('now')),
             'storage_backend': 'icechunk'
         })
+
+        # Provenance of the FORECAST data, kept distinct from this staging store.
+        known = {p for p in member_provenance if any(p)}
+        if len(known) == 1:
+            src_store, src_ref = known.pop()
+            ensemble_ds.attrs['source_icechunk_store'] = src_store
+            ensemble_ds.attrs['source_icechunk_ref'] = src_ref
+        elif len(known) > 1:
+            listed = "; ".join(f"{a}@{b}" for a, b in sorted(known))
+            ensemble_ds.attrs['source_icechunk_store'] = f"MIXED: {listed}"
+            ensemble_ds.attrs['source_icechunk_ref'] = "MIXED"
+            print(f"   ⚠️  MIXED PROVENANCE -- members came from more than one "
+                  f"forecast store: {listed}")
+            print(f"      The quintile product will say so. Do not submit it "
+                  f"until you know why.")
+        else:
+            ensemble_ds.attrs['source_icechunk_store'] = "unknown"
+            ensemble_ds.attrs['source_icechunk_ref'] = "unknown"
 
         print(f"   ✅ Final ensemble dataset:")
         print(f"      Members: {ensemble_ds.sizes['member']}")
@@ -802,6 +830,14 @@ def calculate_ensemble_quintiles(forecast_ds, forecast_date: str,
             'title': 'Ensemble Forecast Quintile Probabilities',
             'processing_date': str(np.datetime64('now'))
         })
+        # Carry the forecast store forward. This file is the submission input and
+        # the ONLY per-cycle artifact cleanup_aifs_run.py keeps (it purges
+        # nc_1p5deg, where the member-level attrs live), so without this a cleaned
+        # cycle can no longer say which store produced what was submitted.
+        for k in ('source_icechunk_store', 'source_icechunk_ref',
+                  'forecast_date', 'precision'):
+            if k in getattr(forecast_ds, 'attrs', {}):
+                result_ds.attrs[k] = forecast_ds.attrs[k]
         return result_ds
     else:
         print("No quintile data calculated")
