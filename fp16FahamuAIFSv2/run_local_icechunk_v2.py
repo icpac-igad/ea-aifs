@@ -263,7 +263,7 @@ def run(date_str, members, input_dir, store_path, lead_time,
                           device="cuda", precision=precision)
     print(f"Model loaded in {time.time() - t0:.1f}s\n")
 
-    ok, failed, skipped, snap = [], [], [], None
+    ok, failed, skipped, snap, native_snap = [], [], [], None, None
 
     # Resolve the work list up front (before any download) so resumed/complete members
     # never cost a GCS transfer.
@@ -385,7 +385,7 @@ def run(date_str, members, input_dir, store_path, lead_time,
                   f"expected {len(kept_native)}")
         snap = writer.finalize()                 # flush any uncommitted tail steps
         if native_writer is not None:
-            native_writer.finalize()
+            native_snap = native_writer.finalize()
         ok.append(member)
         print(f"    [OK] member {member:03d}: stored {writer.n}/{n_steps} steps, "
               f"{len(writer.snapshots)} commits (last {snap}) in {time.time() - m_t0:.1f}s")
@@ -404,19 +404,39 @@ def run(date_str, members, input_dir, store_path, lead_time,
     # deleted names are tombstoned (never reusable), so tagging after a partial run
     # would permanently bind `cycle-<date>` to a 1-member snapshot -- a reader would
     # then silently get NaNs for every other member.
-    if tag and snap is not None:
+    def tag_store(r, s, last_index, label):
+        """Tag `cycle-<date>` on one store, only if its whole ensemble is present.
+
+        Each store is checked against its OWN last kept step: with
+        --native-write-hours the sidecar ends at a different index from the main
+        store, so sharing one index would mis-report completeness for whichever
+        store did not set it.
+        """
+        if s is None:
+            return
         complete = [m for m in range(1, n_members + 1)
-                    if member_written(repo, m - 1, last_kept_index)]
+                    if member_written(r, m - 1, last_index)]
         if len(complete) < n_members:
-            print(f"\n[TAG] not tagged: {len(complete)}/{n_members} members present. "
-                  f"Re-run the remaining members (--skip-existing); the cycle is tagged "
-                  f"only when the ensemble is complete.")
-        else:
-            try:
-                repo.create_tag(f"cycle-{date_str}", snapshot_id=snap)
-                print(f"\n[TAG] cycle-{date_str} -> {snap} ({n_members}/{n_members} members)")
-            except Exception as e:
-                print(f"\n[TAG] skipped ({e})")
+            print(f"\n[TAG] {label}: not tagged, {len(complete)}/{n_members} members "
+                  f"present. Re-run the remaining members (--skip-existing); the cycle "
+                  f"is tagged only when the ensemble is complete.")
+            return
+        try:
+            r.create_tag(f"cycle-{date_str}", snapshot_id=s)
+            print(f"\n[TAG] {label}: cycle-{date_str} -> {s} "
+                  f"({n_members}/{n_members} members)")
+        except Exception as e:
+            print(f"\n[TAG] {label}: skipped ({e})")
+
+    if tag:
+        tag_store(repo, snap, last_kept_index, os.path.basename(str(store_path)))
+        # The sidecar is what 3a and the TS tracker read, so an untagged sidecar
+        # forces those to fall back to `branch:main` -- weaker provenance, and
+        # aifs_n320_grib_1p5defg_nc_cli records the tag you PASSED rather than the
+        # ref it actually read, so a stale --icechunk-tag would silently lie.
+        if native_repo is not None:
+            tag_store(native_repo, native_snap, last_kept_native_index,
+                      os.path.basename(str(native_store)))
 
     print("\n" + "=" * 70)
     print(f"DONE: {len(ok)} written, {len(skipped)} skipped, {len(failed)} failed "
