@@ -114,20 +114,39 @@ grep -niE "password|token|secret|Bearer|api[_-]?key"      fp16FahamuAIFSv2_${DAT
 Each cycle against its predecessors — the step banners should line up within a
 few lines, and a new transcript that does not is worth looking at:
 
-| | 20260813 | 20260820 | 20260827 |
-|---|---|---|---|
-| 3b command | 1 | 1 | 1 |
-| 3c command | 342 | 344 | 344 |
-| `SUBMISSION SUMMARY` | 627 | 952 | 1001 |
-| total lines | 635 | 960 | **1009** |
+| | 20260813 | 20260820 | 20260827 | 20260903 |
+|---|---|---|---|---|
+| 3b command | 1 | 1 | 1 | 1 |
+| 3c command | 342 | 344 | 344 | 337 |
+| `SUBMISSION SUMMARY` | 627 | 952 | 1001 | 1030 |
+| total lines | 635 | 960 | 1009 | **1038** |
+| registered-team rows | — | 479 | 528 | 564 |
 
 **The file grows every cycle for a reason unrelated to the forecast.** The AI-WQ
 package prints the full registered-teams CSV on every call — twice per file, six
 files — and that table keeps gaining teams. Measured across the numbered rows in
-the 3c log, it went from **479 rows total on 20260820 to 528 on 20260827**, which
-is exactly the 49-line difference between the two transcripts. Roughly a third of
-the file is that table. A jump in length is not a signal that anything changed in
-the run — confirm it against the row count before investigating.
+the 3c log, it went 479 → 528 → 564 across the last three cycles, and the
+20260820 → 20260827 step of +49 rows was exactly the 49-line difference between
+those two transcripts. Roughly a third of the file is that table. A jump in length
+is not a signal that anything changed in the run — confirm it against the row count
+before investigating.
+
+20260903's 3c banner sits 7 lines *earlier* than 20260827's, which looks like a
+regression and is not: its 3b log is simply 7 lines shorter.
+
+### When a step ran more than once, use the log that made the submitted file
+
+3b ran twice on 20260903 — once before the provenance change, once after — leaving
+`run_0903_3b.log` **and** `run_0903_3b_prov.log`. The transcript must carry the run
+whose output was actually submitted, and the product itself says which that is:
+
+```bash
+$PY -c "import xarray as xr; print(xr.open_dataset('<quintile>.nc').attrs['processing_date'])"
+# 2026-09-05T09:08:59  -> run_0903_3b_prov.log (09:08), NOT run_0903_3b.log (07:03)
+```
+
+Match `processing_date` against the log mtimes rather than assuming the newest log,
+or the canonically-named one, is the right one.
 
 ### Cycles before 20260820
 
