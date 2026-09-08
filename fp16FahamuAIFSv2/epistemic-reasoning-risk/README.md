@@ -21,6 +21,14 @@ discards everything else. This folder builds the reasoning layer on top of it.
    pseudo-replication, backwards network arrows, unverified `tp`, mis-typed SST nodes,
    over-sold convergence — and a corrected, phased build plan (Part 0 scale×lead, Phases 0–5).
 4. **Phase-0/1 implementation** (below) — *the corrected code*, run on a real cycle.
+5. **`EVIDENCE_MAP_AND_BASIN_PLAN.md`** — *the evidence map.* The six evidence nodes resolved
+   against verified store contents, plus the HydroBASINS level-3 domain plan. Note §4 is
+   partly superseded by (6).
+6. **`SHORT_RANGE_EVIDENCE_MAP.md`** — *the same six nodes at 0–7 days*, with exact fields
+   rather than concepts. Records that the ∇·/∇× blocker in (5) §4 was already solved in
+   `ts-mjo/grid_ops.py` five days before it was written down, re-verifies the operator on O96,
+   and argues that CAPE — the one real gap — is better served by stability indices than by
+   MU-CAPE at this vertical resolution.
 
 ## Phase-0 contracts (fix the failure modes before any counting)
 

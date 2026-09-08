@@ -98,6 +98,14 @@ exactly what the jet work showed must be preserved.
 
 ## 4. The unblocking idea: boundary integrals instead of gradients
 
+> **⚠️ Superseded in part — see
+> [`SHORT_RANGE_EVIDENCE_MAP.md`](SHORT_RANGE_EVIDENCE_MAP.md) §1.** The premise below is
+> wrong: `ts-mjo/grid_ops.py` computes the vorticity **field** directly on the reduced
+> Gaussian axis, and `ts-mjo/ts_tracks.py` does object detection there too. It was committed
+> 2026-08-07, five days *before* this file. Vorticity is done and re-verified on O96;
+> divergence is a near-copy of the same method. Boundary integrals remain the cheaper route
+> to an area mean, but they are now an optimisation, not the only option.
+
 Three nodes above are marked ⚠️ for the same reason — vorticity, moisture-flux convergence and
 upper-level divergence all want ∇· or ∇×, undefined on the unstructured reduced-Gaussian
 `values` axis. This has been registered as *blocked pending regrid or spherical harmonics*.
