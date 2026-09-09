@@ -203,22 +203,72 @@ Three of the six ⚠️ marks were pessimistic by five days. The fourth is real.
 
 ### The decision: 112 km everywhere, or pay for 28 km
 
-The six nodes run at **112 km across all 33 days** today. Raising any of them to 28 km is an
-**inference-time** choice — it cannot be recovered afterwards without re-running the rollout
-(~4½ h per cycle). Measured from the current sidecar (51 GB / 10 vars / 61 steps =
-**83.6 MB per variable per step**), serving all six nodes at 28 km needs roughly 28 variables:
+The six nodes run at **112 km across all 33 days** today. Raising them to 28 km is an
+**inference-time** choice — `--native-vars` cannot be widened after the fact without re-running
+the rollout.
 
-| option | cost |
-|---|---|
-| current sidecar (10 vars, days 18–33) | **51 GB** |
-| six nodes at 28 km, days 18–33 only | **~143 GB** |
-| six nodes at 28 km, full 0–792 h | **~309 GB** |
-| *reference: tier-B pair today* | 209 GB |
-| *reference: old full-N320 store* | 583 GB |
+#### What has to be added: 23 variables
 
-So the full-range 28 km option costs about **1.5× the whole tier-B cycle** and roughly half
-the old N320 store it replaced. That is a real trade, not an obvious yes — and it competes
-with disk that is already the binding constraint on this box.
+Six of the current ten already serve the nodes; the other four (`10u`, `10v`, `t_200`, `t_300`)
+are there for the TS tracker. The union the six nodes need is 29, so 23 are missing:
+
+```
+--native-vars msl,tp,2t,10u,10v,t_200,t_300,t_500,u_850,v_850,\
+2d,cp,sp,tcw,\
+q_925,q_850,q_700,q_500,\
+t_850,t_700,\
+u_925,v_925,u_700,v_700,u_500,v_500,u_200,v_200,\
+w_850,w_700,w_500,\
+z_850,z_500
+```
+
+**33 variables.** What each group unlocks:
+
+| added | n | closes |
+|---|---|---|
+| `q_925 q_850 q_700 q_500`, `tcw` | 5 | node 1 entirely; `q_850` also gives node 2 its moisture flux |
+| `u/v` at 925, 700, 500, 200 | 8 | node 2 transport, ζ₇₀₀/ζ₅₀₀ for node 3, `d200` for node 4 |
+| `w_850 w_700 w_500` | 3 | node 4's ascent — currently ❌ |
+| `z_850 z_500` | 2 | `gh850`, `gh500` |
+| `t_850 t_700` | 2 | node 5 lapse rates; with `q` also gives `r850`/`r700` |
+| `2d sp` | 2 | the surface-based CAPE parcel (§4) |
+| `cp` | 1 | convective fraction `cp/tp` |
+
+`d850`, `d200`, `vo850/700/500` and `-div(qV)` need **no** new variables — they come from
+`u`/`v` once `divergence()` exists beside `relative_vorticity()` (§3).
+
+#### What it costs
+
+Measured from the current sidecar: 51 GB / 10 vars / 61 steps = **~86 MB per variable per
+step**, across all 50 members. Runtime is interpolated from two measured points — 14 s/member
+for the 3-var sidecar (`O96-icechunk-store/README.md` §7) and 47 s/member for the 10-var one
+on 20260903 — giving ~4.6 s/member per variable at 61 steps.
+
+| option | sidecar | + O96 | **per cycle** | rollout |
+|---|---|---|---|---|
+| current — 10 vars, days 18–33 | 51 GB | 158 GB | **209 GB** | 4.6 h |
+| **33 vars, days 18–33** | 168 GB | 158 GB | **326 GB** | **6.1 h** |
+| **33 vars, full 0–792 h** | 364 GB | 158 GB | **522 GB** | **8.6 h** |
+| 42 vars (+ full 13-level `q` for true TCWV), 0–792 h | 464 GB | 158 GB | 622 GB | ~10 h |
+| *reference: old full-N320 shape* | — | — | *583 GB* | *4.0 h* |
+
+#### Against the disk actually available
+
+With **523 GB free** (2026-09-09), and a cycle also needing 42 GB of pkls while it runs:
+
+- **326 GB fits comfortably** and leaves room for the pkls plus a second cycle on disk.
+- **522 GB fits once with ~1 GB spare.** The previous cycle would have to be purged before
+  every run and the pkls would not fit alongside it. Not workable weekly.
+- **622 GB does not fit.**
+
+So the full-range option costs only ~10 % less than the 583 GB shape tier B was adopted to
+escape, for a rollout half again as long. **That is not a trade worth making.** The days 18–33
+option at 326 GB is the real candidate: **+117 GB and +1.5 h per cycle**, buying all six nodes
+at 28 km over the AI-WQ target weeks and the tail to day 33.
+
+What it does **not** buy is days 0–17 at 28 km — that stays O96 at ~112 km. If the short-range
+end is what the nodes are for, this option does not serve it, and the one that does costs
+522 GB. Decide which end of the range the product is for before widening anything.
 
 **Recommended order:** settle this first, because every cycle run under the current
 `--native-vars` forecloses it for that cycle. Then add `divergence()` — its value is the same
