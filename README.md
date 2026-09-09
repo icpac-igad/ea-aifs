@@ -1,691 +1,155 @@
-# AI Forecast Submission Workflow
+# ea-aifs — AI Weather Quest forecasts from AIFS-ENS 2.0
 
-This document describes the complete sequential workflow for AI forecast submission using the AIFS ensemble system. The workflow spans from initial condition preparation to final forecast submission.
+Operational pipeline for **`fp16FahamuAIFSv2`**: a 50-member AIFS-ENS-2.0 ensemble run every
+Thursday to 792 h (33 days), post-processed to weekly quintile probabilities and submitted to
+the [AI Weather Quest](https://ai-weather-quest.ecmwf.int/).
 
-## Overview
+**`fp16FahamuAIFSv2` is the only model still run.** `FahamuAIFSv1`, `fp16FahamuAIFSv1` and
+`era5tFp16FahamuAIFSv1` are **deprecated** — kept for reference, not maintained. See
+[Deprecated models](#deprecated-models).
 
-The AI forecast submission process consists of 3 main steps across different computing environments (CPU/ETL and GPU) to produce ensemble weather forecasts and submit them for evaluation.
-
-### Workflow Index
-1. **Initial Condition Preparation** (ETL Machine) → `shared/ecmwf_opendata_pkl_input_aifsens.py`
-2. **GPU Inference** (GPU Machines)
-   - FP32 (A100 GPU) → `FahamuAIFSv1/automate_aifs_gpu_pipeline.py`
-   - FP16 (G2 GPU) → `fp16FahamuAIFSv1/fp16_automate_aifs_gpu_pipeline.py`
-3. **Post-Processing & Submission** (ETL Machine)
-   - Regrid → `shared/aifs_n320_grib_1p5defg_nc_cli.py`
-   - Quintile Analysis → `shared/ensemble_quintile_analysis_cli.py`
-   - Forecast Submission → `shared/forecast_submission_cli.py`
-
-### Models
-
-Scripts are grouped by forecast model. Each model has its own folder and a concise
-file-map doc; code shared across models lives in `shared/`.
-
-| Model | Input · Precision | Folder / doc |
-|-------|-------------------|--------------|
-| **FahamuAIFSv1** | ECMWF Open Data · FP32 (A100) | [`FahamuAIFSv1/FahamuAIFSv1.md`](FahamuAIFSv1/FahamuAIFSv1.md) |
-| **fp16FahamuAIFSv1** | ECMWF Open Data · FP16 (G2/L4) | [`fp16FahamuAIFSv1/fp16FahamuAIFSv1.md`](fp16FahamuAIFSv1/fp16FahamuAIFSv1.md) |
-| **era5tFp16FahamuAIFSv1** | CEDA ERA5T · FP16 | [`era5tFp16FahamuAIFSv1/era5tFp16FahamuAIFSv1.md`](era5tFp16FahamuAIFSv1/era5tFp16FahamuAIFSv1.md) |
-| **fp16FahamuAIFSv2** | ECMWF Open Data · FP16 · **AIFS-ENS-2.0** | [`fp16FahamuAIFSv2/README.md`](fp16FahamuAIFSv2/README.md) *(Steps 1–2; GPU runner pending smoke-test)* |
-
-`tools/` holds model-agnostic diagnostics and the non-CLI legacy scripts. The sections
-below document the FahamuAIFSv1 / fp16FahamuAIFSv1 pipeline (they share Steps 1, 3–5);
-the ERA5T variant is covered under [ERA5T Pipeline](#era5t-pipeline-ceda-data-source).
+| | |
+|---|---|
+| model | `ecmwf/aifs-ens-2.0`, FP16 |
+| members | 50 |
+| lead time | 792 h (33 days), 6-hourly |
+| submitted | `tas`, `mslp`, `pr` × weeks 3 & 4 (init+18, init+25 days) |
+| box | local RTX 5000 Ada, 30 GB — **not** Coiled |
+| cadence | Thursday init; the AI-WQ window closes **init + 3 days, 23:59 UTC** |
 
 ---
 
-## ETL Environment Setup
+## Weekly cycle records
 
-The ETL (non-GPU) machine is used for **Step 1** and **Step 3**. Start the Coiled notebook:
+**Every cycle produces two files, both in [`fp16FahamuAIFSv2/`](fp16FahamuAIFSv2/).** They are
+the primary record — the run logs they are built from live outside the repo in
+`/tank/projects/` and are not backed up.
 
-```bash
-coiled notebook start --name p2-aifs-etl-20260129 --vm-type n2-standard-2 --software aifs-etl-v2 --workspace=gcp-sewaa-nka --region us-east5
-```
+| file | what it is |
+|---|---|
+| `run_commands_<DATE>.md` | the cycle's commands **as run**, timings, validation, and what went wrong |
+| `fp16FahamuAIFSv2_<DATE>.txt` | verbatim console transcript of steps 3b + 3c, including the submission receipt |
 
-### Software Installation
+| cycle | run doc | transcript | notes |
+|---|---|---|---|
+| 20260709 | [md](fp16FahamuAIFSv2/run_commands_20260709.md) | [txt](fp16FahamuAIFSv2/fp16FahamuAIFSv2_20260709.txt) | leaderboard `+0.071 / +0.055 / +0.106` (tas/mslp/pr, week 3) |
+| 20260716 | [md](fp16FahamuAIFSv2/run_commands_20260716.md) | [txt](fp16FahamuAIFSv2/fp16FahamuAIFSv2_20260716.txt) | |
+| 20260723 | [md](fp16FahamuAIFSv2/run_commands_20260723.md) | [txt](fp16FahamuAIFSv2/fp16FahamuAIFSv2_20260723.txt) | |
+| 20260730 | [md](fp16FahamuAIFSv2/run_commands_20260730.md) | [txt](fp16FahamuAIFSv2/fp16FahamuAIFSv2_20260730.txt) | |
+| 20260806 | [md](fp16FahamuAIFSv2/run_commands_20260806.md) | [txt](fp16FahamuAIFSv2/fp16FahamuAIFSv2_20260806.txt) | |
+| 20260813 | [md](fp16FahamuAIFSv2/run_commands_20260813.md) | [txt](fp16FahamuAIFSv2/fp16FahamuAIFSv2_20260813.txt) | FTP → **ECBox** migration; 3c ~12 min/file |
+| 20260820 | [md](fp16FahamuAIFSv2/run_commands_20260820.md) | [txt](fp16FahamuAIFSv2/fp16FahamuAIFSv2_20260820.txt) | O96 archive + N320 rerun — two stores, one cycle |
+| 20260827 | [md](fp16FahamuAIFSv2/run_commands_20260827.md) | [txt](fp16FahamuAIFSv2/fp16FahamuAIFSv2_20260827.txt) | the `HF_HOME` trap |
+| **20260903** | [md](fp16FahamuAIFSv2/run_commands_20260903.md) | [txt](fp16FahamuAIFSv2/fp16FahamuAIFSv2_20260903.txt) | **first tier-B cycle — 209 GB instead of 583 GB** |
 
-Install the required environment using micromamba:
-
-```bash
-micromamba create -n aifs-etl -c conda-forge python=3.12.7 \
-  && eval "$(micromamba shell hook --shell bash)" \
-  && micromamba activate aifs-etl \
-  && micromamba install -c conda-forge "earthkit-data<1.0.0" ecmwf-opendata \
-  && pip install gcsfs s3fs earthkit-regrid==0.5.1 google-cloud-storage icechunk AI_WQ_package \
-  && sudo apt update && sudo apt install nano
-```
-
-> **AIFS-ENS-2.0 (`fp16FahamuAIFSv2`, `--v2`):** the v2 pipeline standardises on
-> **`earthkit-regrid 0.5.1`** (vs 0.4.0 above). Use the v2 ETL env-creation command in
-> [`fp16FahamuAIFSv2/README.md`](fp16FahamuAIFSv2/README.md#run) for Steps 3–5.
->
-> **Pin `earthkit-data<1.0.0`.** The `earthkit-data` above is unpinned and now resolves to
-> **1.0.0**, whose changed source API breaks the ETL scripts: `from_source(...)` returns a
-> non-iterable `GribData` (`TypeError: 'GribData' object is not iterable`; `len()` raises
-> `ImportError: cannot import name 'convert_array'` against earthkit-utils 0.3.0). Pin
-> `"earthkit-data<1.0.0"` (solves to 0.20.0). Repair an already-drifted env with
-> `micromamba install -n aifs-etl -c conda-forge 'earthkit-data<1.0.0' 'earthkit-regrid=0.5.1'`.
-> See *Troubleshooting: Open-Data Input Prep Hangs* below.
-
-### Credentials Setup
-
-Copy the `.env.example` file to `.env` and fill in your credentials:
-
-```bash
-cp .env.example .env
-nano .env
-```
-
-Example `.env` contents:
-
-```
-AIWQ_TEAM_NAME=Fahamu
-AIWQ_MODEL_NAME=FahamuAIFSv1
-AIWQ_MODEL_NAME_FP16=FahamuAIFSv1_fp16
-AIWQ_PASSWORD=your_password_here
-```
-
-A GCS service account key file (`coiled-data.json`) is also required for cloud storage access.
+How the transcript is assembled, and the two traps in doing so (ANSI escapes, and scanning for
+credentials — 3c authenticates twice per file):
+**[`RUN_LOGS_AND_TRANSCRIPTS.md`](fp16FahamuAIFSv2/RUN_LOGS_AND_TRANSCRIPTS.md)**.
 
 ---
 
-## Step 1: Initial Condition Preparation (ETL Machine)
+## The cycle, end to end
 
-**File:** `shared/ecmwf_opendata_pkl_input_aifsens.py`
+Roughly **9 hours** of wall time, of which ~4.5 h is GPU. Start with the most recent
+`run_commands_*.md` — it is the authoritative version of these commands.
 
 ```bash
-python shared/ecmwf_opendata_pkl_input_aifsens.py
+PY=/tank/projects/micromamba/envs/aifs-gpu/bin/python
+BASE=/tank/projects/aifs-run/<DATE>_0000
 ```
 
-- **Purpose:** Download and preprocess ECMWF open data for ensemble members 1-50
-- **Environment:** ETL machine (CPU-only, `n2-standard-2`)
-- **Input:** ECMWF open data (surface, soil, pressure level parameters)
-- **Output:** Pickle files uploaded to GCS bucket (`gs://aifs-aiquest-us-20251127/YYYYMMDD_0000/input/`)
-- **Requires:** `coiled-data.json` (GCS service account key)
+| step | what | time | output |
+|---|---|---|---|
+| **0** | is the cycle published? | seconds | `check_open_data_inputs.py --date <DATE> --source gcs` |
+| **1** | input pkls from the GCS mirror | ~2.5 h | 42 GB, 50 members |
+| — | **symlinks** — the step that breaks runs | seconds | `proto_input_state_member_NNN.pkl` → `input_state_member_NNN.pkl` |
+| **2** | GPU inference → Icechunk | ~4.5 h | see [storage](#storage-tier-b) |
+| **3a** | regrid 432–792 h → 1.5° NetCDF | ~9 min | 2 GB, 50 files |
+| **3b** | quintile probabilities | ~2 min | 6.7 MB — the submission input |
+| **3c** | submit via ECBox | ~1 h 15 m | 6 files (3 vars × 2 weeks) |
+
+Three things that have each cost a run:
+
+- **Create the symlinks.** The builder writes `proto_input_state_member_NNN.pkl`; the runner
+  opens `input_state_member_NNN.pkl`. Count *and* resolve them — `ln -sf` links happily to a
+  missing target. Skipping this makes step 2 exit in 2 seconds with `50 failed`.
+- **`export HF_HOME=/tank/projects/hf_cache`.** Three plausible cache paths exist on the box
+  and two contain an `aifs-ens-2.0` directory; only this one is complete. The wrong one does
+  not fail — it stalls silently with the GPU at 0 %.
+- **Run steps 2 and 3c detached** (`setsid nohup … &`) with `-u`. Both exceed any foreground
+  timeout, and a SIGTERM mid-member left one cycle at 39/50.
+
+### Storage: tier B
+
+Since 20260903 a single rollout writes **two stores**, replacing the 583 GB full-N320 shape:
+
+| store | grid | leads | variables | size |
+|---|---|---|---|---|
+| `icechunk_o96` | O96, 40 320 cells (~112 km) | **all 132 steps, 0–792 h** | 124 | 158 GB |
+| `icechunk_n320_aiwq` | N320, 542 080 cells (~28 km) | 432–792 h | **10** | 51 GB |
+
+**209 GB per cycle**, and the O96 corpus keeps days 8 and 15, which MJO needs and the old
+`--write-hours 432-792` window discarded. 3a reads the **sidecar**; the corpus carries
+everything else. Rationale and measurements:
+[`O96-icechunk-store/README.md`](fp16FahamuAIFSv2/O96-icechunk-store/README.md) §7.
+
+> The sidecar's 10 variables were chosen for the AI-WQ submission and the TS tracker. It holds
+> **no `q`, no `w`, no `z`, and winds only at 850** — anything else at 28 km needs
+> `--native-vars` widened, which is an **inference-time** choice that cannot be recovered
+> without re-running the rollout.
+
+### Before submitting
+
+`--dry-run` short-circuits before the AI-WQ checks, so it exercises **neither the ECBox token
+nor the validation**. What works offline — window open, team/model registered, all six arrays
+`(5,121,240)` finite and summing to 1, and (since 20260903) `source_icechunk_store` confirming
+which store built the file — is in
+[`run_commands_20260903.md`](fp16FahamuAIFSv2/run_commands_20260903.md#step-3c--submit).
 
 ---
 
-## Step 2: GPU Inference
+## Documentation index
 
-### Step 2a: FP32 Inference (A100 GPU)
+**Operations**
+- [`fp16FahamuAIFSv2/README.md`](fp16FahamuAIFSv2/README.md) — scripts, environments, the v2 scoping
+- [`LOCAL_GPU_RUN.md`](fp16FahamuAIFSv2/LOCAL_GPU_RUN.md) — step 2 on the local box, environment build, and the HuggingFace-cache stall
+- [`RUN_LOGS_AND_TRANSCRIPTS.md`](fp16FahamuAIFSv2/RUN_LOGS_AND_TRANSCRIPTS.md) — where logs live, how transcripts are built
+- `cleanup_aifs_run.py` — reclaims a finished cycle ⚠️ **does not yet match tier-B store names**
 
-Start the GPU notebook:
+**Storage & performance**
+- [`O96-icechunk-store/`](fp16FahamuAIFSv2/O96-icechunk-store/) — the O96 route, tier B, manifest compaction
+- [`ICECHUNK_PATH_A.md`](fp16FahamuAIFSv2/ICECHUNK_PATH_A.md) · [`ICECHUNK_COMMIT_CADENCE.md`](fp16FahamuAIFSv2/ICECHUNK_COMMIT_CADENCE.md) · [`LOAD_TEST_RESULTS.md`](fp16FahamuAIFSv2/LOAD_TEST_RESULTS.md)
 
-```bash
-coiled notebook start --name p1-gpu-aifs-20260129 --vm-type a2-ultragpu-1g --software east5-us-flashattn-dockerv1 --workspace=gcp-sewaa-nka --region us-east5 --disk-size 60
-```
+**Verification**
+- [`O96-icechunk-store/forecast-evaluation/`](fp16FahamuAIFSv2/O96-icechunk-store/forecast-evaluation/) — score a cycle locally against AI-WQ observations, using the competition's own code
 
-**File:** `FahamuAIFSv1/automate_aifs_gpu_pipeline.py`
-
-```bash
-python FahamuAIFSv1/automate_aifs_gpu_pipeline.py --date 20260129_0000 --members 1-50
-```
-
-- **Purpose:** Run AIFS-ENS model at full FP32 precision for all ensemble members
-- **Environment:** A100 GPU (`a2-ultragpu-1g`, ~80GB VRAM)
-- **Processing:** One member at a time (download → inference → upload → cleanup) to minimise storage usage
-- **Output:** GRIB files uploaded to `gs://aifs-aiquest-us-20251127/YYYYMMDD_0000/forecasts/`
-
-**Required files on the GPU machine:**
-
-| File | Purpose |
-|------|---------|
-| `FahamuAIFSv1/automate_aifs_gpu_pipeline.py` | Main pipeline orchestrator |
-| `FahamuAIFSv1/fp32_multi_run_AIFS_ENS_v1.py` | AIFS model runner (FP32) |
-| `shared/download_pkl_from_gcs.py` | GCS download utility |
-| `shared/upload_aifs_gpu_output_grib_gcs.py` | GCS upload utility |
-| `coiled-data.json` | GCS service account key |
-
-**SHUTDOWN GPU notebook after completion** to avoid unnecessary costs.
-
-### Step 2b: FP16 Inference (G2 GPU)
-
-Start the GPU notebook:
-
-```bash
-coiled notebook start --name p2-fp16-20260129 --vm-type g2-standard-12 --software flashattn-dockerv1 --workspace=gcp-sewaa-nka --region us-east4 --disk-size 400
-```
-
-**File:** `fp16FahamuAIFSv1/fp16_automate_aifs_gpu_pipeline.py`
-
-```bash
-python fp16FahamuAIFSv1/fp16_automate_aifs_gpu_pipeline.py --date 20260129_0000 --members 1-50
-```
-
-- **Purpose:** Run AIFS-ENS model at FP16 (half precision), reducing VRAM from ~50GB to <24GB
-- **Environment:** G2 GPU (`g2-standard-12`)
-- **Processing:** Same per-member pipeline as FP32 version
-- **Output:** GRIB files uploaded to `gs://aifs-aiquest-us-20251127/YYYYMMDD_0000/fp16_forecasts/`
-
-**Required files on the GPU machine:**
-
-| File | Purpose |
-|------|---------|
-| `fp16FahamuAIFSv1/fp16_automate_aifs_gpu_pipeline.py` | Main pipeline orchestrator (FP16) |
-| `fp16FahamuAIFSv1/fp16_multi_run_AIFS_ENS_v1.py` | AIFS model runner (FP16) |
-| `shared/download_pkl_from_gcs.py` | GCS download utility |
-| `shared/upload_aifs_gpu_output_grib_gcs.py` | GCS upload utility |
-| `coiled-data.json` | GCS service account key |
-
-**SHUTDOWN GPU notebook after completion.**
+**Research**
+- [`ts-mjo/`](fp16FahamuAIFSv2/ts-mjo/) — tropical-storm-days tracker and MJO. AIFS-ENS 2.0 emits no OLR, so Wheeler–Hendon RMM is not computable; `vpm-mjo.md` proposes VPM as the AIFS-only route
+- [`epistemic-reasoning-risk/`](fp16FahamuAIFSv2/epistemic-reasoning-risk/) — evidence nodes, Bayesian-network work, and what the store can and cannot support
 
 ---
 
-## Step 3: Post-Processing & Submission (ETL Machine)
+## Deprecated models
 
-Use the same ETL machine from Step 1:
+Not maintained. Kept because their outputs are on the AI-WQ leaderboard and their docs explain
+choices the v2 pipeline inherited.
 
-```bash
-coiled notebook start --name p2-aifs-etl-20260129 --vm-type n2-standard-2 --software aifs-etl-v2 --workspace=gcp-sewaa-nka --region us-east5
-```
+| model | input · precision | docs |
+|---|---|---|
+| `FahamuAIFSv1` | ECMWF Open Data · FP32 (A100) | [`FahamuAIFSv1.md`](FahamuAIFSv1/FahamuAIFSv1.md) |
+| `fp16FahamuAIFSv1` | ECMWF Open Data · FP16 (G2/L4) | [`fp16FahamuAIFSv1.md`](fp16FahamuAIFSv1/fp16FahamuAIFSv1.md) |
+| `era5tFp16FahamuAIFSv1` | CEDA ERA5T · FP16, 10 members, 960 h | [`era5tFp16FahamuAIFSv1.md`](era5tFp16FahamuAIFSv1/era5tFp16FahamuAIFSv1.md) |
 
-### Step 3a: Forecast Download & Regrid
-
-**File:** `shared/aifs_n320_grib_1p5defg_nc_cli.py`
-
-```bash
-python shared/aifs_n320_grib_1p5defg_nc_cli.py --date 20260129
-
-# For FP16:
-python shared/aifs_n320_grib_1p5defg_nc_cli.py --date 20260129 --fp16
-
-# For AIFS-ENS-2.0 (fp16FahamuAIFSv2):
-python shared/aifs_n320_grib_1p5defg_nc_cli.py --date 20260129 --v2
-```
-
-- **Purpose:** Download GRIB files from GCS and regrid from N320 to 1.5 degree NetCDF
-- **Output:** NetCDF files in `gs://aifs-aiquest-us-20251127/YYYYMMDD_0000/1p5deg_nc/` (or `fp16_1p5deg_nc/`, or `fp16_v2_1p5deg_nc/` with `--v2`)
-
-#### Parallel processing — `--max-workers`
-
-Each member runs in its own subprocess; `--max-workers N` runs N of them at once.
-
-```bash
-# Process 2 members concurrently
-python shared/aifs_n320_grib_1p5defg_nc_cli.py --date 20260129 --fp16 --max-workers 2
-```
-
-- **Default `--max-workers 1`** = sequential (unchanged behavior).
-- **RAM-bound, not CPU-bound.** Each member peaks at **~1.3 GiB RSS** (measured). Keep
-  `max-workers × ~1.6 GiB` within available RAM — there is usually **no swap**, so
-  overcommit gets a member **OOM-killed** mid-write. The script prints a RAM-guard
-  warning if you exceed the estimate (`--mem-per-worker-gb` tunes it). **Size
-  `--max-workers` to *physical* cores, not vCPUs.** Measured 20260611 on a 2-vCPU
-  box (= 1 physical core + hyperthread): 2-way gave **no wall-clock gain** (19
-  members ≈ 7.6 min/member, same as sequential) — earthkit's regrid is CPU-bound, so
-  two members just contend for the one core. The dispatcher pays off only on a host
-  with multiple **physical** cores (e.g. 4–8 real vCPUs), where it scales ~linearly
-  until RAM is the cap.
-- **Isolation (why it's safe):** each worker gets a private `EARTHKIT_WORKDIR` *slot*
-  with its **own** earthkit-data, tmp, **and earthkit-regrid (SQLite) cache**. That
-  regrid cache must not be shared across concurrent processes — doing so throws
-  `database is locked` and fails members. Each slot downloads the N320→1.5° matrix
-  once and reuses it. Override the workdir root with `EARTHKIT_WORKDIR=/path`.
-- **Don't double-launch.** Two parent runs over the same `--members` just duplicate
-  work and race on GCS output — run one launcher with `--max-workers`, not two.
-- **Surface-only regrid (~7× faster, all modes).** The script now selects the 3 target
-  surface params (`msl/tp/2t`) **before** N320→1.5° interpolation instead of regridding
-  the whole GRIB and extracting afterwards. `earthkit-regrid` does a matrix multiply per
-  field, so regridding 36 surface fields instead of the full ~1416-field GRIB (mostly
-  pressure levels) cut per-member time from **~7.6 min → ~1.1 min** (measured on the v2
-  50-member run; same 5.7→1.1 min drop on one member in a controlled same-env test). It
-  falls back to the full FieldList if the select fails, so v1/fp16/fp32 are unaffected in
-  output and get the same speedup. This change was required for `--v2` (aifs-ens-2.0 GRIB
-  can't be `to_xarray()`'d whole — see
-  [`fp16FahamuAIFSv2/README.md`](fp16FahamuAIFSv2/README.md#why-v2-regrid-is-7-faster-than-the-old-v1-timing)).
-  The 4–4.5 h figure in the cost table below predates this and now overestimates.
-
-### Step 3b: Ensemble Quintile Analysis
-
-**File:** `shared/ensemble_quintile_analysis_cli.py`
-
-```bash
-# FP32 mode (uses icechunk by default for memory efficiency)
-python shared/ensemble_quintile_analysis_cli.py --date 20260129
-
-# FP16 mode
-python shared/ensemble_quintile_analysis_cli.py --date 20260129 --fp16
-
-# AIFS-ENS-2.0 mode (reads fp16_v2_1p5deg_nc/)
-python shared/ensemble_quintile_analysis_cli.py --date 20260129 --v2
-```
-
-- **Purpose:** Download ensemble NetCDF from GCS, retrieve climatology, calculate quintile probabilities
-- **Output:** `ensemble_quintile_probabilities_YYYYMMDD.nc` (or `_fp16.nc`, or `_v2.nc` with `--v2`)
-- **Requires:** `.env` file with `AIWQ_PASSWORD` for climatology retrieval, `coiled-data.json` for GCS access
-
-### Step 3c: Forecast Submission
-
-**File:** `shared/forecast_submission_cli.py`
-
-```bash
-# FP32 submission
-python shared/forecast_submission_cli.py --date 20260129
-
-# FP16 submission
-python shared/forecast_submission_cli.py --date 20260129 --fp16
-
-# AIFS-ENS-2.0 submission (uses ..._v2.nc + AIWQ_MODEL_NAME_V2/AIWQ_MODEL_NAME_FP16)
-python shared/forecast_submission_cli.py --date 20260129 --v2
-
-# Dry run (validate without submitting)
-python shared/forecast_submission_cli.py --date 20260129 --dry-run
-```
-
-- **Purpose:** Submit quintile probabilities to AI Weather Quest competition
-- **Requires:** `.env` file with `AIWQ_TEAM_NAME`, `AIWQ_MODEL_NAME`, and `AIWQ_PASSWORD`
-  (for `--v2`, `AIWQ_MODEL_NAME_V2` or `AIWQ_MODEL_NAME_FP16`)
-- **Submits:** 3 variables (mslp, pr, tas) x 2 weeks = 6 forecasts per run
-- **Submission window:** AI-WQ accepts a forecast only within **init date → init+3 days**
-  (e.g. `20260611` was open `20260611`–`20260614`). Outside it the server rejects with
-  *"You are not allowed to submit … Allowed time window … is …"*. Run this step within
-  3 days of the init date.
-
-### Step 3c (alt): Build AI-WQ individual files + zip (no live submission)
-
-**File:** `shared/aiwq_individual_files_cli.py`
-
-```bash
-# Write the 6 per-variable/week DataArrays as individual AI-WQ files and zip them
-python shared/aiwq_individual_files_cli.py --date 20260611 --fp16
-# options: --variables tas pr mslp  --weeks 1 2  --save-dir DIR  --zip PATH
-```
-
-- **Purpose:** Produce the same forecasts as the AI-WQ structure
-  (`forecast_submission.AI_WQ_create_empty_dataarray` → `to_netcdf`) and bundle them,
-  **without** submitting — for archival or a manual/out-of-window upload.
-- **Output:** `{variable}_{date}_p{week}_{team}_{model}.nc` (each `quintile×lat×lon` =
-  `5×121×240`, probabilities sum to 1 across quintiles) in `aiwq_individual_<date>/`,
-  zipped to `aiwq_submission_<date>_<team>_<model>.zip`.
-- Reuses the same `prepare_aiwq_submission` + credentials as Step 3c, so the files are
-  identical to what would be submitted.
+They ran on Coiled GPU notebooks against AIFS-ENS **1.0**, with GRIB on GCS rather than a local
+Icechunk store. `shared/` still holds the CLIs all of them use — v2 passes `--v2`.
 
 ---
-
-## Data Flow
-
-```
-ECMWF Open Data → Pickle Files → GCS (YYYYMMDD_0000/input/)
-                                        ↓
-                              GPU Inference (FP32/FP16)
-                                        ↓
-                              GCS (YYYYMMDD_0000/forecasts/ or fp16_forecasts/)
-                                        ↓
-                              Regrid N320 → 1.5deg NetCDF
-                                        ↓
-                              GCS (YYYYMMDD_0000/1p5deg_nc/ or fp16_1p5deg_nc/)
-                                        ↓
-                              Quintile Analysis → Submission
-```
-
-## Storage Strategy
-- **GCS Bucket:** `aifs-aiquest-us-20251127`
-- **Path Structure:**
-  - Input pickle files: `YYYYMMDD_0000/input/`
-  - FP32 GRIB forecasts: `YYYYMMDD_0000/forecasts/`
-  - FP16 GRIB forecasts: `YYYYMMDD_0000/fp16_forecasts/`
-  - FP32 NetCDF outputs: `YYYYMMDD_0000/1p5deg_nc/`
-  - FP16 NetCDF outputs: `YYYYMMDD_0000/fp16_1p5deg_nc/`
-- **Service Account:** `coiled-data.json` for GCS access
-
-## GPU Memory Optimization
-
-| GPU | VRAM | Pipeline Script | Precision | Chunks |
-|-----|------|----------------|-----------|--------|
-| A100 (80GB) | 80GB | `FahamuAIFSv1/automate_aifs_gpu_pipeline.py` | FP32 | Default |
-| A100 (40GB) | 40GB | `FahamuAIFSv1/automate_aifs_gpu_pipeline.py` | FP32 | 8 |
-| G2 (L4 24GB) | 24GB | `fp16FahamuAIFSv1/fp16_automate_aifs_gpu_pipeline.py` | FP16 | 16 |
-| A10G | 24GB | `fp16FahamuAIFSv1/fp16_automate_aifs_gpu_pipeline.py` | FP16 | 16 |
-| RTX 4090 | 24GB | `fp16FahamuAIFSv1/fp16_automate_aifs_gpu_pipeline.py` | FP16 | 16 |
-
-**Reference:** [HuggingFace Discussion #17](https://huggingface.co/ecmwf/aifs-ens-1.0/discussions/17)
-
-### GPU Memory Profiling
-
-Profile peak VRAM with the PyTorch CUDA memory snapshot before locking a
-GPU/precision/chunk choice. The full step-by-step (scripts, `--chunks` sweep,
-`pytorch.org/memory_viz` snapshot inspection, and the measured FP32-vs-FP16 baseline)
-lives in **[`fp16FahamuAIFSv2/README.md`](fp16FahamuAIFSv2/README.md#gpu-memory-profiling-step-2)**.
-Profiler scripts: `FahamuAIFSv1/pytorch_profile_fp32.py` and
-`fp16FahamuAIFSv1/pytorch_profile_fp16.py`.
-
-Quick reference (AIFS-ENS v1.0, Discussion #17): FP16 + `NUM_CHUNKS=16` peaks at
-~20 GB allocated / ~23 GB reserved → fits L4 / A10G / RTX 4090; FP32 exceeds 48 GB →
-needs A100/H100. Re-profile for v2 (larger model).
-
-## Ensemble Configuration
-- **Members:** 1-50
-- **Forecast Length:** 792 hours (33 days)
-- **Meteorological Parameters:** pr, mslp, tas
-
----
-
-## ERA5T Pipeline (CEDA Data Source)
-
-An alternative pipeline using ERA5T data from the CEDA archive instead of ECMWF Open Data.
-This enables forecasts initialized from dates not covered by ECMWF Open Data (which only
-retains the most recent ~24h). ERA5T has a ~1 week lag from real time.
-
-For full technical documentation, see [`era5tFp16FahamuAIFSv1/era5tFp16FahamuAIFSv1.md`](era5tFp16FahamuAIFSv1/era5tFp16FahamuAIFSv1.md).
-
-### Key Differences from Standard Pipeline
-
-| Aspect | Standard (ECMWF Open Data) | ERA5T (CEDA) |
-|--------|---------------------------|--------------|
-| Input fields | 92 fields | 74 fields (adapted to 92 at inference) |
-| Members | 1-50 | 0-9 (10 EDA members) |
-| Lead time | 792h (33 days) | 960h (40 days) |
-| Data source | ECMWF Open Data (latest only) | CEDA ERA5T archive (~1 week lag) |
-| Auth | None | CEDA Bearer token (`ceda_token` in `.env`) |
-
-### ERA5T Workflow
-
-**Step 1: Create pkl files from CEDA** (ETL Machine)
-
-```bash
-uv run era5tFp16FahamuAIFSv1/ceda_era5t_pkl_input_aifsens.py
-```
-
-Edit `DATE` in the script to set the initialization date. Requires `ceda_token` in `.env`.
-Output: `gs://aifs-aiquest-us-20251127/era5t/YYYYMMDD/input_state_member_00*.pkl`
-
-**Step 2: GPU Inference** (GPU Machine, >=24GB VRAM)
-
-```bash
-python era5tFp16FahamuAIFSv1/era5t_fp16_automate_aifs_gpu_pipeline.py \
-    --date YYYYMMDD_0000 \
-    --members 0-9 \
-    --gcs-input-prefix era5t/YYYYMMDD \
-    --gcs-output-subpath era5t_fp16_forecasts \
-    --lead-time 960
-```
-
-Note: `--date` is the target forecast date folder, `--gcs-input-prefix` points to the
-ERA5T init date pkl files. For example, init date 20260227 → target date 20260305.
-
-**Step 3: GRIB to 1.5deg NetCDF** (ETL Machine)
-
-```bash
-python era5tFp16FahamuAIFSv1/era5t_aifs_n320_grib_1p5deg_nc_cli.py \
-    --date YYYYMMDD_0000 \
-    --members 0-9 \
-    --gcs-input-subpath era5t_fp16_forecasts \
-    --gcs-output-subpath era5t_fp16_1p5deg_nc \
-    --init-date YYYYMMDD
-```
-
-`--init-date` must match the ERA5T initialization date used in the GRIB filenames.
-
-**Step 4: Quintile Analysis** (ETL Machine)
-
-```bash
-python era5tFp16FahamuAIFSv1/era5t_ensemble_quintile_analysis_cli.py --date YYYYMMDD --members 0-9 --fp16
-```
-
-**Step 5: Submit** (ETL Machine)
-
-```bash
-python era5tFp16FahamuAIFSv1/era5t_forecast_submission_cli.py --date YYYYMMDD
-```
-
-### ERA5T Scripts Reference
-
-All ERA5T scripts live in `era5tFp16FahamuAIFSv1/`.
-
-| Script | Purpose |
-|--------|---------|
-| `ceda_era5t_pkl_input_aifsens.py` | CEDA ERA5T → pkl (74 fields, 10 members) |
-| `era5t_fp16_automate_aifs_gpu_pipeline.py` | GPU pipeline orchestrator (FP16) |
-| `era5t_fp16_multi_run_AIFS_ENS_v1.py` | FP16 inference with field adaptation (74→92) |
-| `era5t_aifs_n320_grib_1p5deg_nc_cli.py` | GRIB → 1.5deg NetCDF regridding |
-| `era5t_ensemble_quintile_analysis_cli.py` | Quintile probability calculation |
-| `era5t_forecast_submission_cli.py` | AI Weather Quest submission |
-| `diagnose_quintile_bias.py` | Diagnostic: quintile bias inspection |
-
-### ERA5T Execution Times and Costs
-
-| Script | Time | Environment | Cost |
-|--------|------|-------------|------|
-| `ceda_era5t_pkl_input_aifsens.py` | ~14 min | CPU (n2-standard-2) | ~$0.04 |
-| `era5t_fp16_automate_aifs_gpu_pipeline.py` | ~2.5 hours | GPU (g2-standard-12) | ~$5-7 |
-| `era5t_aifs_n320_grib_1p5deg_nc_cli.py` | ~1 hour | CPU (n2-standard-2) | ~$0.24 |
-| `era5t_ensemble_quintile_analysis_cli.py` | ~10 min | CPU (n2-standard-2) | ~$0.04 |
-| `era5t_forecast_submission_cli.py` | ~5 min | CPU (n2-standard-2) | ~$0.02 |
-
-## Dependencies
-
-### Core Packages
-- `anemoi-inference`: ECMWF AI model runner
-- `earthkit-data`: ECMWF data handling
-- `earthkit-regrid`: Data regridding (v0.4.0)
-- `google-cloud-storage`: GCS operations
-- `icechunk`: Memory-efficient ensemble processing
-- `AI_WQ_package`: Forecast submission and evaluation
-- `python-dotenv`: Credential management from `.env` file
-
-### Authentication
-- GCS service account key (`coiled-data.json`) for cloud storage access
-- `.env` file with AI Weather Quest credentials (team name, model name, password)
-
-## Script Execution Times and Costs
-
-| Script | Execution Time | Environment | Cost (USD) | Notes |
-|--------|----------------|-------------|------------|-------|
-| `shared/ecmwf_opendata_pkl_input_aifsens.py` | 2-2.5 hours | CPU (n2-standard-2) | ~$0.48-0.60 | Data preprocessing and GCS upload |
-| `FahamuAIFSv1/automate_aifs_gpu_pipeline.py` | 6.5-7 hours | GPU (a2-ultragpu-1g) | ~$35-42 | FP32, 50 members, per-member processing |
-| `fp16FahamuAIFSv1/fp16_automate_aifs_gpu_pipeline.py` | 6.5-7 hours | GPU (g2-standard-12) | ~$15-20 | FP16, 50 members, reduced cost GPU |
-| `shared/aifs_n320_grib_1p5defg_nc_cli.py` | 4-4.5 hours | CPU (n2-standard-2) | ~$0.96-1.08 | GRIB regridding and processing |
-| `shared/ensemble_quintile_analysis_cli.py` | 15 minutes | CPU (n2-standard-2) | ~$0.06 | Ensemble analysis |
-| `shared/forecast_submission_cli.py` | 5 minutes | CPU (n2-standard-2) | ~$0.02 | Submission validation |
-
-## Troubleshooting: HuggingFace Model Download Hangs
-
-### Symptom
-
-The GPU inference pipeline hangs indefinitely at model checkpoint download:
-
-```
-Running forecast for member 0...
-Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]
-```
-
-This occurs inside `runner.run()` when the `anemoi-inference` library attempts to download the `ecmwf/aifs-ens-1.0` model weights (~3-4 GB) from HuggingFace Hub. The model metadata loads quickly during `SimpleRunner()` init, but the large checkpoint blob download stalls.
-
-### Root Cause
-
-The HuggingFace `huggingface_hub` downloader can hang due to:
-
-1. **Network throttling or rate limiting** on unauthenticated requests from cloud VMs
-2. **Incomplete downloads with stale lock files** preventing retry (a previous failed/killed download leaves `.incomplete` and `.lock` files in the cache)
-3. **No `HF_TOKEN` set**, causing anonymous download which is subject to stricter rate limits
-
-### Diagnosis
-
-```bash
-# Check for incomplete downloads and stale locks
-ls -la ~/.cache/huggingface/hub/models--ecmwf--aifs-ens-1.0/blobs/
-# Look for files ending in .incomplete
-
-ls -la ~/.cache/huggingface/hub/.locks/models--ecmwf--aifs-ens-1.0/
-# Look for .lock files with recent timestamps
-
-# Check HF token
-echo $HF_TOKEN
-```
-
-### Fix: Clear Stale Cache and Retry
-
-```bash
-# 1. Kill the stuck process
-kill $(pgrep -f era5t_fp16_automate_aifs_gpu_pipeline)
-
-# 2. Remove incomplete downloads and stale locks
-rm -f ~/.cache/huggingface/hub/models--ecmwf--aifs-ens-1.0/blobs/*.incomplete
-rm -f ~/.cache/huggingface/hub/.locks/models--ecmwf--aifs-ens-1.0/*.lock
-
-# 3. Set HF token to avoid rate limiting
-export HF_TOKEN="your_huggingface_token"
-
-# 4. Re-run the pipeline
-python era5tFp16FahamuAIFSv1/era5t_fp16_automate_aifs_gpu_pipeline.py --date YYYYMMDD_0000 --members 0-4 ...
-```
-
-### Recommended: Pre-cache Model in Docker Image
-
-The most reliable solution is to bake the HuggingFace model into the Docker image used for GPU inference. This eliminates runtime downloads entirely, avoids network dependency during forecast runs, and ensures reproducible deployments.
-
-#### Approach 1: Dockerfile with Pre-downloaded Model
-
-Add the model download step to the GPU Docker image build:
-
-```dockerfile
-FROM your-base-gpu-image:latest
-
-# Install huggingface_hub for download
-RUN pip install huggingface_hub
-
-# Pre-download the AIFS-ENS model checkpoint into the HF cache
-# This caches all 7 files (~3-4 GB) at build time
-ARG HF_TOKEN
-RUN python -c "\
-from huggingface_hub import snapshot_download; \
-snapshot_download('ecmwf/aifs-ens-1.0', token='${HF_TOKEN}')"
-
-# The model is now cached at /root/.cache/huggingface/hub/models--ecmwf--aifs-ens-1.0/
-# anemoi-inference will find it automatically without any network calls
-```
-
-Build with:
-
-```bash
-docker build --build-arg HF_TOKEN=hf_your_token -t aifs-gpu-cached:latest .
-```
-
-#### Approach 2: Volume Mount from GCS
-
-If Docker image size is a concern (~3-4 GB added), pre-download the model to a persistent disk or GCS bucket and mount it:
-
-```bash
-# Pre-download once to a persistent location
-python -c "
-from huggingface_hub import snapshot_download
-snapshot_download('ecmwf/aifs-ens-1.0', cache_dir='/mnt/model-cache/huggingface')
-"
-
-# Mount at runtime
-export HF_HOME=/mnt/model-cache/huggingface
-python era5tFp16FahamuAIFSv1/era5t_fp16_automate_aifs_gpu_pipeline.py ...
-```
-
-#### Approach 3: Coiled Software Environment with Cached Model
-
-For Coiled-managed GPU notebooks, include the model download in the software environment setup so it is available when the notebook starts:
-
-```bash
-# During software environment creation, ensure model is cached
-python -c "from huggingface_hub import snapshot_download; snapshot_download('ecmwf/aifs-ens-1.0')"
-```
-
-### Why Docker Pre-caching is Preferred
-
-| Approach | Pros | Cons |
-|----------|------|------|
-| Runtime download | No image size increase | Slow startup (~10-30 min), network dependent, can hang |
-| Docker pre-cache | Zero startup delay, no network needed, fully reproducible | Larger image (~3-4 GB), requires rebuild for model updates |
-| Volume mount | Flexible, shared across instances | Requires persistent disk setup, mount configuration |
-
-For operational forecast pipelines where reliability and speed matter, **Docker pre-caching is strongly recommended**. It converts a flaky runtime network dependency into a deterministic build-time step.
-
----
-
-
-## Troubleshooting: Open-Data Input Prep Hangs at "surface fields..."
-
-> **Only affects `--fetch earthkit`.** Step 1 now defaults to `--fetch index`, which
-> talks to the mirror over plain single-range HTTP GETs and never touches
-> earthkit-data's download cache or its lock — so this hang cannot occur on the
-> default path. Kept for the fallback backend.
-
-### Symptom
-
-`ecmwf_opendata_pkl_input_aifsens_v2.py` (Step 1, ETL) prints the first line and then
-hangs indefinitely with no further output:
-
-```
-Creating v2.0 input state for ensemble member 1
-  surface fields...
-```
-
-### Root Cause
-
-Two independent issues, both unrelated to the `--source` mirror (AWS/ECMWF/Azure/Google):
-
-1. **`earthkit-data` drifted to 1.0.0.** Its changed source API returns a non-iterable
-   `GribData`, so the script's `for f in data:` loop dies (`TypeError: 'GribData' object is
-   not iterable`; `len()` → `ImportError: cannot import name 'convert_array'`). Pin
-   `earthkit-data<1.0.0` (see *Software Installation*).
-2. **A suspended (`^Z`) or wedged prep process holds the open-data download lock.**
-   `earthkit-data` serialises downloads with a file lock
-   (`/tmp/earthkit-data-*/e-odretriever-*.cache.lock`). Ctrl-Z **suspends** the process
-   without releasing the lock, so every *new* run blocks forever at the first download.
-   **Stop runs with Ctrl-C (SIGINT), never Ctrl-Z.**
-
-The first `ekr.interpolate` call also does a one-time N320 matrix download (tens of
-seconds) — that is normal, not a hang.
-
-### Diagnosis
-
-```bash
-# Env drift — should be earthkit-data 0.20.x / earthkit-regrid 0.5.1
-python -c "import earthkit.data as d, earthkit.regrid as r; print(d.__version__, r.__version__)"
-
-# Suspended/stuck prep processes ('T' = stopped) and the stale lock
-ps -o pid,stat,cmd $(pgrep -f ecmwf_opendata_pkl_input_aifsens_v2)
-ls -la /tmp/earthkit-data-*/*.cache.lock
-```
-
-### Fix: Kill Stuck Jobs, Clear the Lock, Retry
-
-```bash
-# 1. Kill any suspended/stuck prep processes (SIGCONT so a stopped proc can receive SIGKILL)
-for p in $(pgrep -f ecmwf_opendata_pkl_input_aifsens_v2); do kill -CONT $p; kill -9 $p; done
-
-# 2. Remove the stale download lock(s)
-rm -f /tmp/earthkit-data-*/*.cache.lock
-
-# 3. Repair the env if drifted
-micromamba install -n aifs-etl -c conda-forge 'earthkit-data<1.0.0' 'earthkit-regrid=0.5.1'
-
-# 4. Re-run. The default --fetch index avoids this failure mode entirely
-#    (single-range HTTP, no earthkit-data cache lock) and is ~5x faster:
-python fp16FahamuAIFSv2/ecmwf_opendata_pkl_input_aifsens_v2.py --date YYYYMMDD --members 1-50
-# ...or stay on the old backend if you need it (AWS mirror, ~3 min/member when healthy):
-python fp16FahamuAIFSv2/ecmwf_opendata_pkl_input_aifsens_v2.py --date YYYYMMDD --members 1-50 \
-    --fetch earthkit --source aws
-```
-
----
-
-
-## Forecast Run History
-
-| S.No | Date | Ensemble Members | Status | Notes |
-|------|------|------------------|--------|-------|
-| 1 | 2025-08-21 | 50 | Completed | Full ensemble run |
-| 2 | 2025-08-28 | 50 | Completed | Full ensemble run |
-| 3 | 2025-09-04 | 50 | Completed | Full ensemble run |
-| 4 | 2025-09-11 | 48 | Completed | Reduced members due to GPU memory issue |
-| 5 | 2025-09-18 | 20 | Completed | Time exceeded to download from opendata |
 
 ## Acknowledgements
 
-This work was funded in part by:
-
-1. Hazard modeling, impact estimation, climate storylines for event catalogue
-   on drought and flood disasters in the Eastern Africa (E4DRR) project.
-   https://icpac-igad.github.io/e4drr/ United Nations | Complex Risk Analytics
-   Fund (CRAF'd) on the activity 2.3.3 Experiment generative AI for EPS(Ensemble Prediction Systems):
-   Explore the application of Generative AI (cGAN) in bias correction and
-   downscaling of EPS data in an operational setup.
-2. The Strengthening Early Warning Systems for Anticipatory Action (SEWAA)
-   Project. https://cgan.icpac.net/
+1. Hazard modeling, impact estimation, climate storylines for event catalogue on drought and
+   flood disasters in the Eastern Africa (E4DRR) project.
+   https://icpac-igad.github.io/e4drr/ — United Nations | Complex Risk Analytics Fund (CRAF'd),
+   activity 2.3.3: Experiment generative AI for EPS (Ensemble Prediction Systems).
+2. The Strengthening Early Warning Systems for Anticipatory Action (SEWAA) Project.
+   https://cgan.icpac.net/
