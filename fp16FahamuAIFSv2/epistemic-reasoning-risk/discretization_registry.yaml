@@ -1,0 +1,407 @@
+# Discretization registry — Phase 0 contract (CPT_BUILD_CRITIQUE_AND_PLAN.md §Phase 0).
+#
+# Every locus's state definition lives here with a versioned ID. CPT artifacts MUST
+# reference the ID(s) they used. Changing ANY field (threshold, baseline, pooling region,
+# level, window) means minting a NEW id — counts never pool across ids (kills failure C2/C3:
+# state-definition drift and threshold re-tuning). This file is versioned in git; the id is
+# the contract between a stored count tensor and the meaning of its axes.
+#
+# grade: evidence grade from epistemic-reasoning-summary.md (A hard-relative/no-baseline,
+#        C needs-baseline, etc.). baseline: what the state is measured against.
+
+registry_version: "0.2.0"
+
+# --- Lead windows (Part 0 rule B1: every CPT carries exactly one) -------------------------
+# Stored steps are hours 432..792 (days 18..33), 6-hourly. AI-WQ-aligned weekly windows.
+lead_windows:
+  W1_wk3:   { id: "lw.W1.v1", hours: [432, 576], note: "AI-WQ week 1, days 18-24" }
+  W2_wk45:  { id: "lw.W2.v1", hours: [582, 792], note: "AI-WQ week 2 + tail, days 25-33" }
+
+# --- Pooling region -----------------------------------------------------------------------
+regions:
+  IGAD_EA:
+    id: "reg.IGAD.v1"
+    lat: [-12.0, 18.0]
+    lon: [22.0, 52.0]
+    note: "Greater Horn / IGAD box on native N320 cells; pool-THEN-classify (B4)."
+  # Circulation regions for the explanation-first product (DIRECTION_EXPLANATION_FIRST.md):
+  # the point is to describe the SOURCE circulation, not only the receiving region.
+  EQ_INDIAN:
+    id: "reg.EQIO.v1"
+    lat: [-10.0, 10.0]
+    lon: [50.0, 100.0]
+    note: "Equatorial Indian Ocean — IOD/Walker fingerprint and the moisture source for the
+           East-African rains."
+  WIO:
+    id: "reg.WIO.v1"
+    lat: [-25.0, 5.0]
+    lon: [40.0, 70.0]
+    note: "Western Indian Ocean — TC genesis region and southern-swell corridor toward the
+           East-African coast."
+  SOMALI_JET:
+    id: "reg.SOMJET.v1"
+    lat: [-5.0, 10.0]
+    lon: [40.0, 55.0]
+    note: "Findlater / Somali jet corridor — cross-equatorial flow off the Somali coast."
+  TURKANA:
+    id: "reg.TURKANA.v1"
+    lat: [1.0, 6.0]
+    lon: [34.5, 38.5]
+    note: "Turkana channel — the gap between the Ethiopian and Kenyan highlands, near Lake
+           Turkana / Marsabit."
+  TEJ_AFRICA:
+    id: "reg.TEJafr.v1"
+    lat: [0.0, 20.0]
+    lon: [30.0, 55.0]
+    note: "Tropical Easterly Jet, African sector — 200 hPa easterly core over the Horn/Sahel."
+  TEJ_INDIAN:
+    id: "reg.TEJind.v1"
+    lat: [5.0, 20.0]
+    lon: [55.0, 90.0]
+    note: "Tropical Easterly Jet, Indian Ocean sector — upstream of the African sector."
+  MASCARENE:
+    id: "reg.MASC.v1"
+    lat: [-35.0, -20.0]
+    lon: [45.0, 90.0]
+    note: "Mascarene High — SW Indian Ocean subtropical high; its strength and ridge position
+           set the cross-equatorial pressure gradient that drives the Somali jet."
+  ST_HELENA:
+    id: "reg.STHEL.v1"
+    lat: [-35.0, -20.0]
+    lon: [335.0, 360.0]
+    note: "St Helena High — South Atlantic subtropical high; drives the westerly Congo inflow.
+           Box stops at the prime meridian to avoid a longitude wrap."
+  CONGO:
+    id: "reg.CONGO.v1"
+    lat: [-10.0, 5.0]
+    lon: [12.0, 30.0]
+    note: "Congo basin — the western moisture source; the Congo air boundary is a decisive
+           control on western Ethiopian / South Sudanese rainfall."
+
+# --- Loci (forecast-side, Phase 1: grade-A no-baseline paths) ------------------------------
+loci:
+
+  z500_regime:
+    id: "loc.z500regime.v1"
+    grade: "A"
+    role: "synoptic-state parent (H-proxy for THIS cycle)"
+    field: "z_500"
+    baseline: "ensemble-mean-of-this-cycle (relative anomaly; NOT a climatology)"
+    method: "window-mean per member -> anomaly from 50-member mean over reg.IGAD.v1 ->
+             standardize -> k-means (scipy kmeans2) into K clusters"
+    k_regimes: 4
+    states: "regime_0 .. regime_{K-1} (labels are per-cycle; not comparable across cycles)"
+    derivation_fields: ["z_500"]
+    status: "SUPERSEDED by loc.circ.v2 (k=2) — the k=4 partition is unstable on this spread;
+             see k_selection under process_loci.circulation_regime. cpt_artifact_20260730.nc
+             was built with this id and is retained as-is; do not pool it with v2 counts."
+
+  ivt_moisture:
+    id: "loc.ivt.v1"
+    grade: "A"
+    role: "moisture-supply child (single representative of the moisture cluster, A5)"
+    method: "IVT = (1/g) * vertical integral of q*(u,v) over shared levels; |IVT|;
+             window-mean, region-mean per member"
+    levels: [50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]
+    baseline: "ensemble-median-of-this-cycle (binary: high/low relative to 50-member median)"
+    states: ["ivt_low", "ivt_high"]
+    derivation_fields: ["q_*", "u_*", "v_*"]
+    excludes: "tcw, moisture-flux-convergence, tp — same q,u,v source (A5 derivation-independence)"
+
+  somali_jet:
+    id: "loc.somalijet.v1"
+    grade: "A-relative"
+    role: "diagnostic index (labelled RELATIVE until a baseline exists)"
+    method: "850 hPa cross-equatorial southerly index: mean v_850 over 40-55E, 5S-5N,
+             window-mean per member"
+    baseline: "ensemble-median-of-this-cycle (binary)"
+    states: ["jet_weak", "jet_strong"]
+    derivation_fields: ["v_850"]
+
+# --- Process-group loci (v0.2.0) — the qd-1 grouped ontology -------------------------------
+# These are the BN's evidence nodes: ONE node per physical process, each estimated from a few
+# store fields OUTSIDE the BN (qd-1: "the diagnostic calculation occurs outside the BN").
+# All are region-pooled before classification (Part-0 admissibility). Consumed by
+# s2s_bn_evidence_prep.py and s2s_water_balance_bn.jl.
+#
+# STATE DEFINITIONS ARE ABSOLUTE PHYSICAL THRESHOLDS, NOT WITHIN-ENSEMBLE QUANTILES.
+# The first v0.2.0 draft used within-ensemble quantiles ("no climatology exists, so make every
+# state relative"). That is wrong and was caught by running it: a quantile state is a RANK, so
+# the fraction of members in each state is fixed by the cut points regardless of the forecast —
+# quartiles always yield [.25,.25,.25,.25]. Verified on cycle-20260730_0000: every
+# quantile-defined node returned IDENTICAL state fractions for both lead windows, i.e. the
+# unit-level soft evidence carried zero information. Only the k-means circulation node (a
+# pattern classification, not a rank) varied. States therefore need a FIXED reference. Until a
+# model climatology exists (Phase 4 / Route B), that reference is the physically-anchored
+# thresholds below. They are provisional BY CONSTRUCTION and the anchors are stated; changing
+# any number mints a NEW id and counts never pool across ids.
+
+process_loci:
+
+  circulation_regime:
+    id: "loc.circ.v2"
+    grade: "A-relative"
+    node: "C"
+    states: ["unfavourable", "convergent"]
+    k_regimes: 2
+    k_selection: "TESTED, not assumed. k_regimes_test.py (artifact
+                  k_regimes_test_20260730.json) clusters two independent 80% member
+                  subsamples per k and compares labels on their intersection with the
+                  Adjusted Rand Index (chance-corrected, so no null model is needed).
+                  Mean ARI over 6 region x lead-window cases:
+                    k=2 0.817 STABLE | k=3 0.619 marginal | k=4 0.557 UNSTABLE |
+                    k=5 0.544 | k=6 0.535.
+                  Silhouette falls monotonically from 0.43 (k=2) to 0.22 (k=6), and PC1
+                  alone carries 72-88% of the ensemble variance (ESS 1.3-1.9 of 50).
+                  k=4 was manufacturing four regimes out of ~1 dominant direction.
+                  SUPERSEDES loc.circ.v1 (k=4); counts NEVER pool across the two ids."
+    fields: ["z_500", "msl", "v_850"]
+    method: "window-mean z_500 anomaly from the 50-member mean over the region -> whiten ->
+             k-means K=2 (one state per member, A1). Clusters are then ORDERED by a
+             circulation-only index  idx = z(-msl_anom) + z(v_850 region-mean)  so the state
+             labels are physically ordered and comparable within the cycle."
+    baseline: "ensemble-mean-of-this-cycle"
+    ordering_rule: "ascending circulation index; humidity is deliberately EXCLUDED from the
+                    ordering so C stays independent of M's moisture content (non-circular)"
+    supersedes: "loc.z500regime.v1 (unordered k-means labels)"
+
+  moisture_transport:
+    id: "loc.moist.v1"
+    grade: "A-relative"
+    node: "M"
+    states: ["deficient", "normal", "enhanced", "extreme_persistent"]
+    fields: ["q_*", "u_*", "v_*"]
+    method: "|IVT| = |(1/g) integral of q*(u,v) dp| over the 13 shared levels; region-mean;
+             window-mean per member. Persistence = fraction of window steps whose region-mean
+             |IVT| exceeds the ABSOLUTE 'enhanced' threshold (250)."
+    levels: [50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]
+    baseline: "ABSOLUTE — region-mean |IVT| in kg m-1 s-1"
+    thresholds: "deficient <150; normal 150-250; enhanced 250-350; extreme_persistent >=350
+                 AND persistence >= 0.5"
+    anchor: "the standard AR magnitude criterion (Guan & Waliser, 250 kg m-1 s-1) at
+             0.6x / 1.0x / 1.4x. NOTE the scale caveat: these anchor a LOCAL IVT, so a
+             whole-region mean will sit in one bin (verified: all 50 members 157-230 ->
+             'normal' for reg.IGAD.v1). The intended unit is an admin-1 / catchment; a
+             degenerate node over a large box is a scale artifact, not a signal."
+    excludes: "tcw and tp — same q,u,v source (A5 derivation-independence). tcw may be
+               reported as a cross-check but never as a second parent."
+
+  rainfall_environment:
+    id: "loc.rgenv.v1"
+    grade: "A-relative"
+    node: "R"
+    states: ["suppressed", "weakly_supportive", "supportive", "strongly_supportive"]
+    fields: ["w_500", "w_700", "t_850", "t_500", "q_700", "t_700", "sp"]
+    method: "NO CAPE IN STORE. Index = ascent/0.01 + (lapse-26)/3 + (rh700-0.50)/0.15, where
+             ascent = -(w_500 + w_700)/2 (Pa/s; negative w is ascent),
+             lapse  = t_850 - t_500 (K; larger = steeper = less stable),
+             rh700  = q_700 / q_sat(t_700, 700 hPa)  [Tetens]. Region+window mean per member."
+    baseline: "ABSOLUTE — index cuts at [-1.0, 0.5, 2.0]"
+    anchor: "0.01 Pa/s ~ modest large-scale ascent; 26 K ~ typical tropical 850-500 lapse;
+             RH700 0.50 ~ the dry/moist mid-level divide. Sub-scores are physically scaled,
+             NOT z-scored (a z-score is a within-ensemble rank — see the header note)."
+    note: "qd-1 asks for CAPE; cape is ABSENT from the store (verified 20260730). This index is
+           the documented substitute — it is an ENVIRONMENT index, not an instability proxy."
+
+  precipitation_forcing:
+    id: "loc.precf.v1"
+    grade: "A-relative"
+    node: "P"
+    states: ["below_normal", "normal", "heavy_episodic", "heavy_persistent"]
+    fields: ["tp"]
+    method: "tp is INTERVAL (per-6h) in metres — verified on cycle-20260730_0000; no
+             de-accumulation. Region-mean per step -> mm. Per member per window compute:
+             total, peak rolling 24 h (4 consecutive steps), wet-step fraction (>0.2 mm/6h)."
+    baseline: "ABSOLUTE — precipitation RATE in mm/day (window total / window days), so W1 and
+               W2 are directly comparable despite their different lengths"
+    thresholds: "below_normal <1.0 mm/day; normal 1.0-4.0; heavy >=4.0, then split by SHAPE:
+                 peak24/total > 0.5 -> heavy_episodic else heavy_persistent. The shape rule is
+                 a scale-free ratio, so it holds at any unit size."
+
+  antecedent_wetness:
+    id: "loc.antecedent.v2proxy"
+    grade: "B-proxy"
+    node: "A"
+    states: ["very_dry", "dry", "normal", "wet", "saturated"]
+    fields: ["swvl1", "swvl2"]
+    method: "STORE-SIDE FALLBACK ONLY. Land-cell region-mean of the volumetric soil water in
+             the top two layers at the FIRST step of the window (hour 432 / 582), per member."
+    baseline: "ABSOLUTE — volumetric soil water m3/m3, cuts at [0.12, 0.20, 0.28, 0.35]"
+    anchor: "loam wilting point ~0.12 and field capacity ~0.30; saturation above ~0.35"
+    honest_limits: "This is the MODEL's soil water after 18+ days of free run with no land-surface
+                    data assimilation — not an observed antecedent state. The observed node
+                    (loc.antecedentR1.v1, CHIRPS/IMERG) is the real one and is still unbuilt.
+                    See S2S_BN_ONTOLOGY.md 'the antecedent gap': observations at init are ~18
+                    days stale for this window and the 0-432 h forcing is not stored."
+    land_mask: "finite(swvl1) — lsm is ABSENT from the store; the input-side LSM mask survives
+                as NaN over sea, so finite(swvl1) IS the land mask (31.7% of global cells)."
+
+  runoff_response:
+    id: "loc.runoff.v1"
+    grade: "B-proxy"
+    node: "RO"
+    role: "EVIDENCE CHILD of the water-balance node W — P(RO | W), not a parent"
+    states: ["nil", "low", "moderate", "high"]
+    fields: ["ro"]
+    method: "ro is INTERVAL per-6h in m (verified: flat with lead time, 5.8% nonzero cells);
+             land-cell region-sum over the window -> mm per member."
+    baseline: "ABSOLUTE — runoff RATE mm/day, cuts at [0.05, 0.25, 0.75]"
+    note: "The model DOES output runoff, contra the assumption that AIFS says nothing about
+           catchment response. It is a bucket-scheme response with no routing and no real
+           catchment — hence grade B and evidence-child, never the target itself."
+
+  low_level_jets:
+    id: "loc.llj.v1"
+    grade: "A"
+    node: "LLJ (diagnostic, not a BN state node)"
+    role: "identify and classify the Somali (Findlater) and Turkana low-level jets by
+           PHYSICAL core wind speed, per member per lead window"
+    supersedes: "loc.somalijet.v1 — which used mean v_850 over a 15x10 deg box classified
+                 binary vs the ENSEMBLE MEDIAN. Three defects: (i) a box MEAN dilutes a jet
+                 CORE, the same scale artifact that made the moisture node degenerate;
+                 (ii) it used the meridional component only, while the literature criterion is
+                 wind SPEED |V|=sqrt(u^2+v^2); (iii) an ensemble-median binary is a RANK, the
+                 informationless definition this registry's header condemns."
+    metric: "core speed = 95th percentile of |V| over the box cells, per member per step
+             (a percentile, NOT a mean, so the core survives). Reported with the box max.
+             Duration = fraction of window steps with core speed above each threshold."
+    somali_jet:
+      box: "reg.SOMJET.v1"
+      level: 850          # ~1.5 km ASL — the Findlater core altitude (1.0-1.5 km)
+      secondary_level: 925
+      thresholds_m_s: { present: 15.0, strong: 25.0 }
+      direction_check: "cross-equatorial southerly: box-mean v > 0"
+      source: "Findlater jet: cross-equatorial winds 15-30 m/s at 1.0-1.5 km during the
+               summer monsoon regime."
+    turkana_jet:
+      box: "reg.TURKANA.v1"
+      level: 925          # ~0.75 km ASL — channel jet core sits low
+      secondary_level: 850
+      thresholds_m_s: { present: 12.0, typical_core: 16.8, extreme: 30.0 }
+      direction_check: "southeasterly-to-easterly channelling: box-mean u < 0"
+      nocturnal: "the Turkana jet peaks nocturnally (~0300 local). Local time is UTC+3 and the
+                  cycle is initialised 00Z, so steps whose lead hour is a multiple of 24 are
+                  00 UTC = 0300 LOCAL. Those steps are reported separately."
+      source: "Turkana jet: core generally >12 m/s, campaign nocturnal maxima ~16.8 m/s at
+               0300 local, extreme bursts 30-50 m/s."
+    reporting_rule: "counts above NAMED PHYSICAL thresholds, never a multi-way state split —
+                     see state_resolution_test: this ensemble does not resolve fine
+                     categorical partitions."
+
+  upper_jet_and_highs:
+    id: "loc.ujh.v1"
+    grade: "A"
+    node: "UJH (diagnostic, not a BN state node)"
+    role: "Tropical Easterly Jet and the two subtropical highs, by PHYSICAL thresholds — the
+           same recipe that worked for the low-level jets (localised feature + percentile
+           metric + absolute threshold), applied to the upper-level and boundary drivers."
+    tej:
+      boxes: ["reg.TEJafr.v1", "reg.TEJind.v1"]
+      level: 200
+      secondary_level: 150
+      metric: "core = 95th percentile of the EASTERLY component (-u) over the box, per member
+               per step. Not |V|: the TEJ is defined by easterly flow, so a speed magnitude
+               would score westerly outliers as jet."
+      thresholds_m_s: { present: 15.0, core: 25.0, strong: 35.0 }
+      direction_check: "easterly: box-mean u < 0"
+      season_note: "the TEJ is a boreal-summer (JJA) feature; a late-July/August cycle should
+                    show it, and its ABSENCE in a DJF cycle would be correct, not a failure."
+    subtropical_highs:
+      boxes: ["reg.MASC.v1", "reg.STHEL.v1"]
+      field: "msl"
+      metric: "central pressure = box MAX of msl (hPa) per member per step; the position of that
+               maximum (lat/lon) is reported as the ridge centre, and the area fraction above
+               1020 hPa as the extent."
+      thresholds_hPa: { present: 1020.0, strong: 1024.0, very_strong: 1028.0 }
+      why: "the Mascarene High sets the cross-equatorial gradient driving the Somali jet, and
+            St Helena drives the Congo westerly inflow — so these EXPLAIN the jets rather than
+            duplicating them, which is the point of adding them."
+    reporting_rule: "counts above NAMED PHYSICAL thresholds with ESS attached; positions as
+                     coordinates. Never a multi-way state split."
+
+# --- State-resolution test (mrp_stability_test.py, artifact mrp_stability_20260730.json) ----
+# The k-regimes test forced the same question onto the threshold-defined nodes. Its ARI protocol
+# does NOT transfer: threshold states are a deterministic function of each member's own value,
+# so subsample re-labelling is trivially stable and measures nothing. Tested instead were
+# degeneracy, cut fragility (kernel density AT the cut / peak density), threshold sensitivity
+# (total-variation distance under +/-10% and +/-25% shifts of every cut by the ensemble spread)
+# and sampling error (bootstrap CI at n=50 and at n=ESS).
+#
+# RESULT over 3 regions x 2 lead windows on cycle-20260730_0000 — the 4-state partitions are
+# NOT resolved by this ensemble:
+#     M  1.33 of 4 states occupied on average (4 of 6 cases DEGENERATE, all members in one
+#        state); mean TVD@10% 0.06
+#     R  2.0 of 4 occupied; 4 of 6 cases FRAGILE; density-at-cut up to 0.99 (the cut lands on
+#        the distribution PEAK, with 11 of 50 members within 5% of the spread of it)
+#     P  2.0 of 4 occupied; 4 of 6 FRAGILE; density-at-cut up to 0.89
+#   At n_eff = ESS the 90% CI on a reported state fraction is 0.33-1.00 wide, i.e. a reported
+#   split is essentially unconstrained if members are treated as ~1-2 independent atmospheres.
+#
+# DECISION — thresholds are NOT re-tuned. Moving cuts into this cycle's density valleys is
+# precisely the threshold-re-tuning failure the critique names (C3): it would fit the partition
+# to one event and destroy cross-cycle comparability, which is the entire point of absolute
+# thresholds. Instead:
+#   1. every explanation record now carries a `state_resolution` block per node (occupancy,
+#      density-at-worst-cut, flag) and the narrative says so in words;
+#   2. the product LEADS with continuous ranges and named-threshold exceedance counts
+#      ("|IVT| 158-226, 0 of 50 above 250"), which are immune to this failure mode, and the
+#      multi-way state split is demoted to BN input;
+#   3. the real fix is a model climatology (Phase 4 / E4) so cuts sit at climatological
+#      percentiles — a fixed, non-event-specific reference. This test is the strongest argument
+#      yet for prioritising it.
+# The 4-state vocabularies are RETAINED as fixed contracts (a degenerate node is itself
+# information: "this cycle sits entirely in normal moisture supply"), and the ESS discount
+# already keeps their CPT rows wide.
+state_resolution_test:
+  id: "test.stateres.v1"
+  artifact: "mrp_stability_20260730.json"
+  applies_to: ["loc.moist.v1", "loc.rgenv.v1", "loc.precf.v1"]
+  verdict: "4-state partitions unresolved; ~1.3-2.0 states occupied; cuts often on the density
+            peak. Thresholds unchanged by design; records carry the fragility flag."
+
+# --- Explanation products (DIRECTION_EXPLANATION_FIRST.md) ---------------------------------
+# The PRIMARY output as of 2026-08-06: ensemble counts over circulation states, per region per
+# lead window, with the ESS caveat attached to every count. These are NOT risk states and carry
+# no threshold, no exposure and no elicitation. Within-ensemble relative framing ("n of 50
+# members") is NATIVE here — the same relativity that is fatal for a calibrated risk state.
+explanation_products:
+  circulation_record:
+    id: "exp.circrecord.v1"
+    emits: "regime occupancy, |IVT| distribution + threshold exceedance counts, Somali-jet
+            index, rainfall-environment components, precipitation-rate distribution, ESS"
+    loci: ["loc.circ.v1", "loc.moist.v1", "loc.somalijet.v1", "loc.rgenv.v1", "loc.precf.v1"]
+    honesty_rule: "every record states ESS alongside n=50; a count of members is never reported
+                   without the number of effectively independent members"
+
+# --- Blocked / deferred loci (fields verified ABSENT from the store) -----------------------
+# PRIORITY CHANGE 2026-08-06: under the explanation-first direction the divergence/derivative
+# diagnostics stop being deferrable — velocity potential chi200, the Walker/divergent
+# circulation and moisture-flux convergence ARE the product. `moisture_flux_convergence` below
+# is therefore a FIRST-CLASS blocker requiring a regrid or spherical-harmonic step, not a
+# registered absence.
+blocked_loci:
+  turkana_jet_channelling:
+    id: "loc.turkanajet.v1"
+    status: "PARTIALLY UNBLOCKED 2026-08-07. The earlier 'BLOCKED - needs orography' was too
+             pessimistic: identifying the jet by a geographic box + a physical speed threshold
+             needs no orography at all, and is now implemented as loc.llj.v1. What genuinely
+             still needs slor/sdor/z-surface (absent from the store, static file required) is
+             ATTRIBUTING the jet to terrain channelling and computing the gap geometry."
+  moisture_flux_convergence:
+    id: "loc.mfc.v1"
+    status: "BLOCKED — divergence needs a spatial derivative; the store is on an UNSTRUCTURED
+             reduced-Gaussian `values` axis where naive gradients are undefined. Needs either
+             earthkit-regrid to a regular grid or a spherical-harmonic step. All v0.2.0
+             diagnostics are integral/mean-based by design to avoid this."
+  cape_instability:
+    id: "loc.cape.v1"
+    status: "BLOCKED — cape ABSENT from the store. Substituted by loc.rgenv.v1."
+
+# --- Observation-side loci (Phase 2/3 — NOT YET IMPLEMENTED; placeholders) -----------------
+# tp as a CHIRPS-climatology tercile (retires within-ensemble tercile, A3/R2) and the R1
+# antecedent-percentile node require the CHIRPS ingest (Phase 2). Reserved ids so nothing
+# silently reuses them:
+reserved_obs_loci:
+  tp_chirps_tercile:   { id: "loc.tpCHIRPS.v1", status: "reserved (Phase 2)" }
+  antecedent_r1:       { id: "loc.antecedentR1.v1", status: "reserved (Phase 2)" }
+  sst_boundary:        { id: "loc.sstOISST.v1", status: "reserved (Phase 2, A4: observed SST at init)" }

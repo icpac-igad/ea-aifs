@@ -168,7 +168,9 @@ def parse_member_range(member_str: str) -> List[int]:
 class GRIBToNetCDFProcessor:
     def __init__(self, date_str: str, members: List[int], fp16: bool = False, skip_upload: bool = False,
                  bucket: str = "aifs-aiquest-us-20251127", service_account: str = "coiled-data.json",
-                 v2: bool = False):
+                 v2: bool = False, source: str = "grib", icechunk_store: str = None,
+                 icechunk_tag: str = None, icechunk_branch: str = "main",
+                 output_dir: str = None, source_grid: str = "n320"):
         """
         Initialize processor with configurable date, members, and precision mode.
 
@@ -216,6 +218,22 @@ class GRIBToNetCDFProcessor:
 
         # Ensemble members
         self.members = members
+
+        # Input source: 'grib' (download GRIB from GCS) or 'icechunk' (read a store
+        # written directly by the inference, per ICECHUNK_PATH_A.md §4.1). The Icechunk
+        # path produces an identical NetCDF; only where the N320 fields come from changes.
+        self.source = source
+        # If set, the per-member NetCDF is moved here and NOT deleted by cleanup.
+        self.output_dir = output_dir
+        # Grid the Icechunk store is on. 'n320' is the native model grid (the default,
+        # and what the GRIB path always produced); 'o96' reads an O96 archive written by
+        # run_local_icechunk_v2.py --grid o96. earthkit ships both matrices to 1.5 deg.
+        self.source_grid = source_grid
+        self.icechunk_store = icechunk_store
+        self.icechunk_tag = icechunk_tag
+        self.icechunk_branch = icechunk_branch
+        if self.source == "icechunk" and not self.icechunk_store:
+            raise ValueError("--source icechunk requires --icechunk-store")
 
         # Time ranges for 792-hour forecast
         self.time_ranges = [
@@ -459,6 +477,147 @@ class GRIBToNetCDFProcessor:
             print(f"    ❌ NetCDF conversion failed: {e}")
             return None
 
+    # ------------------------------------------------------------------
+    # Icechunk source (ICECHUNK_PATH_A.md §4.1)
+    # ------------------------------------------------------------------
+    def _open_icechunk_root(self):
+        """Open the store read-only at a tag (preferred) or a branch."""
+        import icechunk
+        import zarr
+
+        repo = icechunk.Repository.open_or_create(
+            icechunk.local_filesystem_storage(self.icechunk_store)
+        )
+        # A compacted store has had its original tag tombstoned by expire+GC (see
+        # O96-icechunk-store/MANIFEST_COMPACTION.md), so fall back to the branch rather
+        # than failing. After compaction the branch tip IS the tagged snapshot, so this
+        # returns the same data -- but say so loudly rather than resolving silently.
+        if self.icechunk_tag:
+            try:
+                session = repo.readonly_session(tag=self.icechunk_tag)
+                where = f"tag={self.icechunk_tag}"
+            except Exception:
+                have = sorted(repo.list_tags())
+                session = repo.readonly_session(self.icechunk_branch)
+                where = (f"branch={self.icechunk_branch} "
+                         f"(tag {self.icechunk_tag!r} absent; tags present: {have or 'none'})")
+                print(f"  ⚠️  tag {self.icechunk_tag!r} not found -> reading {where}")
+        else:
+            session = repo.readonly_session(self.icechunk_branch)
+            where = f"branch={self.icechunk_branch}"
+        print(f"  📖 Icechunk store: {self.icechunk_store} ({where})")
+        return zarr.open_group(session.store, mode="r")
+
+    @staticmethod
+    def _window_hours(time_range) -> List[int]:
+        """Forecast hours a GRIB window contains: (432,504) -> 438..504 step 6.
+
+        The runner opens a file at start_hour and writes the NEXT 12 steps, so the
+        window is half-open on the left — h432-504 holds 438..504, not 432..504.
+        """
+        start, end = int(time_range[0]), int(time_range[1])
+        return list(range(start + 6, end + 6, 6))
+
+    def _regrid_n320(self, values_1d) -> np.ndarray:
+        """N320 reduced-Gaussian (542,080 cells) -> 1.5° regular grid (121, 240).
+
+        earthkit-regrid has no batch mode for N320 (a leading dim raises
+        "matmul: dimension mismatch"), so callers loop per field.
+        """
+        in_grid = {"n320": "N320", "o96": "O96"}[self.source_grid]
+        return ekr.interpolate(
+            np.asarray(values_1d, dtype="float64"),
+            {"grid": in_grid}, {"grid": [1.5, 1.5]},
+        )
+
+    def process_icechunk_to_netcdf(self, member: int) -> Optional[str]:
+        """Build the same 1.5° NetCDF as the GRIB path, reading N320 from Icechunk.
+
+        Emits per-window datasets with dims (step, latitude, longitude) and concatenates
+        them along a new ``time`` dim exactly as ``process_grib_to_netcdf`` does, so the
+        outer-join on ``step`` reproduces the identical sparse (time, step) block layout
+        the quintile CLI expects (``.isel(time=t).sum(dim='step', skipna=True)``).
+        """
+        print("  🔄 Reading N320 fields from Icechunk and regridding...")
+        member_datasets: List[xr.Dataset] = []
+        try:
+            root = self._open_icechunk_root()
+            target_params = list(self.var_mapping.values())  # ['msl', 'tp', '2t']
+            missing = [p for p in target_params if p not in list(root.array_keys())]
+            if missing:
+                print(f"    ❌ store is missing {missing}")
+                return None
+
+            lats = np.linspace(90.0, -90.0, 121)
+            lons = np.arange(0.0, 360.0, 1.5)
+            m_idx = member - 1
+
+            for i, time_range in enumerate(self.time_ranges):
+                hours = self._window_hours(time_range)
+                idx = [h // 6 - 1 for h in hours]          # absolute time index in store
+                print(f"    Processing ({i+1}/{len(self.time_ranges)}): "
+                      f"h{time_range[0]}-{time_range[1]} -> steps {hours[0]}..{hours[-1]}")
+
+                data = {}
+                for param in target_params:
+                    arr = np.asarray(root[param][m_idx, idx, :])   # (12, 542080)
+                    if not np.isfinite(arr).any():
+                        print(f"      ❌ member {member:03d} has no data at these steps "
+                              f"(param {param}) — was it written?")
+                        return None
+                    # regrid each step (no batch support)
+                    grid = np.stack([self._regrid_n320(arr[k]) for k in range(arr.shape[0])])
+                    data[param] = (("step", "latitude", "longitude"), grid)
+
+                step_coord = np.array([np.timedelta64(h, "h") for h in hours],
+                                      dtype="timedelta64[us]")
+                member_datasets.append(xr.Dataset(
+                    data, coords={"step": step_coord, "latitude": lats, "longitude": lons}
+                ))
+                gc.collect()
+
+            if not member_datasets:
+                print(f"    ⚠️  No valid datasets for member {member:03d}")
+                return None
+
+            # Same concat/expand as the GRIB path -> identical structure.
+            member_combined = xr.concat(member_datasets, dim="time")
+            del member_datasets
+            gc.collect()
+
+            member_combined = member_combined.expand_dims("member").assign_coords(
+                member=[f"{member:03d}"]
+            )
+            member_combined.attrs.update({
+                "title": f"AIFS Ensemble Forecast Data ({self.mode_label})",
+                "description": f"Regridded to 1.5 degree resolution, member {member:03d}",
+                "source": f"ECMWF AIFS ensemble forecast ({self.mode_label}, Icechunk)",
+                "grid_resolution": "1.5 degrees",
+                "forecast_date": f"{self.forecast_date} {self.forecast_time}:00",
+                "member": f"member{member:03d}",
+                "precision": self.mode_label,
+                "variables": ", ".join(self.var_mapping.keys()),
+                "icechunk_store": str(self.icechunk_store),
+                "icechunk_ref": self.icechunk_tag or f"branch:{self.icechunk_branch}",
+                "processing_date": str(np.datetime64("now")),
+            })
+            member_combined = self.clean_dataset_attrs(member_combined)
+
+            nc_filename = f"aifs_ensemble_forecast_1p5deg_member{member:03d}.nc"
+            nc_path = os.path.join(self.temp_dir, nc_filename)
+            print(f"    💾 Saving NetCDF: {nc_filename}")
+            member_combined.to_netcdf(nc_path, engine="netcdf4")
+            del member_combined
+            gc.collect()
+
+            size_mb = os.path.getsize(nc_path) / (1024 * 1024)
+            print(f"    ✅ NetCDF created: {size_mb:.1f} MB")
+            return nc_path
+
+        except Exception as e:
+            print(f"    ❌ Icechunk -> NetCDF conversion failed: {e}")
+            return None
+
     def clean_dataset_attrs(self, ds: xr.Dataset) -> xr.Dataset:
         def clean_attrs(obj):
             if hasattr(obj, "attrs"):
@@ -596,12 +755,24 @@ class GRIBToNetCDFProcessor:
         nc_file: Optional[str] = None
 
         try:
-            # Step 1 & 2: Download and convert GRIB files one at a time
-            print(f"📥 Processing GRIB files for member {member:03d}")
-            nc_file = self.process_grib_to_netcdf(member)
+            # Step 1 & 2: build the 1.5° NetCDF from the configured source
+            if self.source == "icechunk":
+                print(f"📖 Reading Icechunk store for member {member:03d}")
+                nc_file = self.process_icechunk_to_netcdf(member)
+            else:
+                print(f"📥 Processing GRIB files for member {member:03d}")
+                nc_file = self.process_grib_to_netcdf(member)
             if not nc_file:
                 print(f"  ❌ NetCDF conversion failed for member {member:03d}")
                 return False
+
+            # Keep the NetCDF: move it out of the temp dir before any cleanup runs.
+            if self.output_dir:
+                os.makedirs(self.output_dir, exist_ok=True)
+                dest = os.path.join(self.output_dir, os.path.basename(nc_file))
+                shutil.move(nc_file, dest)
+                nc_file = dest
+                print(f"    📁 Kept NetCDF: {nc_file}")
 
             # Step 3: Upload NetCDF to GCS (skip if --no-upload flag is set)
             if self.skip_upload:
@@ -623,7 +794,7 @@ class GRIBToNetCDFProcessor:
         finally:
             # Step 4: Cleanup NetCDF file and earthkit directories
             print("🧹 Step 4: Final cleanup")
-            if nc_file:
+            if nc_file and not self.output_dir:      # --output-dir means keep it
                 self.cleanup_local_files([nc_file])
             self.cleanup_earthkit_dirs()
             gc.collect()
@@ -757,6 +928,17 @@ def _run_member_subprocess(member: int, args, base_workdir: str, slot=None):
         '--bucket', args.bucket,
         '--service-account', args.service_account,
     ]
+    if args.source == 'icechunk':
+        cmd += ['--source', 'icechunk', '--icechunk-store', args.icechunk_store]
+        if args.icechunk_tag:
+            cmd += ['--icechunk-tag', args.icechunk_tag]
+        if args.icechunk_branch and args.icechunk_branch != 'main':
+            cmd += ['--icechunk-branch', args.icechunk_branch]
+        # Must be forwarded: each member runs as an isolated subprocess, so anything not
+        # rebuilt here silently reverts to its default in the child.
+        cmd += ['--source-grid', args.source_grid]
+    if args.output_dir:
+        cmd += ['--output-dir', args.output_dir]
     if args.fp16:
         cmd.append('--fp16')
     if args.v2:
@@ -831,8 +1013,35 @@ Examples:
     parser.add_argument('--mem-per-worker-gb', type=float, default=DEFAULT_MEM_PER_WORKER_GB,
                        help=f'Estimated peak RSS per member (GiB) for the RAM-safety guard '
                             f'(default {DEFAULT_MEM_PER_WORKER_GB}).')
+    parser.add_argument('--source', choices=['grib', 'icechunk'], default='grib',
+                       help="Where the native N320 fields come from. 'grib' (default) "
+                            "downloads GRIB from GCS; 'icechunk' reads a store written "
+                            "directly by the inference (no GRIB, no download).")
+    parser.add_argument('--icechunk-store', default=None,
+                       help='Local path of the Icechunk store (required for --source icechunk)')
+    parser.add_argument('--icechunk-tag', default=None,
+                       help='Read this immutable tag (recommended for reproducibility). '
+                            'Beware a tag written by a partial run — see run_commands_*.md.')
+    parser.add_argument('--source-grid', choices=['n320', 'o96'], default='n320',
+                        help='grid the Icechunk store is on (default n320, the native '
+                             'model grid). Use o96 for a store written by '
+                             'run_local_icechunk_v2.py --grid o96.')
+    parser.add_argument('--icechunk-branch', default='main',
+                       help='Branch to read when no --icechunk-tag is given (default main)')
+    parser.add_argument('--output-dir', default=None,
+                       help='Keep each member NetCDF in this directory instead of deleting it '
+                            '(use with --no-upload for a fully local Step 3a).')
 
     args = parser.parse_args()
+
+    if args.source == 'icechunk':
+        if not args.icechunk_store:
+            print("ERROR: --source icechunk requires --icechunk-store")
+            return 1
+        args.icechunk_store = os.path.abspath(args.icechunk_store)
+        if not os.path.isdir(args.icechunk_store):
+            print(f"ERROR: Icechunk store not found: {args.icechunk_store}")
+            return 1
 
     # Single member mode (called by subprocess)
     if args.single_member is not None:
@@ -843,10 +1052,18 @@ Examples:
             skip_upload=args.no_upload,
             bucket=args.bucket,
             service_account=args.service_account,
-            v2=args.v2
+            v2=args.v2,
+            source=args.source,
+            icechunk_store=args.icechunk_store,
+            icechunk_tag=args.icechunk_tag,
+            icechunk_branch=args.icechunk_branch,
+            source_grid=args.source_grid,
+            output_dir=args.output_dir,
         )
-        # Process just this one member
-        if not processor.initialize_gcs():
+        # Process just this one member. A fully-local icechunk run (no upload) never
+        # touches GCS, so don't require the service account for it.
+        needs_gcs = not (args.source == 'icechunk' and args.no_upload)
+        if needs_gcs and not processor.initialize_gcs():
             return 1
         processor.create_temp_directory()
         try:

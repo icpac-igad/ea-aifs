@@ -212,15 +212,20 @@ def process_single_member(member: int, date_str: str,
                           runner, upload_threads: int = 5,
                           gcs_input_prefix: str = None,
                           gcs_output_subpath: str = None,
-                          lead_time: int = LEAD_TIME) -> bool:
+                          lead_time: int = LEAD_TIME,
+                          no_upload: bool = False,
+                          keep_local: bool = False) -> bool:
     """
     Process a single ensemble member through the complete pipeline (FP16).
 
     Steps:
-        1. Download .pkl file
+        1. Download .pkl file (skipped if already present locally)
         2. Run GPU inference (FP16)
-        3. Upload .grib files to fp16_v2_forecasts/
-        4. Cleanup local files
+        3. Upload .grib files to fp16_v2_forecasts/   (skipped if no_upload)
+        4. Cleanup local files                        (skipped if keep_local)
+
+    Local-only mode: pass no_upload=True + keep_local=True to run inference against
+    a pkl already staged in input_dir and keep the GRIB output on local disk (no GCS).
     """
     print(f"\n  --- Member {member:03d} (FP16, {lead_time}h) ---")
     start_time = time.time()
@@ -229,7 +234,7 @@ def process_single_member(member: int, date_str: str,
     grib_files = []
     success = True
 
-    # Step 1: Download
+    # Step 1: Download (download_single_member already skips if a valid pkl exists)
     download_ok, pkl_path = download_single_member(
         member, date_str, input_dir, bucket, service_account_key,
         gcs_input_prefix=gcs_input_prefix
@@ -243,21 +248,28 @@ def process_single_member(member: int, date_str: str,
                                              lead_time=lead_time)
     if not model_ok:
         print(f"    [FAILED] Model run failed for member {member}")
-        # Still cleanup the pkl file
-        cleanup_member_files(member, pkl_path, [])
+        # Still cleanup the pkl file (unless keeping local files)
+        if not keep_local:
+            cleanup_member_files(member, pkl_path, [])
         return False
 
     # Step 3: Upload to fp16_v2_forecasts/ (or custom subpath)
-    upload_ok = upload_single_member(
-        member, grib_files, date_str, bucket, service_account_key, upload_threads,
-        gcs_output_subpath=gcs_output_subpath
-    )
-    if not upload_ok:
-        print(f"    [WARNING] Upload had failures for member {member}")
-        success = False
+    if no_upload:
+        print(f"    [UPLOAD] Skipped (--no-upload); GRIB kept in {output_dir}")
+    else:
+        upload_ok = upload_single_member(
+            member, grib_files, date_str, bucket, service_account_key, upload_threads,
+            gcs_output_subpath=gcs_output_subpath
+        )
+        if not upload_ok:
+            print(f"    [WARNING] Upload had failures for member {member}")
+            success = False
 
-    # Step 4: Cleanup (always cleanup, even if upload had issues)
-    cleanup_member_files(member, pkl_path, grib_files)
+    # Step 4: Cleanup (skipped when keeping local files)
+    if keep_local:
+        print(f"    [CLEANUP] Skipped (--keep-local); pkl + GRIB retained")
+    else:
+        cleanup_member_files(member, pkl_path, grib_files)
 
     elapsed = time.time() - start_time
     status = "SUCCESS" if success else "PARTIAL"
@@ -278,7 +290,9 @@ def run_pipeline(date_str: str, members: List[int],
                  upload_threads: int = 5,
                  gcs_input_prefix: str = None,
                  gcs_output_subpath: str = None,
-                 lead_time: int = LEAD_TIME) -> bool:
+                 lead_time: int = LEAD_TIME,
+                 no_upload: bool = False,
+                 keep_local: bool = False) -> bool:
     """
     Run the complete AIFS GPU pipeline (FP16) with per-member processing.
 
@@ -307,8 +321,14 @@ def run_pipeline(date_str: str, members: List[int],
     print(f"  Lead time: {lead_time}h ({lead_time//24} days)")
     print("")
     print("Processing mode: ONE MEMBER AT A TIME")
-    print("  For each member: Download → Inference(FP16) → Upload → Cleanup")
-    print("  This ensures minimal local storage usage.")
+    if no_upload or keep_local:
+        print(f"  For each member: Download → Inference(FP16)"
+              f"{'' if no_upload else ' → Upload'}"
+              f"{'' if keep_local else ' → Cleanup'}")
+        print(f"  LOCAL MODE: no_upload={no_upload} keep_local={keep_local}")
+    else:
+        print("  For each member: Download → Inference(FP16) → Upload → Cleanup")
+        print("  This ensures minimal local storage usage.")
     print("=" * 70)
 
     # Enable memory optimization for FP16
@@ -346,7 +366,9 @@ def run_pipeline(date_str: str, members: List[int],
             upload_threads=upload_threads,
             gcs_input_prefix=gcs_input_prefix,
             gcs_output_subpath=gcs_output_subpath,
-            lead_time=lead_time
+            lead_time=lead_time,
+            no_upload=no_upload,
+            keep_local=keep_local
         )
 
         member_time = time.time() - member_start
@@ -378,7 +400,10 @@ def run_pipeline(date_str: str, members: List[int],
         print(f"Failed:     {failed_members}")
     print(f"Total time: {elapsed/60:.1f} min ({elapsed/3600:.2f} hours)")
     print(f"Avg/member: {elapsed/len(members):.1f}s")
-    print(f"Output:     gs://{bucket}/{date_str}/{effective_output_subpath}/")
+    if no_upload:
+        print(f"Output:     {output_dir}/  (local; upload skipped)")
+    else:
+        print(f"Output:     gs://{bucket}/{date_str}/{effective_output_subpath}/")
     print("=" * 70)
 
     return len(failed_members) == 0
@@ -425,10 +450,18 @@ Examples:
     parser.add_argument('--gcs-output-subpath', default=None,
                        help='Custom GCS output subpath. '
                             'Overrides default fp16_v2_forecasts.')
+    parser.add_argument('--no-upload', action='store_true',
+                       help='Skip GCS upload; keep GRIB output on local disk '
+                            '(input pkl must already be staged in --input-dir).')
+    parser.add_argument('--keep-local', action='store_true',
+                       help='Do not delete local pkl/GRIB after each member '
+                            '(local-only runs). Implied use with --no-upload.')
 
     args = parser.parse_args()
 
-    if not os.path.exists(args.service_account):
+    # The service account is only needed when we actually touch GCS.
+    need_gcs = not (args.no_upload and os.path.isdir(args.input_dir))
+    if need_gcs and not os.path.exists(args.service_account):
         print(f"ERROR: Service account not found: {args.service_account}")
         return 1
 
@@ -448,7 +481,9 @@ Examples:
         upload_threads=args.upload_threads,
         gcs_input_prefix=args.gcs_input_prefix,
         gcs_output_subpath=args.gcs_output_subpath,
-        lead_time=args.lead_time
+        lead_time=args.lead_time,
+        no_upload=args.no_upload,
+        keep_local=args.keep_local
     )
 
     return 0 if success else 1

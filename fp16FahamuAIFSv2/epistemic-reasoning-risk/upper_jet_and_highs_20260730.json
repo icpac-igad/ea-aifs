@@ -1,0 +1,437 @@
+{
+ "meta": {
+  "locus": "loc.ujh.v1",
+  "tag": "cycle-20260730_0000",
+  "registry_version": "0.2.0",
+  "created": "2026-08-07T04:34:59+00:00",
+  "generator": "upper_jet_and_highs.py"
+ },
+ "windows": {
+  "W1_wk3": {
+   "hours": [
+    432,
+    576
+   ],
+   "n_steps": 25,
+   "tej": {
+    "TEJ_AFRICA": {
+     "box": "reg.TEJafr.v1",
+     "level_hPa": 200,
+     "n_cells": 6319,
+     "ess": 2.82,
+     "core_easterly_m_s": {
+      "window_mean": {
+       "min": 17.55,
+       "median": 22.36,
+       "max": 29.97
+      },
+      "peak_any_step": {
+       "min": 20.47,
+       "median": 26.61,
+       "max": 35.81
+      },
+      "box_max_any_step": 40.36
+     },
+     "threshold_counts": {
+      "present_15.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.976,
+       "max_duration_frac": 1.0
+      },
+      "core_25.0": {
+       "n_members_reaching": 36,
+       "n_members": 50,
+       "mean_duration_frac": 0.229,
+       "max_duration_frac": 0.92
+      },
+      "strong_35.0": {
+       "n_members_reaching": 1,
+       "n_members": 50,
+       "mean_duration_frac": 0.002,
+       "max_duration_frac": 0.08
+      }
+     },
+     "direction": {
+      "required": "easterly (u<0)",
+      "n_members_satisfying": 50,
+      "box_mean_u_m_s": -11.98
+     }
+    },
+    "TEJ_INDIAN": {
+     "box": "reg.TEJind.v1",
+     "level_hPa": 200,
+     "n_cells": 6625,
+     "ess": 3.05,
+     "core_easterly_m_s": {
+      "window_mean": {
+       "min": 24.04,
+       "median": 29.64,
+       "max": 35.37
+      },
+      "peak_any_step": {
+       "min": 28.86,
+       "median": 34.33,
+       "max": 40.16
+      },
+      "box_max_any_step": 45.99
+     },
+     "threshold_counts": {
+      "present_15.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 1.0,
+       "max_duration_frac": 1.0
+      },
+      "core_25.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.907,
+       "max_duration_frac": 1.0
+      },
+      "strong_35.0": {
+       "n_members_reaching": 18,
+       "n_members": 50,
+       "mean_duration_frac": 0.056,
+       "max_duration_frac": 0.48
+      }
+     },
+     "direction": {
+      "required": "easterly (u<0)",
+      "n_members_satisfying": 50,
+      "box_mean_u_m_s": -19.89
+     }
+    }
+   },
+   "highs": {
+    "MASCARENE": {
+     "box": "reg.MASC.v1",
+     "n_cells": 7952,
+     "ess": 3.29,
+     "central_pressure_hPa": {
+      "window_mean": {
+       "min": 1027.77,
+       "median": 1033.18,
+       "max": 1039.49
+      },
+      "peak_any_step": {
+       "min": 1030.89,
+       "median": 1037.24,
+       "max": 1046.11
+      }
+     },
+     "ridge_strength_hPa": {
+      "box_mean": {
+       "min": 1020.79,
+       "median": 1025.77,
+       "max": 1030.47
+      },
+      "box_p95": {
+       "min": 1026.31,
+       "median": 1031.61,
+       "max": 1037.71
+      }
+     },
+     "threshold_caveat": "the 1020/1024/1028 hPa thresholds are CENTRAL-pressure values from the literature, but the box MAX over a large winter-hemisphere box exceeds them almost always - see the saturation in threshold_counts. Metric and threshold are mismatched; the fix is a climatology (E4), NOT re-tuning the numbers to fit (C3).",
+     "ridge_centre": {
+      "lat_mean": -32.44,
+      "lat_sd_across_members": 1.495,
+      "lon_mean": 67.84,
+      "lon_sd_across_members": 8.855
+     },
+     "extent_frac_above_1020": 0.923,
+     "threshold_counts": {
+      "present_1020.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 1.0,
+       "max_duration_frac": 1.0
+      },
+      "strong_1024.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.993,
+       "max_duration_frac": 1.0
+      },
+      "very_strong_1028.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.934,
+       "max_duration_frac": 1.0
+      }
+     }
+    },
+    "ST_HELENA": {
+     "box": "reg.STHEL.v1",
+     "n_cells": 4383,
+     "ess": 2.68,
+     "central_pressure_hPa": {
+      "window_mean": {
+       "min": 1023.0,
+       "median": 1029.53,
+       "max": 1034.97
+      },
+      "peak_any_step": {
+       "min": 1026.45,
+       "median": 1034.33,
+       "max": 1042.34
+      }
+     },
+     "ridge_strength_hPa": {
+      "box_mean": {
+       "min": 1016.98,
+       "median": 1023.25,
+       "max": 1027.73
+      },
+      "box_p95": {
+       "min": 1022.18,
+       "median": 1028.31,
+       "max": 1033.14
+      }
+     },
+     "threshold_caveat": "the 1020/1024/1028 hPa thresholds are CENTRAL-pressure values from the literature, but the box MAX over a large winter-hemisphere box exceeds them almost always - see the saturation in threshold_counts. Metric and threshold are mismatched; the fix is a climatology (E4), NOT re-tuning the numbers to fit (C3).",
+     "ridge_centre": {
+      "lat_mean": -31.15,
+      "lat_sd_across_members": 2.687,
+      "lon_mean": 346.81,
+      "lon_sd_across_members": 5.401
+     },
+     "extent_frac_above_1020": 0.772,
+     "threshold_counts": {
+      "present_1020.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.998,
+       "max_duration_frac": 1.0
+      },
+      "strong_1024.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.842,
+       "max_duration_frac": 1.0
+      },
+      "very_strong_1028.0": {
+       "n_members_reaching": 47,
+       "n_members": 50,
+       "mean_duration_frac": 0.548,
+       "max_duration_frac": 1.0
+      }
+     }
+    }
+   }
+  },
+  "W2_wk45": {
+   "hours": [
+    582,
+    792
+   ],
+   "n_steps": 36,
+   "tej": {
+    "TEJ_AFRICA": {
+     "box": "reg.TEJafr.v1",
+     "level_hPa": 200,
+     "n_cells": 6319,
+     "ess": 3.47,
+     "core_easterly_m_s": {
+      "window_mean": {
+       "min": 12.85,
+       "median": 21.29,
+       "max": 24.87
+      },
+      "peak_any_step": {
+       "min": 18.69,
+       "median": 26.32,
+       "max": 34.04
+      },
+      "box_max_any_step": 38.87
+     },
+     "threshold_counts": {
+      "present_15.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.927,
+       "max_duration_frac": 1.0
+      },
+      "core_25.0": {
+       "n_members_reaching": 31,
+       "n_members": 50,
+       "mean_duration_frac": 0.123,
+       "max_duration_frac": 0.5
+      },
+      "strong_35.0": {
+       "n_members_reaching": 0,
+       "n_members": 50,
+       "mean_duration_frac": 0.0,
+       "max_duration_frac": 0.0
+      }
+     },
+     "direction": {
+      "required": "easterly (u<0)",
+      "n_members_satisfying": 50,
+      "box_mean_u_m_s": -10.55
+     }
+    },
+    "TEJ_INDIAN": {
+     "box": "reg.TEJind.v1",
+     "level_hPa": 200,
+     "n_cells": 6625,
+     "ess": 3.57,
+     "core_easterly_m_s": {
+      "window_mean": {
+       "min": 22.01,
+       "median": 27.27,
+       "max": 31.99
+      },
+      "peak_any_step": {
+       "min": 25.75,
+       "median": 32.47,
+       "max": 38.94
+      },
+      "box_max_any_step": 45.65
+     },
+     "threshold_counts": {
+      "present_15.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.999,
+       "max_duration_frac": 1.0
+      },
+      "core_25.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.696,
+       "max_duration_frac": 1.0
+      },
+      "strong_35.0": {
+       "n_members_reaching": 9,
+       "n_members": 50,
+       "mean_duration_frac": 0.025,
+       "max_duration_frac": 0.25
+      }
+     },
+     "direction": {
+      "required": "easterly (u<0)",
+      "n_members_satisfying": 50,
+      "box_mean_u_m_s": -17.85
+     }
+    }
+   },
+   "highs": {
+    "MASCARENE": {
+     "box": "reg.MASC.v1",
+     "n_cells": 7952,
+     "ess": 3.5,
+     "central_pressure_hPa": {
+      "window_mean": {
+       "min": 1027.6,
+       "median": 1033.15,
+       "max": 1038.7
+      },
+      "peak_any_step": {
+       "min": 1030.98,
+       "median": 1038.47,
+       "max": 1047.31
+      }
+     },
+     "ridge_strength_hPa": {
+      "box_mean": {
+       "min": 1021.86,
+       "median": 1025.96,
+       "max": 1029.31
+      },
+      "box_p95": {
+       "min": 1026.68,
+       "median": 1031.54,
+       "max": 1035.58
+      }
+     },
+     "threshold_caveat": "the 1020/1024/1028 hPa thresholds are CENTRAL-pressure values from the literature, but the box MAX over a large winter-hemisphere box exceeds them almost always - see the saturation in threshold_counts. Metric and threshold are mismatched; the fix is a climatology (E4), NOT re-tuning the numbers to fit (C3).",
+     "ridge_centre": {
+      "lat_mean": -32.87,
+      "lat_sd_across_members": 1.251,
+      "lon_mean": 68.48,
+      "lon_sd_across_members": 5.927
+     },
+     "extent_frac_above_1020": 0.926,
+     "threshold_counts": {
+      "present_1020.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 1.0,
+       "max_duration_frac": 1.0
+      },
+      "strong_1024.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.994,
+       "max_duration_frac": 1.0
+      },
+      "very_strong_1028.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.896,
+       "max_duration_frac": 1.0
+      }
+     }
+    },
+    "ST_HELENA": {
+     "box": "reg.STHEL.v1",
+     "n_cells": 4383,
+     "ess": 3.88,
+     "central_pressure_hPa": {
+      "window_mean": {
+       "min": 1024.31,
+       "median": 1028.41,
+       "max": 1033.81
+      },
+      "peak_any_step": {
+       "min": 1027.93,
+       "median": 1033.96,
+       "max": 1041.2
+      }
+     },
+     "ridge_strength_hPa": {
+      "box_mean": {
+       "min": 1017.79,
+       "median": 1023.04,
+       "max": 1026.57
+      },
+      "box_p95": {
+       "min": 1023.33,
+       "median": 1027.1,
+       "max": 1032.42
+      }
+     },
+     "threshold_caveat": "the 1020/1024/1028 hPa thresholds are CENTRAL-pressure values from the literature, but the box MAX over a large winter-hemisphere box exceeds them almost always - see the saturation in threshold_counts. Metric and threshold are mismatched; the fix is a climatology (E4), NOT re-tuning the numbers to fit (C3).",
+     "ridge_centre": {
+      "lat_mean": -31.48,
+      "lat_sd_across_members": 1.659,
+      "lon_mean": 348.14,
+      "lon_sd_across_members": 4.149
+     },
+     "extent_frac_above_1020": 0.782,
+     "threshold_counts": {
+      "present_1020.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.996,
+       "max_duration_frac": 1.0
+      },
+      "strong_1024.0": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.877,
+       "max_duration_frac": 1.0
+      },
+      "very_strong_1028.0": {
+       "n_members_reaching": 49,
+       "n_members": 50,
+       "mean_duration_frac": 0.513,
+       "max_duration_frac": 0.917
+      }
+     }
+    }
+   }
+  }
+ }
+}

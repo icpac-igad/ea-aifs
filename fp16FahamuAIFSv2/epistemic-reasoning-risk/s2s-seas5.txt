@@ -1,0 +1,647 @@
+Yes. I would **not make each meteorological variable a Bayesian-network node**. Instead, use the raw S2S/SEAS5 variables to calculate a small set of physically interpretable **diagnostic evidence nodes**, so the same BN can ingest either dataset despite their different variable inventories.
+
+Your six-node fundamental layer is already a strong structure. I would organize it as:
+
+| Fundamental evidence node                  | Recommended diagnostic                                        | S2S variables                                                                 | SEAS5 variables                                             |
+| ------------------------------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **Moisture**                               | column/low–mid-level moisture availability                    | `q1000,q925,q850,q700,q500`; optionally derive vertically integrated moisture | `tcwv` **preferred**, plus `q1000,q925,q850,q700,q500`      |
+| **Low-level transport / convergence**      | moisture flux + convergence at 850–925 hPa                    | `q850/q925 × u850/v850`; derive moisture-flux convergence                     | `q850 × u850/v850`; `tcwv`, `u850/v850`                     |
+| **Cyclonic / disturbance circulation**     | low-level relative vorticity, pressure anomaly, circulation   | `u850,v850,z850,slp`                                                          | `u850,v850,z850,slp`                                        |
+| **Vertical dynamical support**             | upper-level divergence / vertical wind shear / trough support | `u200,v200,z200,z500`, with `u850,v850`                                       | `u200,v200,z200,z500`, with `u850,v850`                     |
+| **Thermodynamic / convective environment** | instability + boundary-layer moisture                         | `cape`, `t2d`, `t850,t500`, `q850/q700`, `olr`                                | `t2d`, `t850,t500`, `q850/q700`; derive instability proxies |
+| **Predicted precipitation**                | ensemble probability / anomaly / percentile of rainfall       | `pr`, `conv_pr`                                                               | `pr`                                                        |
+
+The important point is that **`q850`, `u850`, `v850`, `z500`, etc. are predictors used to construct the evidence**, rather than becoming dozens of BN parents themselves.
+
+### 1. Moisture
+
+For SEAS5, `tcwv` is probably the cleanest fundamental moisture diagnostic. For S2S, because TCWV is absent in your listed fields, construct an approximate vertically integrated moisture measure from:
+
+[
+q_{1000}, q_{925}, q_{850}, q_{700}, q_{500}
+]
+
+or use a simpler low/mid-level index such as
+
+[
+M = w_1q_{925}+w_2q_{850}+w_3q_{700}.
+]
+
+For East African heavy rainfall I would retain **q850 and q700** at minimum. q500 can add information about deep moistening, but I would not give it a separate BN node.
+
+A useful categorical BN state could simply be:
+
+[
+\text{Moisture} =
+{\text{dry},\text{normal},\text{moist},\text{exceptionally moist}}
+]
+
+defined relative to the lead-time- and calendar-specific hindcast climatology.
+
+---
+
+### 2. Low-level transport / convergence
+
+This should probably carry more information than merely wind speed.
+
+From
+
+[
+q_{850},u_{850},v_{850}
+]
+
+calculate horizontal moisture flux:
+
+[
+\vec Q_{850}=q_{850}(u_{850},v_{850})
+]
+
+and preferably its convergence:
+
+[
+-\nabla\cdot(q_{850}\vec V_{850}).
+]
+
+If possible, combine 925–700 hPa layers to approximate integrated vapor transport rather than relying on 850 hPa alone.
+
+For the BN:
+
+[
+\text{Moisture transport}
+=========================
+
+{\text{divergent/weak},\text{normal},\text{convergent},\text{strongly convergent}}.
+]
+
+For East Africa this becomes especially informative if calculated over a **larger synoptic domain**, rather than only inside the HydroBASINS polygon where impacts are being assessed.
+
+---
+
+### 3. Cyclonic / disturbance circulation
+
+Use:
+
+[
+u_{850},v_{850},z_{850},SLP
+]
+
+to derive relative vorticity:
+
+[
+\zeta_{850}
+===========
+
+## \frac{\partial v}{\partial x}
+
+\frac{\partial u}{\partial y}.
+]
+
+You can combine this with standardized SLP or Z850 anomalies.
+
+This captures things that rainfall alone misses: tropical lows, monsoon circulations, convergence zones, cyclonic disturbances, and large-scale systems approaching from outside the target basin.
+
+I would call the BN node something like:
+
+[
+\boxed{\text{Disturbance circulation}}
+]
+
+rather than simply "cyclonic circulation", because not every important East African rainfall configuration requires a closed cyclone.
+
+---
+
+### 4. Vertical dynamical support
+
+I would derive at least two indicators:
+
+[
+\text{Deep-layer shear}
+=======================
+
+|\vec V_{200}-\vec V_{850}|
+]
+
+and upper-level divergence from `u200/v200`.
+
+Also useful:
+
+[
+Z_{500}',\quad Z_{200}'
+]
+
+or their gradients/anomalies to identify trough/ridge configurations.
+
+The resulting evidence state could represent:
+
+[
+{\text{suppressed},\text{neutral},\text{supportive},\text{strongly supportive}}.
+]
+
+This is considerably better than making `z500`, `u200`, and `v200` separate BN nodes.
+
+---
+
+### 5. Thermodynamic / convective environment
+
+S2S is particularly useful here because it contains `cape` and `olr`.
+
+For S2S I would use:
+
+[
+CAPE,\quad T_{2d},\quad q_{850},\quad q_{700},\quad OLR
+]
+
+with low OLR acting as evidence of organized/deep convection.
+
+SEAS5 does not have CAPE in your list, but you can derive simpler proxies from:
+
+[
+T_{850}-T_{500},
+]
+
+dewpoint, specific humidity and low/mid-level temperature.
+
+So the physical meaning remains common even though the observable differs:
+
+[
+\boxed{\text{Convective environment}}
+]
+
+rather than a model-variable-specific node called `CAPE`.
+
+---
+
+### 6. Predicted precipitation
+
+This should ideally be **probabilistic**, not simply the ensemble mean.
+
+For example:
+
+[
+P(P_{7d}>P_{90})
+]
+
+or
+
+[
+P(P_{7d}>100\ {\rm mm})
+]
+
+depending on the hazard and basin.
+
+You can also derive:
+
+[
+P(\mathrm{extreme}),\qquad
+\mathrm{ensemble\ median},\qquad
+\mathrm{upper\ tail}
+]
+
+but I would expose only one or perhaps two precipitation evidence nodes to the BN.
+
+For flood-risk reasoning, an especially useful distinction is:
+
+[
+\boxed{\text{Expected precipitation}}
+]
+
+and
+
+[
+\boxed{\text{Extreme precipitation tail}}
+]
+
+because a moderate ensemble mean can coexist with a small but important probability of extreme rainfall.
+
+---
+
+## SST should probably become a separate **large-scale boundary forcing layer**
+
+This is where I would expand your six-node structure. SST is qualitatively different from `q850`, vorticity, CAPE or rainfall. It changes relatively slowly and provides information about the **background state that makes certain atmospheric configurations more or less likely**.
+
+So I would not put raw `sst` into the "Moisture" node.
+
+I would introduce something such as:
+
+[
+\boxed{\text{Oceanic forcing}}
+]
+
+and derive several possible SST diagnostics underneath it.
+
+For East Africa, the highest-value SST-derived evidence would be:
+
+1. **Western Indian Ocean SST anomaly**
+
+   Particularly western equatorial/tropical Indian Ocean SST anomalies adjacent to East Africa. This represents the local/upstream moisture-source state.
+
+2. **Indian Ocean east–west SST gradient**
+
+   Rather than only SST magnitude:
+
+   [
+   \Delta SST_{IO}
+   ===============
+
+   SST_{\rm west}-SST_{\rm east}.
+   ]
+
+   Conceptually this is closely related to the Indian Ocean Dipole state and can influence moisture transport into East Africa.
+
+3. **Equatorial Pacific SST state**
+
+   A Niño-3.4-like SST anomaly provides an ENSO background-state signal.
+
+4. **Western Indian Ocean / Arabian Sea meridional gradients**
+
+   These can be useful for monsoon-flow and moisture-source diagnostics, depending on season.
+
+I would **not necessarily create four BN nodes**, however. They are strongly correlated and would complicate the CPTs.
+
+A cleaner architecture is:
+
+[
+\text{SST fields}
+\rightarrow
+\boxed{\text{Large-scale ocean state}}
+\rightarrow
+\text{Atmospheric evidence}
+]
+
+with perhaps states such as
+
+[
+{\text{unfavourable},\text{neutral},\text{favourable},\text{strongly favourable}}.
+]
+
+For particular seasons, you could condition the meaning of this node differently.
+
+---
+
+## There are three other evidence nodes I would strongly consider
+
+Beyond SST, your available data support three additions that are valuable for **risk reasoning rather than pure meteorological diagnosis**.
+
+### Antecedent land-surface state
+
+From S2S:
+
+[
+smv20,\quad smv100
+]
+
+and from SEAS5, whatever soil-moisture fields are eventually available.
+
+I would make:
+
+[
+\boxed{\text{Antecedent wetness}}
+]
+
+This matters enormously for flood risk because:
+
+[
+100\ {\rm mm}
++
+\text{saturated catchment}
+]
+
+does not mean the same thing as
+
+[
+100\ {\rm mm}
++
+\text{dry catchment}.
+]
+
+For drought analysis the same variable becomes antecedent soil-moisture deficit.
+
+This is arguably more useful to the risk BN than adding another atmospheric pressure level.
+
+---
+
+### Convective organization
+
+S2S gives you both:
+
+[
+pr,\quad conv_pr,\quad OLR.
+]
+
+You could therefore derive something like:
+
+[
+\frac{conv_pr}{pr}
+]
+
+together with OLR anomalies.
+
+I would not necessarily use this universally, but for short/S2S heavy-rainfall diagnostics it can distinguish broadly forced precipitation from strongly convective situations.
+
+---
+
+### Persistence / temporal consistency
+
+This is not another physical variable, but for your CRMA-style reasoning it is particularly valuable.
+
+Instead of asking only whether a signal exists at one forecast cycle, calculate whether the evidence persists:
+
+[
+P_t,;P_{t-1},;P_{t-2},...
+]
+
+and create:
+
+[
+\boxed{\text{Signal persistence}}
+]
+
+with states such as:
+
+[
+{\text{weakening},\text{unstable},\text{persistent},\text{strengthening}}.
+]
+
+That is epistemically useful: a single run showing strong convergence is weaker evidence than the same circulation emerging repeatedly across initialization cycles and ensemble members.
+
+---
+
+## I would therefore slightly extend your architecture
+
+For the **meteorological evidence** itself:
+
+[
+\boxed{\text{Large-scale ocean state}}
+]
+
+[
+\downarrow
+]
+
+[
+\boxed{\text{Moisture}}
+]
+
+[
+\boxed{\text{Low-level transport/convergence}}
+]
+
+[
+\boxed{\text{Disturbance circulation}}
+]
+
+[
+\boxed{\text{Vertical dynamical support}}
+]
+
+[
+\boxed{\text{Thermodynamic/convective environment}}
+]
+
+[
+\boxed{\text{Predicted precipitation}}
+]
+
+and then outside the atmospheric state:
+
+[
+\boxed{\text{Antecedent land-surface state}}
+]
+
+[
+\boxed{\text{Signal persistence / forecast consistency}}
+]
+
+These can feed a higher-level latent proposition such as:
+
+[
+\boxed{\text{Meteorological support for extreme rainfall}}
+]
+
+which then feeds your hazard/risk part of the BN.
+
+So conceptually:
+
+[
+\begin{aligned}
+&SST/\text{climate modes}\
+&\qquad\downarrow\
+&\text{Moisture}
++\text{Transport}
++\text{Circulation}
++\text{Vertical support}
++\text{Convection}\
+&\qquad\downarrow\
+&\boxed{\text{Extreme-rainfall environment}}\
+&\qquad\searrow\
+&\qquad\text{Predicted precipitation}\
+&\qquad\downarrow\
+&\boxed{\text{Hydrometeorological hazard}}
+\end{aligned}
+]
+
+with antecedent wetness entering the hazard node separately.
+
+The advantage is that **S2S and SEAS5 now speak the same physical language**. S2S may diagnose "convective environment" using CAPE + OLR, whereas SEAS5 diagnoses it using temperature/humidity proxies; the BN does not need to know which ECMWF dataset produced the evidence.
+
+For your East Africa application, my resulting priority would therefore be **8 primary evidence concepts**: **ocean state → moisture → moisture transport/convergence → disturbance circulation → vertical support → convective environment → precipitation → antecedent wetness**, with **forecast persistence** added as an epistemic/evidence-quality node rather than another physical process.
+
+
+
+
+## EXTENT Reasoning
+
+Yes. If you want the same IFS regional archive to support **East African rainfall reasoning including Madagascar, Mozambique, Malawi, Tanzania and cyclone-related rainfall**, I would enlarge the southern and eastern boundaries. Your current `15.25°S` cutoff removes much of Madagascar and almost all of the circulation needed to understand Southwest Indian Ocean tropical cyclones and the Mascarene High.
+
+A practical compromise would be approximately:
+
+```python
+LAT_MAX = 25.25
+LAT_MIN = -40.0
+
+LON_MIN = 15.0
+LON_MAX = 80.0
+```
+
+That gives you a substantially more useful **East Africa + SW Indian Ocean synoptic domain** without going global. It captures Madagascar, Mozambique Channel, Malawi/Mozambique, the main SW Indian Ocean tropical-cyclone corridor, and a useful part of the Mascarene High. The climatological SW Indian Ocean cyclone basin itself extends considerably eastward; recent cyclone tracks illustrate why stopping at 55°E misses systems before they approach Madagascar. ([MDPI][1])
+
+I would *not*, however, extend westward just to directly diagnose the **St Helena High**. Its centre is over the South Atlantic, so properly resolving both St Helena and Mascarene highs would push you toward something like a near-African continental/southern-ocean domain. For a rainfall-risk system focused on East Africa, I would instead treat St Helena influence through the circulation entering southern Africa, while resolving the Mascarene High much more directly. Variability in both subtropical highs matters for southern African rainfall, but the Mascarene High is geographically and dynamically much more relevant to your Indian Ocean/Madagascar problem. ([MDPI][2])
+
+### Relative vorticity becomes particularly valuable for the cyclone case
+
+Yes, absolutely. With tropical cyclones, **relative vorticity is one of the diagnostics I would explicitly retain**.
+
+From your existing wind fields,
+
+[
+\zeta =
+\frac{\partial v}{\partial x}
+-----------------------------
+
+\frac{\partial u}{\partial y}
+]
+
+you can calculate relative vorticity without storing another IFS field.
+
+For a Southern Hemisphere cyclone, remember the sign convention: **cyclonic rotation corresponds primarily to negative relative vorticity**, unlike Northern Hemisphere tropical cyclones.
+
+For example, at 850 hPa you could diagnose:
+
+[
+\zeta_{850}<0
+]
+
+and identify spatially coherent cyclonic-vorticity maxima.
+
+But I would avoid defining a cyclone as simply:
+
+> “large negative (\zeta_{850}) = tropical cyclone.”
+
+Instead, the epistemic evidence becomes much stronger when several fields agree:
+
+[
+\boxed{
+\zeta_{850}
++
+MSLP
++
+850\text{-hPa winds}
++
+500\text{-hPa circulation}
++
+TCWV
++
+ascent
++
+precipitation
+}
+]
+
+A recent study specifically examining tropical-cyclone/Mascarene-High effects on East African rainfall used **relative vorticity, MSLP, vertically integrated moisture flux and winds** together, which is quite close to what your existing IFS archive can provide. ([IDEAS/RePEc][3])
+
+### I would add a "cyclonic disturbance" diagnostic rather than a named cyclone node
+
+For CRMA, that distinction is useful.
+
+Starting from:
+
+```text
+u925/v925
+u850/v850
+u700/v700
+u500/v500
+msl
+gh500
+tcwv
+w700/w500
+tp
+```
+
+derive something like:
+
+```text
+Cyclonic disturbance
+    │
+    ├── ζ850
+    ├── ζ700
+    ├── MSLP anomaly/minimum
+    ├── closed/curved low-level circulation
+    ├── wind-speed anomaly
+    └── persistence / movement
+```
+
+Then the system doesn't need to decide whether something officially qualifies as a tropical cyclone. That classification properly belongs to operational cyclone centres.
+
+Your question is instead:
+
+> **Is a coherent cyclonic disturbance present, and is it modifying the moisture/rainfall environment relevant to East Africa?**
+
+That is a much better epistemic proposition.
+
+---
+
+## Madagascar cyclones matter even when they never reach mainland East Africa
+
+This is important for your design.
+
+A cyclone east of Madagascar does not have to make landfall in Mozambique to affect East African rainfall.
+
+It can reorganize:
+
+* low-level moisture transport,
+* western Indian Ocean westerlies/easterlies,
+* convergence,
+* the Mascarene High,
+* pressure gradients,
+* and tropical circulation.
+
+The 2018 analysis of cyclones Dumazile and Eliakim, for example, found interaction between cyclone behaviour, Mascarene High displacement and anomalous westerly moisture flow into East Africa. ([IDEAS/RePEc][3])
+
+So I would **not make cyclone evidence synonymous with cyclone landfall**.
+
+Instead:
+
+[
+\text{SWIO cyclonic circulation}
+\rightarrow
+\text{regional moisture-flow alteration}
+\rightarrow
+\text{East African rainfall environment}
+]
+
+That fits your epistemic framework particularly well.
+
+---
+
+### The Mozambique Channel deserves its own diagnostic
+
+Once you extend southward, another feature becomes quite important: the **Mozambique Channel Trough (MCT)**.
+
+There is a documented relationship between MCT variability, the Mascarene High, cyclonic circulation, convection and southeastern African rainfall. It tends to become established in austral summer and peaks around February. ([American Meteorological Society Journals][4])
+
+And conveniently, you don't need new variables.
+
+Approximately:
+
+```text
+Mozambique Channel Trough
+      ↓
+MSLP anomaly
++ ζ850
++ u850/v850
++ TCWV
++ w700
+```
+
+So I would actually prioritize this over St Helena High for your application.
+
+---
+
+## This changes my recommended synoptic hierarchy
+
+For the extended East African domain I would have:
+
+| Diagnostic                              | Main variables               | Role                                     |
+| --------------------------------------- | ---------------------------- | ---------------------------------------- |
+| **Low-level moisture flow**             | q/TCWV + u/v 850             | Moisture supply                          |
+| **Low-level convergence**               | u/v 850                      | Rainfall forcing                         |
+| **Cyclonic disturbance / TC influence** | ζ850/ζ700 + MSLP             | Madagascar/Mozambique cyclone influence  |
+| **Mozambique Channel trough**           | MSLP + ζ850 + winds          | SE Africa/Madagascar rainfall            |
+| **Mascarene High**                      | MSLP + 850 winds             | Large-scale steering/moisture-flow state |
+| **Somali/Findlater flow**               | u/v 850                      | Eastern/northern EA moisture circulation |
+| **Upper-level support**                 | u/v200 + gh500               | Deep circulation                         |
+| **Ascent**                              | w850/700/500                 | Dynamic rainfall support                 |
+| **Moisture availability**               | TCWV/q/RH                    | Available water                          |
+| **Convection**                          | MUCAPE + temperature profile | Convective potential                     |
+| **Rainfall**                            | EPS `tp`                     | Direct forecast evidence                 |
+
+That gives you something physically continuous from **southern Madagascar → Mozambique Channel → mainland southern East Africa → equatorial East Africa**, rather than treating each named synoptic system independently.
+
+One further point: if disk/storage cost permits it, for this enlarged domain I would consider retaining **`q850`, `q700`, and perhaps `q500`**. Combined with your wind and vorticity diagnostics, these make cyclone-related moisture transport considerably easier to interpret.
+
+So my preferred domain would be **15°E–80°E, 40°S–25°N**, with **Mascarene High + Mozambique Channel Trough + relative vorticity/cyclonic disturbance** included, but **St Helena High excluded as a directly diagnosed feature**. That is probably the best balance between physical completeness and keeping the IFS corpus regional rather than effectively turning it back into a global archive.
+
+[1]: https://www.mdpi.com/2225-1154/8/7/86?utm_source=chatgpt.com "Climatology of the Mascarene High and Its Influence on Weather and Climate over Southern Africa | MDPI"
+[2]: https://www.mdpi.com/2225-1154/8/7/86/html?utm_source=chatgpt.com "Climatology of the Mascarene High and Its Influence on Weather and Climate over Southern Africa"
+[3]: https://ideas.repec.org/a/spr/nathaz/v121y2025i2d10.1007_s11069-024-06879-5.html?utm_source=chatgpt.com "The modulation of the MJO and tropical cyclone impact on East African rainfall by the Mascarene high during the 2018 “long rains”"
+[4]: https://journals.ametsoc.org/view/journals/clim/33/2/jcli-d-19-0267.1.xml?utm_source=chatgpt.com "Variability in the Mozambique Channel Trough and Impacts on Southeast African Rainfall in: Journal of Climate Volume 33 Issue 2 (2020)"

@@ -50,8 +50,8 @@ Install the required environment using micromamba:
 micromamba create -n aifs-etl -c conda-forge python=3.12.7 \
   && eval "$(micromamba shell hook --shell bash)" \
   && micromamba activate aifs-etl \
-  && micromamba install -c conda-forge earthkit-data ecmwf-opendata \
-  && pip install gcsfs s3fs earthkit-regrid==0.4.0 google-cloud-storage icechunk AI_WQ_package \
+  && micromamba install -c conda-forge "earthkit-data<1.0.0" ecmwf-opendata \
+  && pip install gcsfs s3fs earthkit-regrid==0.5.1 google-cloud-storage icechunk AI_WQ_package \
   && sudo apt update && sudo apt install nano
 ```
 
@@ -601,6 +601,11 @@ For operational forecast pipelines where reliability and speed matter, **Docker 
 
 ## Troubleshooting: Open-Data Input Prep Hangs at "surface fields..."
 
+> **Only affects `--fetch earthkit`.** Step 1 now defaults to `--fetch index`, which
+> talks to the mirror over plain single-range HTTP GETs and never touches
+> earthkit-data's download cache or its lock — so this hang cannot occur on the
+> default path. Kept for the fallback backend.
+
 ### Symptom
 
 `ecmwf_opendata_pkl_input_aifsens_v2.py` (Step 1, ETL) prints the first line and then
@@ -651,8 +656,12 @@ rm -f /tmp/earthkit-data-*/*.cache.lock
 # 3. Repair the env if drifted
 micromamba install -n aifs-etl -c conda-forge 'earthkit-data<1.0.0' 'earthkit-regrid=0.5.1'
 
-# 4. Re-run (defaults to the AWS mirror; ~3 min/member once the N320 matrix is cached)
+# 4. Re-run. The default --fetch index avoids this failure mode entirely
+#    (single-range HTTP, no earthkit-data cache lock) and is ~5x faster:
 python fp16FahamuAIFSv2/ecmwf_opendata_pkl_input_aifsens_v2.py --date YYYYMMDD --members 1-50
+# ...or stay on the old backend if you need it (AWS mirror, ~3 min/member when healthy):
+python fp16FahamuAIFSv2/ecmwf_opendata_pkl_input_aifsens_v2.py --date YYYYMMDD --members 1-50 \
+    --fetch earthkit --source aws
 ```
 
 ---

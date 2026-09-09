@@ -35,7 +35,7 @@ timesteps. Constants (`lsm,z,slor,sdor`) are still fetched once and replicated.
 
 | Script | Step | Role |
 |--------|------|------|
-| `ecmwf_opendata_pkl_input_aifsens_v2.py` | 1 (CPU) | ECMWF Open Data → 112-field input-state pkl per member, upload to GCS |
+| `ecmwf_opendata_pkl_input_aifsens_v2.py` | 1 (CPU) | ECMWF Open Data → 112-field input-state pkl per member, upload to GCS. Two backends via `--fetch`: **`index`** (default — one byte range per field, 16 concurrent, eccodes, `google` mirror; ~5× faster) or `earthkit` (original `earthkit-data` path, `aws`/`ecmwf` only). Bit-identical output. |
 | `fp16_automate_aifs_gpu_pipeline_v2.py` | 2 (GPU) | Orchestrator: per-member download → FP16 inference → upload → cleanup. Loads `ecmwf/aifs-ens-2.0` once. |
 | `fp16_multi_run_AIFS_ENS_v2.py` | 2 (GPU) | AIFS-ENS-2.0 FP16 runner (`run_ensemble_member`), 72h-chunked GRIB. Imported by the orchestrator. |
 | `pytorch_profile_fp16_v2.py` | 2 (GPU) | VRAM profiler for aifs-ens-2.0 (FP16 + chunks); PyTorch CUDA memory snapshot. See *GPU Memory Profiling*. |
@@ -47,11 +47,16 @@ The 112-field set: 9 surface + 4 constants + 4 soil (`stl1/2`,`swvl1/2`) + 12 wa
 
 ```bash
 # --- Step 1: input prep (CPU / ETL machine) ---
-# Latest open-data date, all 50 members, upload to gs://…/<date>/input_v2/
-python fp16FahamuAIFSv2/ecmwf_opendata_pkl_input_aifsens_v2.py --members 1-50
-# Pin a date / subset / skip upload while testing:
+# All 50 members, upload to gs://…/<date>/input_v2/. --date is REQUIRED
+# (latest-date detection was removed); defaults to --fetch index --source google.
+python fp16FahamuAIFSv2/ecmwf_opendata_pkl_input_aifsens_v2.py \
+    --date 20260611 --members 1-50
+# Subset / skip upload while testing:
 python fp16FahamuAIFSv2/ecmwf_opendata_pkl_input_aifsens_v2.py \
     --date 20260611 --members 1 --no-upload --keep-local
+# Fall back to the original earthkit-data backend (aws/ecmwf only):
+python fp16FahamuAIFSv2/ecmwf_opendata_pkl_input_aifsens_v2.py \
+    --date 20260611 --members 1-50 --fetch earthkit --source aws
 
 # --- Step 2: GPU inference (Ampere+ GPU, v2 software env) ---
 python fp16FahamuAIFSv2/fp16_automate_aifs_gpu_pipeline_v2.py \
@@ -61,10 +66,22 @@ python fp16FahamuAIFSv2/fp16_automate_aifs_gpu_pipeline_v2.py \
 
 - **Step 1 output:** `gs://aifs-aiquest-us-20251127/<date>_0000/input_v2/input_state_member_NNN.pkl`
   (kept separate from v1's `input/` so both versions coexist). Requires `coiled-data.json`
-  unless `--no-upload`. CPU only. `--source` picks the mirror
-  (**default `aws`**; also `ecmwf`/`azure`/`google`). The direct `ecmwf` portal is throttled
-  to 500 simultaneous connections, so the routine defaults to the **AWS S3** replica — pass
-  `--source ecmwf` only if you specifically need the primary portal.
+  unless `--no-upload`. CPU only.
+
+  **Retrieval backend (`--fetch`).** The default is **`index`**: read the `.index`
+  sidecar, then fetch **one single byte range per field**, 16 concurrent
+  (`INDEX_MAX_WORKERS`), decoding with eccodes. It defaults to the **`google`**
+  mirror and needs neither `earthkit-data` nor `ecmwf-opendata`.
+  **50 members: 2.9 h (20260806) vs 14.5 h (20260730).**
+
+  `--fetch earthkit` keeps the original `earthkit.data.from_source("ecmwf-open-data")`
+  path as a fallback (`aws`/`ecmwf` only). It is slow because `ecmwf-opendata` merges a
+  param group's byte ranges into **one combined multi-range request** and runs the groups
+  serially — a single `503 SlowDown` loses the whole request and costs a 120 s backoff.
+  That batching is also why `--source google` fails on this path (GCS answers multi-range
+  GETs with `400 InvalidArgument`); the mirror itself is fine, and serves single-range
+  requests normally. Both backends produce **bit-identical** pkls (verified field-by-field
+  on 6 members across 2 dates and both mirrors).
 - **Step 2 output:** `gs://…/<date>_0000/fp16_v2_forecasts/aifs_ens_forecast_<date>_memberNNN_h*.grib`.
   Needs an Ampere+ GPU and the v2 software env (below).
 - **Steps 3–5:** reuse the `shared/` CLIs with the **`--v2`** flag (added for this model).
@@ -101,12 +118,43 @@ python fp16FahamuAIFSv2/fp16_automate_aifs_gpu_pipeline_v2.py \
   > then re-run. To stop a run cleanly use Ctrl-C (SIGINT), not Ctrl-Z. The first `ekr.interpolate`
   > call also does a one-time N320 matrix download (tens of seconds) — that's normal, not a hang.
 
+  > **AWS S3 `503 Slow Down` can stall input prep for hours — restart it, don't wait.**
+  > The mirror is hardcoded to AWS S3. S3 occasionally throttles the pressure-level burst
+  > (14 levels × 6 params × 2 timesteps) with its `SlowDown` code, and `multiurl` then retries
+  > **500 times at 120 s** — ~16 h of zero progress. Seen 2026-07-23: 1 h 40 m, **0 pkls**, log
+  > repeating `Recovering from HTTP error [503 Slow Down], attempt N of 500`.
+  > It is **not** an outage — plain requests to
+  > `ecmwf-forecasts.s3.eu-central-1.amazonaws.com` returned 200 in <1 s throughout; the
+  > process had just wedged itself in a retry loop.
+  > **Fix:** `pkill -f ecmwf_opendata_pkl_input_aifsens_v2`, then re-run. earthkit's cache keeps
+  > the already-downloaded fields, so the in-flight member finishes in seconds.
+  > **Detect it:** pkl count stops rising while `503 Slow Down` repeats in the log.
+  > (Mirror health check, if ever needed: `google` and `ecmwf` were both healthy; **`azure` is
+  > broken — HTTP 409**. There is no `--source` flag; `create_input_state(..., source=)` still
+  > takes one in code.)
+
+  > **Cleanup between cycles.** A finished cycle costs ~630 GB
+  > (`icechunk_v2` ~584 GB + `input_states` ~48 GB + `nc_1p5deg` ~2 GB). Reclaim it with
+  > `python cleanup_aifs_run.py` (dry-run) → `--yes`. It keeps `aiwq/*.nc` (the quintile +
+  > climatology files), protects the newest `--keep-latest` cycles, and refuses to touch a
+  > cycle a running process is using.
+
   > **Why this matters:** the quintile CLI (3b) needs `AI_WQ_package` to fetch the 20-yr
-  > quintile **climatology** from the AI-WQ server (`ftp.ecmwf.int`, public — no password).
+  > quintile **climatology** from the AI-WQ server. It logs in as
+  > `ftplib.FTP('ftp.ecmwf.int', 'ai_weather_quest', password)` — so it **does need
+  > `AIWQ_PASSWORD`** (from `.env`). (The host also allows anonymous login, but the
+  > climatology is fetched with that account, not anonymously.)
   > If the package is missing it does **not** error loudly — it prints
   > `AI_WQ_package not available, using local climatology files`, silently falls back to
   > local files that don't exist, and ends with `No quintile data calculated`. If you see
   > that, the fix is `pip install AI_WQ_package`, **not** a server/FTP problem.
+  >
+  > **`530 Login authentication failed`** means `AIWQ_PASSWORD` was never loaded, not that
+  > the password is wrong. `load_dotenv()` used to search upward from the *script's*
+  > directory (`shared/`), which never holds the `.env` — so running
+  > `python ../shared/ensemble_quintile_analysis_cli.py` from this folder still missed it.
+  > Both CLIs now resolve `.env` from the **working directory** first
+  > (`find_dotenv(usecwd=True)`), so "run from this folder" behaves as documented.
 
   Then run from this folder so `coiled-data.json` and `.env` resolve:
 
@@ -123,6 +171,58 @@ python fp16FahamuAIFSv2/fp16_automate_aifs_gpu_pipeline_v2.py \
   # 3d — out-of-window only:  build + zip the per-variable/week AI-WQ files for a manual upload
   python ../shared/aiwq_individual_files_cli.py --date 20260625 --v2
   ```
+
+### Fast re-runs & out-of-window submissions (3b–3d optimized)
+
+For faster re-runs of Steps 3b–3d (climatology → quintiles → individual files → zip), or
+when rerunning after a network error:
+
+```bash
+# --- First run: full quintile pipeline ---
+python ../shared/ensemble_quintile_analysis_cli.py --date 20260625 --v2
+
+# --- If climatology FTP download fails, use direct FTP downloader ---
+python download_climatology.py --date 20260625 --output-dir ./
+
+# --- Fast re-run: load existing ensemble from icechunk store (avoids 50-member re-download) ---
+python ../shared/ensemble_quintile_analysis_cli.py --date 20260625 --v2 --skip-ensemble
+
+# --- Individual files + zip (as before) ---
+AIWQ_TEAM_NAME=Fahamu AIWQ_MODEL_NAME_FP16=fp16FahamuAIFSv2 AIWQ_PASSWORD=<pwd> \
+  python ../shared/aiwq_individual_files_cli.py --date 20260625 --v2
+
+# --- Cleanup intermediates (ensemble_nc_files, aiwq_individual_<date>, optionally icechunk_store) ---
+python cleanup_aiwq_intermediates.py --date 20260625                  # remove individual files only
+python cleanup_aiwq_intermediates.py --all                           # full cleanup (keep .zip + quintile file)
+python cleanup_aiwq_intermediates.py --all --dry-run                 # preview what will be deleted
+```
+
+**Output location:** `aiwq_submission_<date>_<team>_<model>.zip` is saved in the current working directory
+(typically `fp16FahamuAIFSv2/`) alongside the quintile file.
+
+**Performance notes:**
+
+| Step | First run | With `--skip-ensemble` |
+|------|-----------|----------------------|
+| 3b: Quintiles | ~2–3 min (50-member ensemble download + calculation) | ~1 min (load from cache + calculation) |
+| FTP climatology | ~1–2 min (or retried with backoff) | Skipped if files exist locally |
+| 3d: Individual files + zip | ~30 sec | ~30 sec |
+| **Total** | **~3–5 min** | **~1–2 min** |
+
+**Intermediate file sizes (can be cleaned up after zipping):**
+
+- `ensemble_nc_files/`: ~6.5 GB (50 members × ~130 MB each) — deleted by `cleanup_aiwq_intermediates.py`
+- `aiwq_individual_<date>/`: ~30 MB (6 .nc files) — deleted by `cleanup_aiwq_intermediates.py`
+- `ensemble_icechunk_store/`: ~10 GB (lazy-loaded zarr format) — kept for re-runs, delete with `--all`
+- `aiwq_submission_*.zip`: ~700 KB — **keep this for submission**
+
+**Climatology troubleshooting:**
+
+If `ensemble_quintile_analysis_cli.py` fails during climatology download with `530 Login authentication failed`:
+1. The direct FTP downloader (`download_climatology.py`) often succeeds where the AI_WQ_package fails
+   (different FTP session handling).
+2. Use `download_climatology.py` as a workaround, then retry the quintile CLI with `--skip-ensemble`.
+3. Files are cached locally and reused across runs, so the FTP step only runs once per date pair.
 
   > **Submission window:** the live endpoint (3c) only accepts a forecast start date within
   > its window (`start_date` → `start_date + 3 days`). Outside it you get

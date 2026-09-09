@@ -1,0 +1,629 @@
+(aifs-etl) cloudenv@coiled-dask-gcp-sew79-1597692-scheduler-0-26232505:/scratch/notebook/ea-aifs$ python ensemble_quintile_analysis_cli.py --date 20260430 --fp16
+============================================================
+AIFS Ensemble Quintile Analysis Pipeline (FP16)
+============================================================
+Forecast date: 20260430
+Precision mode: FP16
+Members: all available
+GCS bucket: aifs-aiquest-us-20251127
+Memory-efficient mode (icechunk): ENABLED
+
+📥 Step 1: Loading ensemble forecast from GCS (memory-efficient icechunk mode)...
+   This processes members one at a time to avoid OOM errors
+📥 Downloading ensemble NetCDF files from GCS (Memory-Efficient Mode)
+   Bucket: gs://aifs-aiquest-us-20251127/20260430_0000/fp16_1p5deg_nc/
+   Forecast date: 20260430
+   Mode: FP16
+   Icechunk store: ./ensemble_icechunk_store
+   🔍 Scanning for available NetCDF files...
+   ✅ Found 50 NetCDF files in GCS
+  2026-05-03T23:26:38.889324Z  WARN icechunk_arrow_object_store: The LocalFileSystem storage is not safe for concurrent commits. If more than one thread/process will attempt to commit at the same time, prefer using object stores.
+    at icechunk-arrow-object-store/src/lib.rs:196
+
+   📥 Processing member 001 (1/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member001.nc
+      🏗️  Creating icechunk store with member 001
+/scratch/notebook/ea-aifs/ensemble_quintile_analysis_cli.py:253: FutureWarning: The return type of `Dataset.dims` will be changed to return a set of dimension names in future, in order to be more consistent with `DataArray.dims`. To access a mapping from dimension names to lengths, please use `Dataset.sizes`.
+  print(f"      ✅ Created store with dimensions: {dict(ds.dims)}")
+      ✅ Created store with dimensions: {'member': 1, 'time': 5, 'step': 60, 'latitude': 121, 'longitude': 240}
+   📥 Processing member 002 (2/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member002.nc
+      ➕ Appending member 002 to icechunk store
+   📥 Processing member 003 (3/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member003.nc
+      ➕ Appending member 003 to icechunk store
+   📥 Processing member 004 (4/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member004.nc
+      ➕ Appending member 004 to icechunk store
+   📥 Processing member 005 (5/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member005.nc
+      ➕ Appending member 005 to icechunk store
+   📥 Processing member 006 (6/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member006.nc
+      ➕ Appending member 006 to icechunk store
+   📥 Processing member 007 (7/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member007.nc
+      ➕ Appending member 007 to icechunk store
+   📥 Processing member 008 (8/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member008.nc
+      ➕ Appending member 008 to icechunk store
+   📥 Processing member 009 (9/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member009.nc
+      ➕ Appending member 009 to icechunk store
+   📥 Processing member 010 (10/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member010.nc
+      ➕ Appending member 010 to icechunk store
+   📥 Processing member 011 (11/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member011.nc
+      ➕ Appending member 011 to icechunk store
+   📥 Processing member 012 (12/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member012.nc
+      ➕ Appending member 012 to icechunk store
+   📥 Processing member 013 (13/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member013.nc
+      ➕ Appending member 013 to icechunk store
+   📥 Processing member 014 (14/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member014.nc
+      ➕ Appending member 014 to icechunk store
+   📥 Processing member 015 (15/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member015.nc
+      ➕ Appending member 015 to icechunk store
+   📥 Processing member 016 (16/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member016.nc
+      ➕ Appending member 016 to icechunk store
+   📥 Processing member 017 (17/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member017.nc
+      ➕ Appending member 017 to icechunk store
+   📥 Processing member 018 (18/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member018.nc
+      ➕ Appending member 018 to icechunk store
+   📥 Processing member 019 (19/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member019.nc
+      ➕ Appending member 019 to icechunk store
+   📥 Processing member 020 (20/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member020.nc
+      ➕ Appending member 020 to icechunk store
+   📥 Processing member 021 (21/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member021.nc
+      ➕ Appending member 021 to icechunk store
+   📥 Processing member 022 (22/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member022.nc
+      ➕ Appending member 022 to icechunk store
+   📥 Processing member 023 (23/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member023.nc
+      ➕ Appending member 023 to icechunk store
+   📥 Processing member 024 (24/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member024.nc
+      ➕ Appending member 024 to icechunk store
+   📥 Processing member 025 (25/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member025.nc
+      ➕ Appending member 025 to icechunk store
+   📥 Processing member 026 (26/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member026.nc
+      ➕ Appending member 026 to icechunk store
+   📥 Processing member 027 (27/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member027.nc
+      ➕ Appending member 027 to icechunk store
+   📥 Processing member 028 (28/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member028.nc
+      ➕ Appending member 028 to icechunk store
+   📥 Processing member 029 (29/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member029.nc
+      ➕ Appending member 029 to icechunk store
+   📥 Processing member 030 (30/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member030.nc
+      ➕ Appending member 030 to icechunk store
+   📥 Processing member 031 (31/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member031.nc
+      ➕ Appending member 031 to icechunk store
+   📥 Processing member 032 (32/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member032.nc
+      ➕ Appending member 032 to icechunk store
+   📥 Processing member 033 (33/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member033.nc
+      ➕ Appending member 033 to icechunk store
+   📥 Processing member 034 (34/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member034.nc
+      ➕ Appending member 034 to icechunk store
+   📥 Processing member 035 (35/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member035.nc
+      ➕ Appending member 035 to icechunk store
+   📥 Processing member 036 (36/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member036.nc
+      ➕ Appending member 036 to icechunk store
+   📥 Processing member 037 (37/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member037.nc
+      ➕ Appending member 037 to icechunk store
+   📥 Processing member 038 (38/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member038.nc
+      ➕ Appending member 038 to icechunk store
+   📥 Processing member 039 (39/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member039.nc
+      ➕ Appending member 039 to icechunk store
+   📥 Processing member 040 (40/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member040.nc
+      ➕ Appending member 040 to icechunk store
+   📥 Processing member 041 (41/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member041.nc
+      ➕ Appending member 041 to icechunk store
+   📥 Processing member 042 (42/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member042.nc
+      ➕ Appending member 042 to icechunk store
+   📥 Processing member 043 (43/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member043.nc
+      ➕ Appending member 043 to icechunk store
+   📥 Processing member 044 (44/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member044.nc
+      ➕ Appending member 044 to icechunk store
+   📥 Processing member 045 (45/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member045.nc
+      ➕ Appending member 045 to icechunk store
+   📥 Processing member 046 (46/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member046.nc
+      ➕ Appending member 046 to icechunk store
+   📥 Processing member 047 (47/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member047.nc
+      ➕ Appending member 047 to icechunk store
+   📥 Processing member 048 (48/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member048.nc
+      ➕ Appending member 048 to icechunk store
+   📥 Processing member 049 (49/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member049.nc
+      ➕ Appending member 049 to icechunk store
+   📥 Processing member 050 (50/50)
+      Downloading aifs_ensemble_forecast_1p5deg_member050.nc
+      ➕ Appending member 050 to icechunk store
+   ✅ Committed icechunk store with 50 members
+   🔗 Opening final ensemble dataset from icechunk store...
+   ✅ Final ensemble dataset:
+      Members: 50
+      Variables: ['2t', 'tp', 'msl']
+/scratch/notebook/ea-aifs/ensemble_quintile_analysis_cli.py:301: FutureWarning: The return type of `Dataset.dims` will be changed to return a set of dimension names in future, in order to be more consistent with `DataArray.dims`. To access a mapping from dimension names to lengths, please use `Dataset.sizes`.
+  print(f"      Dimensions: {dict(ensemble_ds.dims)}")
+      Dimensions: {'member': 50, 'time': 5, 'step': 60, 'latitude': 121, 'longitude': 240}
+      Storage: icechunk (lazy-loaded, memory-efficient)
+✅ Loaded ensemble forecast:
+<xarray.Dataset> Size: 10GB
+Dimensions:    (member: 50, time: 5, step: 60, latitude: 121, longitude: 240)
+Coordinates:
+  * member     (member) int64 400B 1 2 3 4 5 6 7 8 9 ... 43 44 45 46 47 48 49 50
+  * step       (step) timedelta64[us] 480B 18 days 06:00:00 ... 33 days 00:00:00
+  * latitude   (latitude) float64 968B 90.0 88.5 87.0 85.5 ... -87.0 -88.5 -90.0
+  * longitude  (longitude) float64 2kB 0.0 1.5 3.0 4.5 ... 355.5 357.0 358.5
+Dimensions without coordinates: time
+Data variables:
+    2t         (member, time, step, latitude, longitude) float64 3GB dask.array<chunksize=(1, 5, 10, 60, 120), meta=np.ndarray>
+    tp         (member, time, step, latitude, longitude) float64 3GB dask.array<chunksize=(1, 5, 10, 60, 120), meta=np.ndarray>
+    msl        (member, time, step, latitude, longitude) float64 3GB dask.array<chunksize=(1, 5, 10, 60, 120), meta=np.ndarray>
+Attributes: (12/20)
+    class:            od
+    stream:           oper
+    type:             fc
+    expver:           0001
+    date:             20260430
+    time:             0
+    ...               ...
+    member:           member050
+    precision:        FP16
+    variables:        mslp, pr, tas
+    processing_date:  2026-05-03T23:28:12
+    members:          1-50
+    storage_backend:  icechunk
+
+📥 Step 2: Downloading climatology data...
+   Valid dates: 20260518, 20260525
+Downloading quintile climatology for tas...
+File '/climatologies/2026/tas_20yrCLIM_WEEKLYMEAN_quintiles_20260518.nc' has been downloaded to successfully.
+File '/climatologies/2026/tas_20yrCLIM_WEEKLYMEAN_quintiles_20260525.nc' has been downloaded to successfully.
+✓ Successfully downloaded tas climatology
+Downloading quintile climatology for mslp...
+File '/climatologies/2026/mslp_20yrCLIM_WEEKLYMEAN_quintiles_20260518.nc' has been downloaded to successfully.
+File '/climatologies/2026/mslp_20yrCLIM_WEEKLYMEAN_quintiles_20260525.nc' has been downloaded to successfully.
+✓ Successfully downloaded mslp climatology
+Downloading quintile climatology for pr...
+File '/climatologies/2026/pr_20yrCLIM_WEEKLYSUM_quintiles_20260518.nc' has been downloaded to successfully.
+File '/climatologies/2026/pr_20yrCLIM_WEEKLYSUM_quintiles_20260525.nc' has been downloaded to successfully.
+✓ Successfully downloaded pr climatology
+
+🔢 Step 3: Calculating quintile probabilities...
+📅 Using climatology for valid dates: 20260518, 20260525
+Processing 2t -> tas
+  Processing week1 using time chunks [0, 1]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 0: 12 steps
+      Added time chunk 1: 12 steps
+    Weekly mean (sum / 24 steps)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week1
+  Processing week2 using time chunks [2, 3, 4]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 2: 12 steps
+      Added time chunk 3: 12 steps
+      Added time chunk 4: 12 steps
+    Weekly mean (sum / 36 steps)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week2
+✓ Completed 2t
+Processing tp -> pr
+  Processing week1 using time chunks [0, 1]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 0: 12 steps
+      Added time chunk 1: 12 steps
+    Weekly precipitation (scaled to 7 days)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week1
+  Processing week2 using time chunks [2, 3, 4]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 2: 12 steps
+      Added time chunk 3: 12 steps
+      Added time chunk 4: 12 steps
+    Weekly precipitation (scaled to 7 days)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week2
+✓ Completed tp
+Processing msl -> mslp
+  Processing week1 using time chunks [0, 1]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 0: 12 steps
+      Added time chunk 1: 12 steps
+    Weekly mean (sum / 24 steps)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week1
+  Processing week2 using time chunks [2, 3, 4]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 2: 12 steps
+      Added time chunk 3: 12 steps
+      Added time chunk 4: 12 steps
+    Weekly mean (sum / 36 steps)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week2
+✓ Completed msl
+
+Quintile analysis complete:
+<xarray.Dataset> Size: 7MB
+Dimensions:        (latitude: 121, longitude: 240, time_week: 2, quintile: 5)
+Coordinates:
+  * latitude       (latitude) float64 968B 90.0 88.5 87.0 ... -87.0 -88.5 -90.0
+  * longitude      (longitude) float64 2kB 0.0 1.5 3.0 4.5 ... 355.5 357.0 358.5
+    week           (time_week) <U5 40B 'week1' 'week2'
+  * quintile       (quintile) float64 40B 0.2 0.4 0.6 0.8 1.0
+    time           int64 8B 0
+Dimensions without coordinates: time_week
+Data variables:
+    2t_quintiles   (time_week, quintile, latitude, longitude) float64 2MB 0.2...
+    tp_quintiles   (time_week, quintile, latitude, longitude) float64 2MB 0.4...
+    msl_quintiles  (time_week, quintile, latitude, longitude) float64 2MB 0.1...
+Attributes:
+    title:            Ensemble Forecast Quintile Probabilities
+    processing_date:  2026-05-03T23:29:38
+
+💾 Step 4: Saving results...
+✅ Saved to ./ensemble_quintile_probabilities_20260430_fp16.nc (6.7 MB)
+
+📊 Step 5: Analysis Summary
+----------------------------------------
+Mode: FP16
+Processed variables: ['2t_quintiles', 'tp_quintiles', 'msl_quintiles']
+Time periods: 2
+Grid resolution: 121x240
+
+Quintile probability statistics:
+
+  2t_quintiles:
+    Q1 (0.2): 0.306 mean probability
+    Q2 (0.4): 0.198 mean probability
+    Q3 (0.6): 0.171 mean probability
+    Q4 (0.8): 0.156 mean probability
+    Q5 (1.0): 0.170 mean probability
+
+  tp_quintiles:
+    Q1 (0.2): 0.273 mean probability
+    Q2 (0.4): 0.185 mean probability
+    Q3 (0.6): 0.180 mean probability
+    Q4 (0.8): 0.175 mean probability
+    Q5 (1.0): 0.188 mean probability
+
+  msl_quintiles:
+    Q1 (0.2): 0.163 mean probability
+    Q2 (0.4): 0.132 mean probability
+    Q3 (0.6): 0.155 mean probability
+    Q4 (0.8): 0.178 mean probability
+    Q5 (1.0): 0.372 mean probability
+
+📤 Step 6: Ready for AI Weather Quest submission
+   Output file: ./ensemble_quintile_probabilities_20260430_fp16.nc
+   Available variables: ['2t_quintiles', 'tp_quintiles', 'msl_quintiles']
+   Use submit_forecast() function to submit results
+(aifs-etl) cloudenv@coiled-dask-gcp-sew79-1597692-scheduler-0-26232505:/scratch/notebook/ea-aifs$ python forecast_submission_cli.py --date 20260430 --fp16
+Loaded credentials from .env
+============================================================
+AI Weather Quest Forecast Submission (FP16)
+============================================================
+
+Submitting 6 forecasts...
+  Team: Fahamu
+  Model: fp16FahamuAIFSv1
+  Date: 20260430
+  File: ./ensemble_quintile_probabilities_20260430_fp16.nc
+--------------------------------------------------
+
+[1/6] Submitting mslp_week1...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Directory 'forecast_submissions/20260430' already exists.
+/forecast_submissions/20260430/mslp_20260430_p1_Fahamu_fp16FahamuAIFSv1.nc
+  Successfully submitted mslp_week1
+
+[2/6] Submitting mslp_week2...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Directory 'forecast_submissions/20260430' already exists.
+/forecast_submissions/20260430/mslp_20260430_p2_Fahamu_fp16FahamuAIFSv1.nc
+  Successfully submitted mslp_week2
+
+[3/6] Submitting pr_week1...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Directory 'forecast_submissions/20260430' already exists.
+/forecast_submissions/20260430/pr_20260430_p1_Fahamu_fp16FahamuAIFSv1.nc
+  Successfully submitted pr_week1
+
+[4/6] Submitting pr_week2...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Directory 'forecast_submissions/20260430' already exists.
+/forecast_submissions/20260430/pr_20260430_p2_Fahamu_fp16FahamuAIFSv1.nc
+  Successfully submitted pr_week2
+
+[5/6] Submitting tas_week1...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Directory 'forecast_submissions/20260430' already exists.
+/forecast_submissions/20260430/tas_20260430_p1_Fahamu_fp16FahamuAIFSv1.nc
+  Successfully submitted tas_week1
+
+[6/6] Submitting tas_week2...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv1 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname         Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S        NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU          Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA       DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU    FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier       Fakeweather
+..         ...               ...            ...               ...
+97   LMSTam_01        LMSTeam_01        LMSTeam               LSB
+98   Weatnt_02   WeatherQuant_02   WeatherQuant        aerosphere
+99   Weatnt_03   WeatherQuant_03   WeatherQuant  aerosphereHybrid
+100  ECMWst_02      ECMWFtest_02      ECMWFtest         ECtesting
+101  Regist_01     RegimeCast_01     RegimeCast     RegimeCastS2S
+
+[102 rows x 4 columns]
+Directory 'forecast_submissions/20260430' already exists.
+/forecast_submissions/20260430/tas_20260430_p2_Fahamu_fp16FahamuAIFSv1.nc
+  Successfully submitted tas_week2
+
+============================================================
+SUBMISSION SUMMARY
+============================================================
+Mode: FP16
+Date: 20260430
+Team: Fahamu
+Model: fp16FahamuAIFSv1
+Successful: 6
+Failed: 0
+(aifs-etl) cloudenv@coiled-dask-gcp-sew79-1597692-scheduler-0-26232505:/scratch/notebook/ea-aifs$ 

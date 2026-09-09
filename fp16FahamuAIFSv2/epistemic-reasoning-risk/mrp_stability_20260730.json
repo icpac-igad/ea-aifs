@@ -1,0 +1,1420 @@
+{
+ "meta": {
+  "question": "are the 4 threshold-defined states of M/R/P resolvable on this ensemble?",
+  "protocol_note": "the k-regimes ARI test does NOT transfer: threshold states are a deterministic function of each member's own value, so subsample re-labelling is trivially stable and measures nothing. Tested instead: degeneracy, cut fragility, threshold sensitivity, sampling error.",
+  "member_csv": "/tmp/claude-1002/-home-ezra-ea-aifs-fp16FahamuAIFSv2-epistemic-reasoning-risk/08bdb4db-ce88-45dc-adad-7439a88ebb39/scratchpad/ev_members_k2.csv",
+  "unit_csv": "/tmp/claude-1002/-home-ezra-ea-aifs-fp16FahamuAIFSv2-epistemic-reasoning-risk/08bdb4db-ce88-45dc-adad-7439a88ebb39/scratchpad/ev_k2.csv",
+  "created": "2026-08-07T00:32:56+00:00",
+  "summary_by_node": {
+   "M": {
+    "verdicts": [
+     "DEGENERATE",
+     "DEGENERATE",
+     "FRAGILE",
+     "FRAGILE(cut-through-peak)",
+     "DEGENERATE",
+     "DEGENERATE"
+    ],
+    "mean_states_occupied": 1.33,
+    "max_states_occupied": 2,
+    "mean_tvd_10pct": 0.063,
+    "mean_widest_ci_n50": 0.053,
+    "mean_widest_ci_n_eff": 0.333
+   },
+   "R": {
+    "verdicts": [
+     "robust",
+     "DEGENERATE",
+     "FRAGILE(cut-through-peak)",
+     "FRAGILE",
+     "FRAGILE",
+     "FRAGILE(cut-through-peak)"
+    ],
+    "mean_states_occupied": 2.0,
+    "max_states_occupied": 3,
+    "mean_tvd_10pct": 0.13,
+    "mean_widest_ci_n50": 0.15,
+    "mean_widest_ci_n_eff": 0.75
+   },
+   "P": {
+    "verdicts": [
+     "FRAGILE(cut-through-peak)",
+     "DEGENERATE",
+     "robust",
+     "FRAGILE(cut-through-peak)",
+     "FRAGILE",
+     "FRAGILE"
+    ],
+    "mean_states_occupied": 2.0,
+    "max_states_occupied": 3,
+    "mean_tvd_10pct": 0.143,
+    "mean_widest_ci_n50": 0.133,
+    "mean_widest_ci_n_eff": 0.75
+   }
+  }
+ },
+ "cases": {
+  "reg.CONGO.v1|W1_wk3": {
+   "M": {
+    "n_members": 50,
+    "ess": 1.3,
+    "value_range": [
+     69.7,
+     139.7
+    ],
+    "state_fractions": [
+     1.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "occupancy": [
+     50,
+     0,
+     0,
+     0
+    ],
+    "n_states_occupied": 1,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 150.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.051,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 250.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 350.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.0,
+     "tvd_shift_25pct": 0.08
+    },
+    "boot_ci90_n50": [
+     [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.0,
+    "widest_ci_n_eff": 0.0,
+    "verdict": "DEGENERATE"
+   },
+   "R": {
+    "n_members": 50,
+    "ess": 1.3,
+    "value_range": [
+     1.567,
+     5.874
+    ],
+    "state_fractions": [
+     0.0,
+     0.0,
+     0.1,
+     0.9
+    ],
+    "occupancy": [
+     0,
+     0,
+     5,
+     45
+    ],
+    "n_states_occupied": 2,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": -1.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 0.5,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.011,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 2.0,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.383,
+      "n_within_5pct_spread": 2
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.08,
+     "tvd_shift_25pct": 0.22
+    },
+    "boot_ci90_n50": [
+     [
+      0.0,
+      0.0,
+      0.04,
+      0.82
+     ],
+     [
+      0.0,
+      0.0,
+      0.18,
+      0.96
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      1.0
+     ]
+    ],
+    "widest_ci_n50": 0.14,
+    "widest_ci_n_eff": 1.0,
+    "verdict": "robust"
+   },
+   "P": {
+    "n_members": 50,
+    "ess": 1.3,
+    "value_range": [
+     0.822,
+     2.622
+    ],
+    "state_fractions": [
+     0.08,
+     0.92,
+     0.0,
+     0.0
+    ],
+    "occupancy": [
+     4,
+     46,
+     0,
+     0
+    ],
+    "n_states_occupied": 2,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 1.0,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.569,
+      "n_within_5pct_spread": 2
+     },
+     {
+      "cut": 4.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.12,
+     "tvd_shift_25pct": 0.22
+    },
+    "boot_ci90_n50": [
+     [
+      0.02,
+      0.86,
+      0.0,
+      0.0
+     ],
+     [
+      0.14,
+      0.98,
+      0.0,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      1.0,
+      1.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.12,
+    "widest_ci_n_eff": 1.0,
+    "verdict": "FRAGILE(cut-through-peak)"
+   }
+  },
+  "reg.CONGO.v1|W2_wk45": {
+   "M": {
+    "n_members": 50,
+    "ess": 1.29,
+    "value_range": [
+     83.1,
+     136.9
+    ],
+    "state_fractions": [
+     1.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "occupancy": [
+     50,
+     0,
+     0,
+     0
+    ],
+    "n_states_occupied": 1,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 150.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.006,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 250.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 350.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.0,
+     "tvd_shift_25pct": 0.02
+    },
+    "boot_ci90_n50": [
+     [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.0,
+    "widest_ci_n_eff": 0.0,
+    "verdict": "DEGENERATE"
+   },
+   "R": {
+    "n_members": 50,
+    "ess": 1.29,
+    "value_range": [
+     2.173,
+     6.208
+    ],
+    "state_fractions": [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ],
+    "occupancy": [
+     0,
+     0,
+     0,
+     50
+    ],
+    "n_states_occupied": 1,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": -1.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 0.5,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 2.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.089,
+      "n_within_5pct_spread": 1
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.02,
+     "tvd_shift_25pct": 0.12
+    },
+    "boot_ci90_n50": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "widest_ci_n50": 0.0,
+    "widest_ci_n_eff": 0.0,
+    "verdict": "DEGENERATE"
+   },
+   "P": {
+    "n_members": 50,
+    "ess": 1.29,
+    "value_range": [
+     1.412,
+     3.591
+    ],
+    "state_fractions": [
+     0.0,
+     1.0,
+     0.0,
+     0.0
+    ],
+    "occupancy": [
+     0,
+     50,
+     0,
+     0
+    ],
+    "n_states_occupied": 1,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 1.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.042,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 4.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.013,
+      "n_within_5pct_spread": 0
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.0,
+     "tvd_shift_25pct": 0.08
+    },
+    "boot_ci90_n50": [
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.0,
+    "widest_ci_n_eff": 0.0,
+    "verdict": "DEGENERATE"
+   }
+  },
+  "reg.EQIO.v1|W1_wk3": {
+   "M": {
+    "n_members": 50,
+    "ess": 1.47,
+    "value_range": [
+     263.1,
+     399.9
+    ],
+    "state_fractions": [
+     0.0,
+     0.0,
+     0.84,
+     0.16
+    ],
+    "occupancy": [
+     0,
+     0,
+     42,
+     8
+    ],
+    "n_states_occupied": 2,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 150.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 250.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.039,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 350.0,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.732,
+      "n_within_5pct_spread": 8
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.24,
+     "tvd_shift_25pct": 0.52
+    },
+    "boot_ci90_n50": [
+     [
+      0.0,
+      0.0,
+      0.76,
+      0.08
+     ],
+     [
+      0.0,
+      0.0,
+      0.92,
+      0.24
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      1.0
+     ]
+    ],
+    "widest_ci_n50": 0.16,
+    "widest_ci_n_eff": 1.0,
+    "verdict": "FRAGILE"
+   },
+   "R": {
+    "n_members": 50,
+    "ess": 1.47,
+    "value_range": [
+     -5.129,
+     -0.632
+    ],
+    "state_fractions": [
+     0.86,
+     0.14,
+     0.0,
+     0.0
+    ],
+    "occupancy": [
+     43,
+     7,
+     0,
+     0
+    ],
+    "n_states_occupied": 2,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": -1.0,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.739,
+      "n_within_5pct_spread": 9
+     },
+     {
+      "cut": 0.5,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.023,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 2.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.14,
+     "tvd_shift_25pct": 0.36
+    },
+    "boot_ci90_n50": [
+     [
+      0.78,
+      0.06,
+      0.0,
+      0.0
+     ],
+     [
+      0.94,
+      0.22,
+      0.0,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      1.0,
+      1.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.16,
+    "widest_ci_n_eff": 1.0,
+    "verdict": "FRAGILE(cut-through-peak)"
+   },
+   "P": {
+    "n_members": 50,
+    "ess": 1.47,
+    "value_range": [
+     0.931,
+     4.52
+    ],
+    "state_fractions": [
+     0.02,
+     0.92,
+     0.06,
+     0.0
+    ],
+    "occupancy": [
+     1,
+     46,
+     3,
+     0
+    ],
+    "n_states_occupied": 3,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 1.0,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.139,
+      "n_within_5pct_spread": 1
+     },
+     {
+      "cut": 4.0,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.307,
+      "n_within_5pct_spread": 2
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.06,
+     "tvd_shift_25pct": 0.22
+    },
+    "boot_ci90_n50": [
+     [
+      0.0,
+      0.86,
+      0.02,
+      0.0
+     ],
+     [
+      0.06,
+      0.98,
+      0.12,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      1.0,
+      1.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.12,
+    "widest_ci_n_eff": 1.0,
+    "verdict": "robust"
+   }
+  },
+  "reg.EQIO.v1|W2_wk45": {
+   "M": {
+    "n_members": 50,
+    "ess": 1.33,
+    "value_range": [
+     251.7,
+     372.0
+    ],
+    "state_fractions": [
+     0.0,
+     0.0,
+     0.88,
+     0.12
+    ],
+    "occupancy": [
+     0,
+     0,
+     44,
+     6
+    ],
+    "n_states_occupied": 2,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 150.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 250.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.124,
+      "n_within_5pct_spread": 1
+     },
+     {
+      "cut": 350.0,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.585,
+      "n_within_5pct_spread": 5
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.14,
+     "tvd_shift_25pct": 0.3
+    },
+    "boot_ci90_n50": [
+     [
+      0.0,
+      0.0,
+      0.8,
+      0.04
+     ],
+     [
+      0.0,
+      0.0,
+      0.96,
+      0.2
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      1.0
+     ]
+    ],
+    "widest_ci_n50": 0.16,
+    "widest_ci_n_eff": 1.0,
+    "verdict": "FRAGILE(cut-through-peak)"
+   },
+   "R": {
+    "n_members": 50,
+    "ess": 1.33,
+    "value_range": [
+     -3.822,
+     1.743
+    ],
+    "state_fractions": [
+     0.62,
+     0.36,
+     0.02,
+     0.0
+    ],
+    "occupancy": [
+     31,
+     18,
+     1,
+     0
+    ],
+    "n_states_occupied": 3,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": -1.0,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.993,
+      "n_within_5pct_spread": 11
+     },
+     {
+      "cut": 0.5,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.28,
+      "n_within_5pct_spread": 2
+     },
+     {
+      "cut": 2.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.041,
+      "n_within_5pct_spread": 1
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.22,
+     "tvd_shift_25pct": 0.46
+    },
+    "boot_ci90_n50": [
+     [
+      0.5,
+      0.24,
+      0.0,
+      0.0
+     ],
+     [
+      0.74,
+      0.46,
+      0.06,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      1.0,
+      1.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.24,
+    "widest_ci_n_eff": 1.0,
+    "verdict": "FRAGILE"
+   },
+   "P": {
+    "n_members": 50,
+    "ess": 1.33,
+    "value_range": [
+     1.466,
+     6.073
+    ],
+    "state_fractions": [
+     0.0,
+     0.8,
+     0.2,
+     0.0
+    ],
+    "occupancy": [
+     0,
+     40,
+     10,
+     0
+    ],
+    "n_states_occupied": 2,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 1.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.071,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 4.0,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.736,
+      "n_within_5pct_spread": 6
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.18,
+     "tvd_shift_25pct": 0.48
+    },
+    "boot_ci90_n50": [
+     [
+      0.0,
+      0.7,
+      0.1,
+      0.0
+     ],
+     [
+      0.0,
+      0.9,
+      0.3,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      1.0,
+      1.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.2,
+    "widest_ci_n_eff": 1.0,
+    "verdict": "FRAGILE(cut-through-peak)"
+   }
+  },
+  "reg.IGAD.v1|W1_wk3": {
+   "M": {
+    "n_members": 50,
+    "ess": 1.85,
+    "value_range": [
+     157.7,
+     226.3
+    ],
+    "state_fractions": [
+     0.0,
+     1.0,
+     0.0,
+     0.0
+    ],
+    "occupancy": [
+     0,
+     50,
+     0,
+     0
+    ],
+    "n_states_occupied": 1,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 150.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.025,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 250.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 350.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.0,
+     "tvd_shift_25pct": 0.02
+    },
+    "boot_ci90_n50": [
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.0,
+    "widest_ci_n_eff": 0.0,
+    "verdict": "DEGENERATE"
+   },
+   "R": {
+    "n_members": 50,
+    "ess": 1.85,
+    "value_range": [
+     -0.763,
+     1.963
+    ],
+    "state_fractions": [
+     0.0,
+     0.28,
+     0.72,
+     0.0
+    ],
+    "occupancy": [
+     0,
+     14,
+     36,
+     0
+    ],
+    "n_states_occupied": 2,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": -1.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.032,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 0.5,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.907,
+      "n_within_5pct_spread": 10
+     },
+     {
+      "cut": 2.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.226,
+      "n_within_5pct_spread": 4
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.22,
+     "tvd_shift_25pct": 0.5
+    },
+    "boot_ci90_n50": [
+     [
+      0.0,
+      0.18,
+      0.62,
+      0.0
+     ],
+     [
+      0.0,
+      0.38,
+      0.82,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      1.0,
+      1.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.2,
+    "widest_ci_n_eff": 1.0,
+    "verdict": "FRAGILE"
+   },
+   "P": {
+    "n_members": 50,
+    "ess": 1.85,
+    "value_range": [
+     0.73,
+     1.84
+    ],
+    "state_fractions": [
+     0.24,
+     0.76,
+     0.0,
+     0.0
+    ],
+    "occupancy": [
+     12,
+     38,
+     0,
+     0
+    ],
+    "n_states_occupied": 2,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 1.0,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.892,
+      "n_within_5pct_spread": 11
+     },
+     {
+      "cut": 4.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.22,
+     "tvd_shift_25pct": 0.44
+    },
+    "boot_ci90_n50": [
+     [
+      0.14,
+      0.66,
+      0.0,
+      0.0
+     ],
+     [
+      0.34,
+      0.86,
+      0.0,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      1.0,
+      1.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.2,
+    "widest_ci_n_eff": 1.0,
+    "verdict": "FRAGILE"
+   }
+  },
+  "reg.IGAD.v1|W2_wk45": {
+   "M": {
+    "n_members": 50,
+    "ess": 1.87,
+    "value_range": [
+     164.9,
+     230.5
+    ],
+    "state_fractions": [
+     0.0,
+     1.0,
+     0.0,
+     0.0
+    ],
+    "occupancy": [
+     0,
+     50,
+     0,
+     0
+    ],
+    "n_states_occupied": 1,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 150.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.006,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 250.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 350.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.0,
+     "tvd_shift_25pct": 0.06
+    },
+    "boot_ci90_n50": [
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.0,
+    "widest_ci_n_eff": 0.0,
+    "verdict": "DEGENERATE"
+   },
+   "R": {
+    "n_members": 50,
+    "ess": 1.87,
+    "value_range": [
+     -0.037,
+     1.994
+    ],
+    "state_fractions": [
+     0.0,
+     0.14,
+     0.86,
+     0.0
+    ],
+    "occupancy": [
+     0,
+     7,
+     43,
+     0
+    ],
+    "n_states_occupied": 2,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": -1.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     },
+     {
+      "cut": 0.5,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.678,
+      "n_within_5pct_spread": 4
+     },
+     {
+      "cut": 2.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.242,
+      "n_within_5pct_spread": 1
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.1,
+     "tvd_shift_25pct": 0.34
+    },
+    "boot_ci90_n50": [
+     [
+      0.0,
+      0.06,
+      0.78,
+      0.0
+     ],
+     [
+      0.0,
+      0.22,
+      0.94,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.0,
+      0.5,
+      0.0
+     ],
+     [
+      0.0,
+      0.5,
+      1.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.16,
+    "widest_ci_n_eff": 0.5,
+    "verdict": "FRAGILE(cut-through-peak)"
+   },
+   "P": {
+    "n_members": 50,
+    "ess": 1.87,
+    "value_range": [
+     0.656,
+     2.332
+    ],
+    "state_fractions": [
+     0.18,
+     0.82,
+     0.0,
+     0.0
+    ],
+    "occupancy": [
+     9,
+     41,
+     0,
+     0
+    ],
+    "n_states_occupied": 2,
+    "n_states_defined": 4,
+    "cuts": [
+     {
+      "cut": 1.0,
+      "inside_range": true,
+      "density_ratio_at_cut": 0.852,
+      "n_within_5pct_spread": 10
+     },
+     {
+      "cut": 4.0,
+      "inside_range": false,
+      "density_ratio_at_cut": 0.0,
+      "n_within_5pct_spread": 0
+     }
+    ],
+    "threshold_sensitivity": {
+     "tvd_shift_10pct": 0.28,
+     "tvd_shift_25pct": 0.52
+    },
+    "boot_ci90_n50": [
+     [
+      0.1,
+      0.74,
+      0.0,
+      0.0
+     ],
+     [
+      0.26,
+      0.9,
+      0.0,
+      0.0
+     ]
+    ],
+    "boot_ci90_n_eff": [
+     [
+      0.0,
+      0.5,
+      0.0,
+      0.0
+     ],
+     [
+      0.5,
+      1.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "widest_ci_n50": 0.16,
+    "widest_ci_n_eff": 0.5,
+    "verdict": "FRAGILE"
+   }
+  }
+ }
+}

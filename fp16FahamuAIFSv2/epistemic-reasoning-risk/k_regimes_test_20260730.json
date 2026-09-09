@@ -1,0 +1,516 @@
+{
+ "meta": {
+  "tag": "cycle-20260730_0000",
+  "seed": 20260806,
+  "created": "2026-08-06T16:59:14+00:00",
+  "question": "is k=4 over-partitioning a rank-~2 ensemble spread?",
+  "mean_stability_by_k": {
+   "2": 0.817,
+   "3": 0.619,
+   "4": 0.557,
+   "5": 0.544,
+   "6": 0.535
+  },
+  "most_stable_k": 2
+ },
+ "cases": {
+  "IGAD_EA|W1_wk3": {
+   "region": "IGAD_EA",
+   "region_name": "Greater Horn / IGAD box on native N320 cells",
+   "lead_window": "W1_wk3",
+   "n_cells": 11342,
+   "n_members": 50,
+   "ess": 1.849,
+   "redundancy": 0.962,
+   "pc_variance_shares": [
+    0.7201,
+    0.1325,
+    0.0603,
+    0.0224,
+    0.0174
+   ],
+   "k": {
+    "2": {
+     "stability_ari_mean": 0.827,
+     "stability_ari_sd": 0.186,
+     "silhouette": 0.429,
+     "var_explained": 0.564,
+     "occupancy": [
+      26,
+      24
+     ],
+     "verdict": "stable"
+    },
+    "3": {
+     "stability_ari_mean": 0.516,
+     "stability_ari_sd": 0.185,
+     "silhouette": 0.286,
+     "var_explained": 0.673,
+     "occupancy": [
+      17,
+      17,
+      16
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "4": {
+     "stability_ari_mean": 0.517,
+     "stability_ari_sd": 0.16,
+     "silhouette": 0.225,
+     "var_explained": 0.712,
+     "occupancy": [
+      15,
+      8,
+      16,
+      11
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "5": {
+     "stability_ari_mean": 0.496,
+     "stability_ari_sd": 0.143,
+     "silhouette": 0.241,
+     "var_explained": 0.752,
+     "occupancy": [
+      15,
+      3,
+      16,
+      11,
+      5
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "6": {
+     "stability_ari_mean": 0.462,
+     "stability_ari_sd": 0.128,
+     "silhouette": 0.217,
+     "var_explained": 0.776,
+     "occupancy": [
+      4,
+      3,
+      14,
+      11,
+      5,
+      13
+     ],
+     "verdict": "UNSTABLE"
+    }
+   }
+  },
+  "EQ_INDIAN|W1_wk3": {
+   "region": "EQ_INDIAN",
+   "region_name": "Equatorial Indian Ocean",
+   "lead_window": "W1_wk3",
+   "n_cells": 12816,
+   "n_members": 50,
+   "ess": 1.467,
+   "redundancy": 0.97,
+   "pc_variance_shares": [
+    0.8192,
+    0.0986,
+    0.0187,
+    0.015,
+    0.0102
+   ],
+   "k": {
+    "2": {
+     "stability_ari_mean": 0.965,
+     "stability_ari_sd": 0.056,
+     "silhouette": 0.453,
+     "var_explained": 0.558,
+     "occupancy": [
+      24,
+      26
+     ],
+     "verdict": "stable"
+    },
+    "3": {
+     "stability_ari_mean": 0.632,
+     "stability_ari_sd": 0.221,
+     "silhouette": 0.406,
+     "var_explained": 0.665,
+     "occupancy": [
+      24,
+      22,
+      4
+     ],
+     "verdict": "marginal"
+    },
+    "4": {
+     "stability_ari_mean": 0.532,
+     "stability_ari_sd": 0.172,
+     "silhouette": 0.3,
+     "var_explained": 0.718,
+     "occupancy": [
+      23,
+      11,
+      4,
+      12
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "5": {
+     "stability_ari_mean": 0.568,
+     "stability_ari_sd": 0.151,
+     "silhouette": 0.273,
+     "var_explained": 0.737,
+     "occupancy": [
+      23,
+      7,
+      4,
+      12,
+      4
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "6": {
+     "stability_ari_mean": 0.576,
+     "stability_ari_sd": 0.13,
+     "silhouette": 0.252,
+     "var_explained": 0.799,
+     "occupancy": [
+      15,
+      7,
+      4,
+      11,
+      4,
+      9
+     ],
+     "verdict": "UNSTABLE"
+    }
+   }
+  },
+  "CONGO|W1_wk3": {
+   "region": "CONGO",
+   "region_name": "Congo basin",
+   "lead_window": "W1_wk3",
+   "n_cells": 3456,
+   "n_members": 50,
+   "ess": 1.296,
+   "redundancy": 0.974,
+   "pc_variance_shares": [
+    0.8749,
+    0.0722,
+    0.0287,
+    0.0084,
+    0.0034
+   ],
+   "k": {
+    "2": {
+     "stability_ari_mean": 0.793,
+     "stability_ari_sd": 0.181,
+     "silhouette": 0.462,
+     "var_explained": 0.597,
+     "occupancy": [
+      30,
+      20
+     ],
+     "verdict": "stable"
+    },
+    "3": {
+     "stability_ari_mean": 0.643,
+     "stability_ari_sd": 0.266,
+     "silhouette": 0.389,
+     "var_explained": 0.757,
+     "occupancy": [
+      18,
+      13,
+      19
+     ],
+     "verdict": "marginal"
+    },
+    "4": {
+     "stability_ari_mean": 0.58,
+     "stability_ari_sd": 0.224,
+     "silhouette": 0.351,
+     "var_explained": 0.814,
+     "occupancy": [
+      19,
+      6,
+      7,
+      18
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "5": {
+     "stability_ari_mean": 0.567,
+     "stability_ari_sd": 0.149,
+     "silhouette": 0.328,
+     "var_explained": 0.855,
+     "occupancy": [
+      16,
+      6,
+      7,
+      7,
+      14
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "6": {
+     "stability_ari_mean": 0.584,
+     "stability_ari_sd": 0.158,
+     "silhouette": 0.299,
+     "var_explained": 0.875,
+     "occupancy": [
+      11,
+      6,
+      4,
+      7,
+      7,
+      15
+     ],
+     "verdict": "UNSTABLE"
+    }
+   }
+  },
+  "IGAD_EA|W2_wk45": {
+   "region": "IGAD_EA",
+   "region_name": "Greater Horn / IGAD box on native N320 cells",
+   "lead_window": "W2_wk45",
+   "n_cells": 11342,
+   "n_members": 50,
+   "ess": 1.869,
+   "redundancy": 0.962,
+   "pc_variance_shares": [
+    0.7195,
+    0.1126,
+    0.0461,
+    0.0403,
+    0.0247
+   ],
+   "k": {
+    "2": {
+     "stability_ari_mean": 0.905,
+     "stability_ari_sd": 0.157,
+     "silhouette": 0.401,
+     "var_explained": 0.514,
+     "occupancy": [
+      28,
+      22
+     ],
+     "verdict": "stable"
+    },
+    "3": {
+     "stability_ari_mean": 0.541,
+     "stability_ari_sd": 0.283,
+     "silhouette": 0.299,
+     "var_explained": 0.639,
+     "occupancy": [
+      22,
+      11,
+      17
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "4": {
+     "stability_ari_mean": 0.58,
+     "stability_ari_sd": 0.191,
+     "silhouette": 0.242,
+     "var_explained": 0.673,
+     "occupancy": [
+      10,
+      10,
+      17,
+      13
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "5": {
+     "stability_ari_mean": 0.503,
+     "stability_ari_sd": 0.151,
+     "silhouette": 0.162,
+     "var_explained": 0.706,
+     "occupancy": [
+      11,
+      10,
+      8,
+      8,
+      13
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "6": {
+     "stability_ari_mean": 0.494,
+     "stability_ari_sd": 0.111,
+     "silhouette": 0.152,
+     "var_explained": 0.734,
+     "occupancy": [
+      11,
+      3,
+      8,
+      8,
+      13,
+      7
+     ],
+     "verdict": "UNSTABLE"
+    }
+   }
+  },
+  "EQ_INDIAN|W2_wk45": {
+   "region": "EQ_INDIAN",
+   "region_name": "Equatorial Indian Ocean",
+   "lead_window": "W2_wk45",
+   "n_cells": 12816,
+   "n_members": 50,
+   "ess": 1.327,
+   "redundancy": 0.973,
+   "pc_variance_shares": [
+    0.8661,
+    0.0496,
+    0.0213,
+    0.0158,
+    0.0102
+   ],
+   "k": {
+    "2": {
+     "stability_ari_mean": 0.532,
+     "stability_ari_sd": 0.33,
+     "silhouette": 0.398,
+     "var_explained": 0.547,
+     "occupancy": [
+      29,
+      21
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "3": {
+     "stability_ari_mean": 0.761,
+     "stability_ari_sd": 0.187,
+     "silhouette": 0.395,
+     "var_explained": 0.749,
+     "occupancy": [
+      14,
+      24,
+      12
+     ],
+     "verdict": "stable"
+    },
+    "4": {
+     "stability_ari_mean": 0.577,
+     "stability_ari_sd": 0.174,
+     "silhouette": 0.27,
+     "var_explained": 0.789,
+     "occupancy": [
+      11,
+      14,
+      11,
+      14
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "5": {
+     "stability_ari_mean": 0.536,
+     "stability_ari_sd": 0.163,
+     "silhouette": 0.27,
+     "var_explained": 0.83,
+     "occupancy": [
+      10,
+      12,
+      7,
+      14,
+      7
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "6": {
+     "stability_ari_mean": 0.547,
+     "stability_ari_sd": 0.131,
+     "silhouette": 0.247,
+     "var_explained": 0.855,
+     "occupancy": [
+      10,
+      12,
+      7,
+      7,
+      7,
+      7
+     ],
+     "verdict": "UNSTABLE"
+    }
+   }
+  },
+  "CONGO|W2_wk45": {
+   "region": "CONGO",
+   "region_name": "Congo basin",
+   "lead_window": "W2_wk45",
+   "n_cells": 3456,
+   "n_members": 50,
+   "ess": 1.288,
+   "redundancy": 0.974,
+   "pc_variance_shares": [
+    0.8771,
+    0.0806,
+    0.0188,
+    0.0059,
+    0.0033
+   ],
+   "k": {
+    "2": {
+     "stability_ari_mean": 0.881,
+     "stability_ari_sd": 0.217,
+     "silhouette": 0.495,
+     "var_explained": 0.579,
+     "occupancy": [
+      30,
+      20
+     ],
+     "verdict": "stable"
+    },
+    "3": {
+     "stability_ari_mean": 0.619,
+     "stability_ari_sd": 0.22,
+     "silhouette": 0.364,
+     "var_explained": 0.702,
+     "occupancy": [
+      19,
+      17,
+      14
+     ],
+     "verdict": "marginal"
+    },
+    "4": {
+     "stability_ari_mean": 0.558,
+     "stability_ari_sd": 0.16,
+     "silhouette": 0.323,
+     "var_explained": 0.756,
+     "occupancy": [
+      19,
+      5,
+      13,
+      13
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "5": {
+     "stability_ari_mean": 0.593,
+     "stability_ari_sd": 0.212,
+     "silhouette": 0.315,
+     "var_explained": 0.792,
+     "occupancy": [
+      18,
+      3,
+      13,
+      8,
+      8
+     ],
+     "verdict": "UNSTABLE"
+    },
+    "6": {
+     "stability_ari_mean": 0.55,
+     "stability_ari_sd": 0.16,
+     "silhouette": 0.253,
+     "var_explained": 0.78,
+     "occupancy": [
+      17,
+      2,
+      13,
+      5,
+      5,
+      8
+     ],
+     "verdict": "UNSTABLE"
+    }
+   }
+  }
+ }
+}

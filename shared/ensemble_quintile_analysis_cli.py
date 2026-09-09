@@ -30,9 +30,14 @@ from typing import List, Optional
 from google.cloud import storage
 from google.oauth2 import service_account
 
-# Load environment variables from .env file
-from dotenv import load_dotenv
-load_dotenv()
+# Load environment variables from .env file.
+# Search the *working directory* first: the docs say "run from this folder so
+# coiled-data.json and .env resolve", but dotenv's default find_dotenv() searches
+# upward from THIS module's directory (shared/), which never holds the .env — so the
+# AIWQ_PASSWORD silently stayed unset and the climatology FTP login failed with
+# "530 Login authentication failed". Fall back to the module-relative search.
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv(usecwd=True) or find_dotenv())
 
 def parse_member_range(member_str: str) -> List[int]:
     """Parse member range string like '1-50' or '1,2,3' into list of integers."""
@@ -82,8 +87,15 @@ def valid_dates(forecast_date: str):
     return fc_valid_date1, fc_valid_date2
 
 
-def get_quintile_clim(forecast_date: str, variable: str, password: Optional[str] = None):
-    """Retrieve quintile climatology for a given forecast date and variable."""
+def get_quintile_clim(forecast_date: str, variable: str, password: Optional[str] = None,
+                      max_retries: int = 5, dest: Optional[str] = None):
+    """Retrieve quintile climatology with robust retry logic.
+
+    ``dest`` is the directory to download into (passed to AI_WQ's
+    ``local_destination``). If None, AI_WQ writes to the CWD -- which, with 3b run
+    under ``--clim-dir``/``--work-dir``, put the files where the calc step could not
+    find them. Always pass ``dest=clim_dir``.
+    """
     if not AIWQ_AVAILABLE:
         raise RuntimeError("AI_WQ_package is required for climatology retrieval")
 
@@ -91,20 +103,77 @@ def get_quintile_clim(forecast_date: str, variable: str, password: Optional[str]
         password = os.getenv('AIWQ_PASSWORD') or os.getenv('AIWQ_SUBMIT_PWD')
 
     fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
+    if dest:
+        os.makedirs(dest, exist_ok=True)
 
-    clim1 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(
-        fc_valid_date1, variable, password=password
-    )
-    clim2 = retrieve_evaluation_data.retrieve_20yr_quintile_clim(
-        fc_valid_date2, variable, password=password
-    )
+    import time
+
+    def retry_download(date_str, var, attempt=0):
+        try:
+            # Add initial delay to avoid FTP server rate limiting
+            if attempt == 0:
+                time.sleep(2)
+
+            # local_destination is a DIRECTORY -> AI_WQ writes {dest}/{var}_...nc
+            return retrieve_evaluation_data.retrieve_20yr_quantile_clim(
+                date_str, var, password=password,
+                local_destination=(dest.rstrip('/') if dest else None)
+            )
+        except Exception as e:
+            if attempt < max_retries - 1:
+                # Exponential backoff: 3s, 6s, 12s, 24s, 48s
+                wait_time = (2 ** attempt) * 3
+                error_msg = str(e).split('\n')[0]
+                print(f"      ⚠️  Download attempt {attempt + 1}/{max_retries} failed: {error_msg}")
+                print(f"      Waiting {wait_time}s before retry...")
+                time.sleep(wait_time)
+                return retry_download(date_str, var, attempt + 1)
+            else:
+                print(f"      ❌ All {max_retries} attempts failed")
+                raise
+
+    clim1 = retry_download(fc_valid_date1, variable)
+    clim2 = retry_download(fc_valid_date2, variable)
 
     return clim1, clim2
 
 
+def check_local_climatology_files(forecast_date: str, clim_dir: str = "./",
+                                 variables: Optional[List[str]] = None) -> dict:
+    """Check which climatology files exist locally."""
+    if variables is None:
+        variables = ['tas', 'mslp', 'pr']
+
+    fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
+
+    local_files = {
+        'tas': {
+            'week1': os.path.join(clim_dir, f"tas_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date1}.nc"),
+            'week2': os.path.join(clim_dir, f"tas_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date2}.nc")
+        },
+        'mslp': {
+            'week1': os.path.join(clim_dir, f"mslp_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date1}.nc"),
+            'week2': os.path.join(clim_dir, f"mslp_20yrCLIM_WEEKLYMEAN_quintiles_{fc_valid_date2}.nc")
+        },
+        'pr': {
+            'week1': os.path.join(clim_dir, f"pr_20yrCLIM_WEEKLYSUM_quintiles_{fc_valid_date1}.nc"),
+            'week2': os.path.join(clim_dir, f"pr_20yrCLIM_WEEKLYSUM_quintiles_{fc_valid_date2}.nc")
+        }
+    }
+
+    available = {}
+    for var in variables:
+        available[var] = {
+            'week1': os.path.exists(local_files[var]['week1']),
+            'week2': os.path.exists(local_files[var]['week2'])
+        }
+
+    return available, local_files
+
+
 def download_all_quintiles(forecast_date: str, variables: Optional[List[str]] = None,
-                          password: Optional[str] = None):
-    """Download quintile climatologies for multiple variables."""
+                          password: Optional[str] = None, clim_dir: str = "./"):
+    """Download quintile climatologies for multiple variables (skip if local files exist)."""
     if variables is None:
         variables = ['tas', 'mslp', 'pr']
 
@@ -113,12 +182,20 @@ def download_all_quintiles(forecast_date: str, variables: Optional[List[str]] = 
 
     fc_valid_date1, fc_valid_date2 = valid_dates(forecast_date)
 
+    available, local_files = check_local_climatology_files(forecast_date, clim_dir, variables)
+
+    # Check if all files are available locally
+    all_available = all(available[v]['week1'] and available[v]['week2'] for v in variables)
+    if all_available:
+        print(f"   ✅ All climatology files found locally - skipping download")
+        return {}
+
     quintile_data = {}
 
     for variable in variables:
         print(f"Downloading quintile climatology for {variable}...")
         try:
-            clim1, clim2 = get_quintile_clim(forecast_date, variable, password)
+            clim1, clim2 = get_quintile_clim(forecast_date, variable, password, dest=clim_dir)
             quintile_data[variable] = {
                 fc_valid_date1: clim1,
                 fc_valid_date2: clim2
@@ -141,10 +218,15 @@ def download_ensemble_nc_from_gcs_chunked(
     icechunk_store_path: str = "./ensemble_icechunk_store",
     skip_download_if_exists: bool = True,
     fp16: bool = False,
-    v2: bool = False
+    v2: bool = False,
+    local_only: bool = False
 ):
     """
     Download ensemble NetCDF files from GCS and combine using icechunk for memory efficiency.
+
+    ``local_only=True`` skips GCS entirely: members are discovered by globbing ``local_dir``
+    for ``*member<NNN>.nc``. Use it when Step 3a was run with ``--no-upload --output-dir``
+    (fully local pipeline, no service account needed).
 
     This function processes members one at a time and stores them in an icechunk store,
     avoiding the memory issues that occur when loading all members into RAM at once.
@@ -184,41 +266,58 @@ def download_ensemble_nc_from_gcs_chunked(
     print(f"   Icechunk store: {icechunk_store_path}")
 
     try:
-        # Initialize GCS client
-        credentials = service_account.Credentials.from_service_account_file(service_account_path)
-        client = storage.Client(credentials=credentials)
-        bucket = client.bucket(gcs_bucket)
+        bucket = None
+        if not local_only:
+            # Initialize GCS client
+            credentials = service_account.Credentials.from_service_account_file(service_account_path)
+            client = storage.Client(credentials=credentials)
+            bucket = client.bucket(gcs_bucket)
 
         # Create local directory and clean up existing icechunk store
         os.makedirs(local_dir, exist_ok=True)
         if os.path.exists(icechunk_store_path):
             shutil.rmtree(icechunk_store_path)
 
-        # List available NetCDF files in GCS
-        print(f"   🔍 Scanning for available NetCDF files...")
-        blobs = bucket.list_blobs(prefix=gcs_prefix)
-
         available_files = []
-        for blob in blobs:
-            if blob.name.endswith('.nc'):
-                # Extract member number from filename
-                filename = os.path.basename(blob.name)
-                match = re.search(r'member(\d+)\.nc', filename)
+        if local_only:
+            print(f"   🔍 Scanning local directory {local_dir} for NetCDF files...")
+            for filename in sorted(os.listdir(local_dir)):
+                match = re.search(r'member(\d+)\.nc$', filename)
                 if match:
                     member_num = int(match.group(1))
                     if members is None or member_num in members:
                         available_files.append({
-                            'blob_name': blob.name,
+                            'blob_name': None,
                             'filename': filename,
                             'member': member_num
                         })
+        else:
+            # List available NetCDF files in GCS
+            print(f"   🔍 Scanning for available NetCDF files...")
+            blobs = bucket.list_blobs(prefix=gcs_prefix)
+
+            for blob in blobs:
+                if blob.name.endswith('.nc'):
+                    # Extract member number from filename
+                    filename = os.path.basename(blob.name)
+                    match = re.search(r'member(\d+)\.nc', filename)
+                    if match:
+                        member_num = int(match.group(1))
+                        if members is None or member_num in members:
+                            available_files.append({
+                                'blob_name': blob.name,
+                                'filename': filename,
+                                'member': member_num
+                            })
 
         if not available_files:
-            print(f"   ❌ No NetCDF files found in {gcs_prefix}")
+            where = local_dir if local_only else gcs_prefix
+            print(f"   ❌ No NetCDF files found in {where}")
             return None
 
         available_files.sort(key=lambda x: x['member'])  # Sort by member number
-        print(f"   ✅ Found {len(available_files)} NetCDF files in GCS")
+        print(f"   ✅ Found {len(available_files)} NetCDF files "
+              f"{'locally' if local_only else 'in GCS'}")
 
         # Create local icechunk repository
         local_storage = icechunk.local_filesystem_storage(icechunk_store_path)
@@ -227,6 +326,13 @@ def download_ensemble_nc_from_gcs_chunked(
 
         zarr_group = "ensemble_forecast"
         processed_count = 0
+        # (icechunk_store, icechunk_ref) seen per member. Collected across ALL
+        # members rather than read once off the store, because the group attrs
+        # only retain the LAST member written -- which would silently present a
+        # mixed-source ensemble as single-source. A cycle can hold two forecast
+        # stores (N320 and O96, or a tier-B corpus and its sidecar), so members
+        # built from different stores is a real failure, not a hypothetical.
+        member_provenance = set()
 
         # Process members one by one for memory efficiency
         for i, file_info in enumerate(available_files):
@@ -235,7 +341,9 @@ def download_ensemble_nc_from_gcs_chunked(
 
             # Download file if it doesn't exist locally
             local_path = os.path.join(local_dir, file_info['filename'])
-            if not os.path.exists(local_path) or not skip_download_if_exists:
+            if local_only:
+                print(f"      Using local file: {file_info['filename']}")
+            elif not os.path.exists(local_path) or not skip_download_if_exists:
                 print(f"      Downloading {file_info['filename']}")
                 blob = bucket.blob(file_info['blob_name'])
                 blob.download_to_filename(local_path)
@@ -245,6 +353,9 @@ def download_ensemble_nc_from_gcs_chunked(
             # Load and process single member
             try:
                 ds = xr.open_dataset(local_path, chunks={'member': 1, 'step': 10, 'latitude': 60, 'longitude': 120})
+
+                member_provenance.add((ds.attrs.get("icechunk_store", ""),
+                                       ds.attrs.get("icechunk_ref", "")))
 
                 # Update member coordinate to the correct value
                 ds = ds.assign_coords(member=[member_num])
@@ -297,6 +408,24 @@ def download_ensemble_nc_from_gcs_chunked(
             'processing_date': str(np.datetime64('now')),
             'storage_backend': 'icechunk'
         })
+
+        # Provenance of the FORECAST data, kept distinct from this staging store.
+        known = {p for p in member_provenance if any(p)}
+        if len(known) == 1:
+            src_store, src_ref = known.pop()
+            ensemble_ds.attrs['source_icechunk_store'] = src_store
+            ensemble_ds.attrs['source_icechunk_ref'] = src_ref
+        elif len(known) > 1:
+            listed = "; ".join(f"{a}@{b}" for a, b in sorted(known))
+            ensemble_ds.attrs['source_icechunk_store'] = f"MIXED: {listed}"
+            ensemble_ds.attrs['source_icechunk_ref'] = "MIXED"
+            print(f"   ⚠️  MIXED PROVENANCE -- members came from more than one "
+                  f"forecast store: {listed}")
+            print(f"      The quintile product will say so. Do not submit it "
+                  f"until you know why.")
+        else:
+            ensemble_ds.attrs['source_icechunk_store'] = "unknown"
+            ensemble_ds.attrs['source_icechunk_ref'] = "unknown"
 
         print(f"   ✅ Final ensemble dataset:")
         print(f"      Members: {ensemble_ds.sizes['member']}")
@@ -445,6 +574,32 @@ def download_ensemble_nc_from_gcs(
         return None
 
 
+def load_existing_icechunk_store(icechunk_store_path: str = "./ensemble_icechunk_store"):
+    """Load existing icechunk store without downloading."""
+    if not ICECHUNK_AVAILABLE:
+        raise RuntimeError("icechunk is required. Install with: pip install icechunk")
+
+    if not os.path.exists(icechunk_store_path):
+        raise FileNotFoundError(f"Icechunk store not found at {icechunk_store_path}")
+
+    print(f"📂 Loading existing icechunk store from {icechunk_store_path}...")
+    local_storage = icechunk.local_filesystem_storage(icechunk_store_path)
+    repo = icechunk.Repository.open(local_storage)
+    read_session = repo.readonly_session(branch="main")
+
+    zarr_group = "ensemble_forecast"
+    ensemble_ds = xr.open_zarr(read_session.store, group=zarr_group,
+                             chunks={'member': 1, 'step': 10, 'latitude': 60, 'longitude': 120})
+
+    print(f"✅ Loaded existing ensemble dataset:")
+    print(f"   Members: {ensemble_ds.sizes['member']}")
+    print(f"   Variables: {list(ensemble_ds.data_vars)}")
+    print(f"   Dimensions: {dict(ensemble_ds.sizes)}")
+    print(f"   Storage: icechunk (lazy-loaded, memory-efficient)")
+
+    return ensemble_ds
+
+
 def load_ensemble_from_gcs(
     forecast_date: str,
     members: Optional[List[int]] = None,
@@ -453,7 +608,10 @@ def load_ensemble_from_gcs(
     use_icechunk: bool = True,
     skip_download_if_exists: bool = True,
     fp16: bool = False,
-    v2: bool = False
+    v2: bool = False,
+    local_only: bool = False,
+    local_dir: str = "./ensemble_nc_files",
+    icechunk_store_path: str = "./ensemble_icechunk_store"
 ):
     """
     Convenience function to download and load ensemble data from GCS.
@@ -482,9 +640,12 @@ def load_ensemble_from_gcs(
             members=members,
             gcs_bucket=gcs_bucket,
             service_account_path=service_account_path,
+            local_dir=local_dir,
+            icechunk_store_path=icechunk_store_path,
             skip_download_if_exists=skip_download_if_exists,
             fp16=fp16,
-            v2=v2
+            v2=v2,
+            local_only=local_only
         )
     else:
         return download_ensemble_nc_from_gcs(
@@ -669,6 +830,14 @@ def calculate_ensemble_quintiles(forecast_ds, forecast_date: str,
             'title': 'Ensemble Forecast Quintile Probabilities',
             'processing_date': str(np.datetime64('now'))
         })
+        # Carry the forecast store forward. This file is the submission input and
+        # the ONLY per-cycle artifact cleanup_aifs_run.py keeps (it purges
+        # nc_1p5deg, where the member-level attrs live), so without this a cleaned
+        # cycle can no longer say which store produced what was submitted.
+        for k in ('source_icechunk_store', 'source_icechunk_ref',
+                  'forecast_date', 'precision'):
+            if k in getattr(forecast_ds, 'attrs', {}):
+                result_ds.attrs[k] = forecast_ds.attrs[k]
         return result_ds
     else:
         print("No quintile data calculated")
@@ -743,8 +912,8 @@ Examples:
     # Disable icechunk (not recommended for large ensembles - may cause OOM killed)
     python ensemble_quintile_analysis_cli.py --date 20251127 --no-icechunk
 
-    # Skip redownloading existing files
-    python ensemble_quintile_analysis_cli.py --date 20251127 --skip-existing
+    # Skip ensemble download and use existing icechunk store (fast retry for climatology/quintiles)
+    python ensemble_quintile_analysis_cli.py --date 20251127 --skip-ensemble
         """
     )
 
@@ -761,10 +930,20 @@ Examples:
                        help='Disable icechunk memory-efficient loading (not recommended for large ensembles)')
     parser.add_argument('--skip-existing', action='store_true', default=True,
                        help='Skip downloading existing files (default: True)')
-    parser.add_argument('--output-dir', default='./',
-                       help='Output directory for quintile file')
-    parser.add_argument('--clim-dir', default='./',
-                       help='Directory containing climatology files')
+    parser.add_argument('--skip-ensemble', action='store_true',
+                       help='Skip Step 1 (ensemble download) and load existing icechunk store. Useful for retrying climatology/quintile calculation.')
+    parser.add_argument('--work-dir', default='./',
+                       help='Home directory for ALL per-cycle artifacts (quintile file, '
+                            'climatology, temp icechunk store). --output-dir/--clim-dir '
+                            'override individually; both default to --work-dir. Default: ./')
+    parser.add_argument('--output-dir', default=None,
+                       help='Output directory for quintile file (default: --work-dir)')
+    parser.add_argument('--clim-dir', default=None,
+                       help='Directory for climatology files (default: --work-dir)')
+    parser.add_argument('--local-nc-dir', default=None,
+                       help='Read the per-member 1.5deg NetCDFs from this local directory '
+                            'instead of GCS (pairs with Step 3a --no-upload --output-dir). '
+                            'No service account needed for the ensemble load.')
     parser.add_argument('--bucket', default='aifs-aiquest-us-20251127',
                        help='GCS bucket name')
     parser.add_argument('--service-account', default='coiled-data.json',
@@ -801,26 +980,52 @@ Examples:
     print(f"Members: {args.members if args.members else 'all available'}")
     print(f"GCS bucket: {args.bucket}")
     print(f"Memory-efficient mode (icechunk): {'ENABLED' if use_icechunk else 'DISABLED'}")
+    if args.skip_ensemble:
+        print("⏭️  Skipping Step 1 (ensemble download) - will load existing icechunk store")
     print()
 
-    # Step 1: Download ensemble NetCDF files
-    if use_icechunk:
-        print("📥 Step 1: Loading ensemble forecast from GCS (memory-efficient icechunk mode)...")
-        print("   This processes members one at a time to avoid OOM errors")
-    else:
-        print("📥 Step 1: Loading ensemble forecast from GCS...")
-        print("   ⚠️  Warning: Loading all members into RAM - may cause OOM killed!")
+    # One --work-dir to home all per-cycle artifacts (quintile file, climatology, temp
+    # icechunk store). --output-dir / --clim-dir override individually; all default to
+    # --work-dir, which itself defaults to "./" (backward compatible).
+    work_dir = args.work_dir
+    out_dir = args.output_dir if args.output_dir is not None else work_dir
+    clim_dir = args.clim_dir if args.clim_dir is not None else work_dir
+    icechunk_store_path = os.path.join(work_dir, "ensemble_icechunk_store")
+    os.makedirs(work_dir, exist_ok=True)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    if clim_dir:
+        os.makedirs(clim_dir, exist_ok=True)
 
-    fds = load_ensemble_from_gcs(
-        forecast_date,
-        members=members,
-        gcs_bucket=args.bucket,
-        service_account_path=args.service_account,
-        use_icechunk=use_icechunk,
-        skip_download_if_exists=args.skip_existing,
-        fp16=args.fp16,
-        v2=args.v2
-    )
+    # Step 1: Download ensemble NetCDF files or load existing store
+    if args.skip_ensemble:
+        print("📂 Step 1: Loading existing ensemble forecast from icechunk store...")
+        try:
+            fds = load_existing_icechunk_store(icechunk_store_path)
+        except (FileNotFoundError, RuntimeError) as e:
+            print(f"❌ Error loading existing icechunk store: {e}")
+            return 1
+    else:
+        if use_icechunk:
+            print("📥 Step 1: Loading ensemble forecast from GCS (memory-efficient icechunk mode)...")
+            print("   This processes members one at a time to avoid OOM errors")
+        else:
+            print("📥 Step 1: Loading ensemble forecast from GCS...")
+            print("   ⚠️  Warning: Loading all members into RAM - may cause OOM killed!")
+
+        fds = load_ensemble_from_gcs(
+            forecast_date,
+            members=members,
+            gcs_bucket=args.bucket,
+            service_account_path=args.service_account,
+            use_icechunk=use_icechunk,
+            skip_download_if_exists=args.skip_existing,
+            fp16=args.fp16,
+            v2=args.v2,
+            local_only=bool(args.local_nc_dir),
+            local_dir=args.local_nc_dir or os.path.join(work_dir, "ensemble_nc_files"),
+            icechunk_store_path=icechunk_store_path,
+        )
 
     if fds is None:
         print("❌ Failed to load ensemble data")
@@ -836,14 +1041,14 @@ Examples:
     print(f"   Valid dates: {fc_valid_date1}, {fc_valid_date2}")
 
     if AIWQ_AVAILABLE:
-        download_all_quintiles(forecast_date)
+        download_all_quintiles(forecast_date, clim_dir=clim_dir)
     else:
         print("   Warning: AI_WQ_package not available, using local climatology files")
     print()
 
     # Step 3: Calculate quintiles
     print("🔢 Step 3: Calculating quintile probabilities...")
-    quintile_ds = calculate_ensemble_quintiles(fds, forecast_date, args.clim_dir)
+    quintile_ds = calculate_ensemble_quintiles(fds, forecast_date, clim_dir)
 
     if quintile_ds is None:
         print("❌ Failed to calculate quintiles")
@@ -855,13 +1060,13 @@ Examples:
     # Step 4: Save results
     print("\n💾 Step 4: Saving results...")
     if args.v2:
-        output_file = os.path.join(args.output_dir,
+        output_file = os.path.join(out_dir,
                                    f'ensemble_quintile_probabilities_{forecast_date}_v2.nc')
     elif args.fp16:
-        output_file = os.path.join(args.output_dir,
+        output_file = os.path.join(out_dir,
                                    f'ensemble_quintile_probabilities_{forecast_date}_fp16.nc')
     else:
-        output_file = os.path.join(args.output_dir,
+        output_file = os.path.join(out_dir,
                                    f'ensemble_quintile_probabilities_{forecast_date}.nc')
 
     quintile_ds.to_netcdf(output_file)

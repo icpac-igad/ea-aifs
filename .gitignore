@@ -1,2 +1,32 @@
 # GCP service-account key — must never be committed
 coiled-data.json
+
+# Python bytecode caches
+__pycache__/
+*.py[cod]
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Exported conversation transcripts.
+# The same rule exists in fp16FahamuAIFSv2/.gitignore, but a nested .gitignore does
+# not reach the repo root — which is how 2026-06-30-aifs-ebox-login2.txt sat here
+# staged-able with two ECBox bearer tokens in it (including the `Ws6…` one that
+# run_commands_20260813.md flags as exposed). A transcript records whatever was
+# pasted into the session, so treat the family as untrackable, not the one filename.
+#
+# Match on the date prefix, not on "-aifs-": of the three transcripts untracked in
+# 6e5f21c, only one actually contained "-aifs-" — the others were "-aif-sens-" and
+# "-espeitmic-risk-". The spelling of the middle of the name is not a rule.
+# The one family that must stay trackable is the submission transcript
+# fp16FahamuAIFSv2_<date>.txt, which is a deliberate per-cycle record.
+20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.txt
+20*-aifs-*.txt
+*login*.txt
+
+# Editor swap/backup files — never commit.
+# A swap file of a secret-bearing transcript carries the same content, and the
+# transcript rules above (*login*.txt) do not match a .swp suffix.
+*.swp
+*.swo
+*~

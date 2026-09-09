@@ -1,0 +1,732 @@
+(aifs-gpu) ezra@e4drr-crafd-icpac:~/ea-aifs/fp16FahamuAIFSv2$ python ../shared/ensemble_quintile_analysis_cli.py --date 20260806 --v2 \
+    --local-nc-dir /tank/projects/aifs-run/20260806_0000/nc_1p5deg --work-dir /tank/projects/aifs-run/20260806_0000/aiwq
+============================================================
+AIFS Ensemble Quintile Analysis Pipeline (FP16-v2)
+============================================================
+Forecast date: 20260806
+Precision mode: FP16-v2
+Members: all available
+GCS bucket: aifs-aiquest-us-20251127
+Memory-efficient mode (icechunk): ENABLED
+
+📥 Step 1: Loading ensemble forecast from GCS (memory-efficient icechunk mode)...
+   This processes members one at a time to avoid OOM errors
+📥 Downloading ensemble NetCDF files from GCS (Memory-Efficient Mode)
+   Bucket: gs://aifs-aiquest-us-20251127/20260806_0000/fp16_v2_1p5deg_nc/
+   Forecast date: 20260806
+   Mode: FP16-v2
+   Icechunk store: /tank/projects/aifs-run/20260806_0000/aiwq/ensemble_icechunk_store
+   🔍 Scanning local directory /tank/projects/aifs-run/20260806_0000/nc_1p5deg for NetCDF files...
+   ✅ Found 50 NetCDF files locally
+  [2m2026-08-08T10:20:13.596197Z[0m [33m WARN[0m [1;33micechunk_arrow_object_store[0m[33m: [33mThe LocalFileSystem storage is not safe for concurrent commits. If more than one thread/process will attempt to commit at the same time, prefer using object stores.[0m
+    [2;3mat[0m icechunk-arrow-object-store/src/lib.rs:220
+
+   📥 Processing member 001 (1/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member001.nc
+      🏗️  Creating icechunk store with member 001
+/home/ezra/ea-aifs/fp16FahamuAIFSv2/../shared/ensemble_quintile_analysis_cli.py:357: FutureWarning: The return type of `Dataset.dims` will be changed to return a set of dimension names in future, in order to be more consistent with `DataArray.dims`. To access a mapping from dimension names to lengths, please use `Dataset.sizes`.
+  print(f"      ✅ Created store with dimensions: {dict(ds.dims)}")
+      ✅ Created store with dimensions: {'member': 1, 'time': 5, 'step': 60, 'latitude': 121, 'longitude': 240}
+   📥 Processing member 002 (2/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member002.nc
+      ➕ Appending member 002 to icechunk store
+   📥 Processing member 003 (3/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member003.nc
+      ➕ Appending member 003 to icechunk store
+   📥 Processing member 004 (4/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member004.nc
+      ➕ Appending member 004 to icechunk store
+   📥 Processing member 005 (5/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member005.nc
+      ➕ Appending member 005 to icechunk store
+   📥 Processing member 006 (6/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member006.nc
+      ➕ Appending member 006 to icechunk store
+   📥 Processing member 007 (7/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member007.nc
+      ➕ Appending member 007 to icechunk store
+   📥 Processing member 008 (8/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member008.nc
+      ➕ Appending member 008 to icechunk store
+   📥 Processing member 009 (9/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member009.nc
+      ➕ Appending member 009 to icechunk store
+   📥 Processing member 010 (10/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member010.nc
+      ➕ Appending member 010 to icechunk store
+   📥 Processing member 011 (11/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member011.nc
+      ➕ Appending member 011 to icechunk store
+   📥 Processing member 012 (12/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member012.nc
+      ➕ Appending member 012 to icechunk store
+   📥 Processing member 013 (13/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member013.nc
+      ➕ Appending member 013 to icechunk store
+   📥 Processing member 014 (14/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member014.nc
+      ➕ Appending member 014 to icechunk store
+   📥 Processing member 015 (15/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member015.nc
+      ➕ Appending member 015 to icechunk store
+   📥 Processing member 016 (16/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member016.nc
+      ➕ Appending member 016 to icechunk store
+   📥 Processing member 017 (17/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member017.nc
+      ➕ Appending member 017 to icechunk store
+   📥 Processing member 018 (18/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member018.nc
+      ➕ Appending member 018 to icechunk store
+   📥 Processing member 019 (19/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member019.nc
+      ➕ Appending member 019 to icechunk store
+   📥 Processing member 020 (20/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member020.nc
+      ➕ Appending member 020 to icechunk store
+   📥 Processing member 021 (21/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member021.nc
+      ➕ Appending member 021 to icechunk store
+   📥 Processing member 022 (22/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member022.nc
+      ➕ Appending member 022 to icechunk store
+   📥 Processing member 023 (23/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member023.nc
+      ➕ Appending member 023 to icechunk store
+   📥 Processing member 024 (24/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member024.nc
+      ➕ Appending member 024 to icechunk store
+   📥 Processing member 025 (25/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member025.nc
+      ➕ Appending member 025 to icechunk store
+   📥 Processing member 026 (26/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member026.nc
+      ➕ Appending member 026 to icechunk store
+   📥 Processing member 027 (27/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member027.nc
+      ➕ Appending member 027 to icechunk store
+   📥 Processing member 028 (28/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member028.nc
+      ➕ Appending member 028 to icechunk store
+   📥 Processing member 029 (29/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member029.nc
+      ➕ Appending member 029 to icechunk store
+   📥 Processing member 030 (30/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member030.nc
+      ➕ Appending member 030 to icechunk store
+   📥 Processing member 031 (31/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member031.nc
+      ➕ Appending member 031 to icechunk store
+   📥 Processing member 032 (32/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member032.nc
+      ➕ Appending member 032 to icechunk store
+   📥 Processing member 033 (33/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member033.nc
+      ➕ Appending member 033 to icechunk store
+   📥 Processing member 034 (34/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member034.nc
+      ➕ Appending member 034 to icechunk store
+   📥 Processing member 035 (35/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member035.nc
+      ➕ Appending member 035 to icechunk store
+   📥 Processing member 036 (36/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member036.nc
+      ➕ Appending member 036 to icechunk store
+   📥 Processing member 037 (37/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member037.nc
+      ➕ Appending member 037 to icechunk store
+   📥 Processing member 038 (38/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member038.nc
+      ➕ Appending member 038 to icechunk store
+   📥 Processing member 039 (39/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member039.nc
+      ➕ Appending member 039 to icechunk store
+   📥 Processing member 040 (40/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member040.nc
+      ➕ Appending member 040 to icechunk store
+   📥 Processing member 041 (41/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member041.nc
+      ➕ Appending member 041 to icechunk store
+   📥 Processing member 042 (42/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member042.nc
+      ➕ Appending member 042 to icechunk store
+   📥 Processing member 043 (43/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member043.nc
+      ➕ Appending member 043 to icechunk store
+   📥 Processing member 044 (44/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member044.nc
+      ➕ Appending member 044 to icechunk store
+   📥 Processing member 045 (45/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member045.nc
+      ➕ Appending member 045 to icechunk store
+   📥 Processing member 046 (46/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member046.nc
+      ➕ Appending member 046 to icechunk store
+   📥 Processing member 047 (47/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member047.nc
+      ➕ Appending member 047 to icechunk store
+   📥 Processing member 048 (48/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member048.nc
+      ➕ Appending member 048 to icechunk store
+   📥 Processing member 049 (49/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member049.nc
+      ➕ Appending member 049 to icechunk store
+   📥 Processing member 050 (50/50)
+      Using local file: aifs_ensemble_forecast_1p5deg_member050.nc
+      ➕ Appending member 050 to icechunk store
+   ✅ Committed icechunk store with 50 members
+   🔗 Opening final ensemble dataset from icechunk store...
+   ✅ Final ensemble dataset:
+      Members: 50
+      Variables: ['msl', 'tp', '2t']
+/home/ezra/ea-aifs/fp16FahamuAIFSv2/../shared/ensemble_quintile_analysis_cli.py:405: FutureWarning: The return type of `Dataset.dims` will be changed to return a set of dimension names in future, in order to be more consistent with `DataArray.dims`. To access a mapping from dimension names to lengths, please use `Dataset.sizes`.
+  print(f"      Dimensions: {dict(ensemble_ds.dims)}")
+      Dimensions: {'member': 50, 'time': 5, 'step': 60, 'latitude': 121, 'longitude': 240}
+      Storage: icechunk (lazy-loaded, memory-efficient)
+✅ Loaded ensemble forecast:
+<xarray.Dataset> Size: 10GB
+Dimensions:    (member: 50, time: 5, step: 60, latitude: 121, longitude: 240)
+Coordinates:
+  * member     (member) int64 400B 1 2 3 4 5 6 7 8 9 ... 43 44 45 46 47 48 49 50
+  * step       (step) timedelta64[us] 480B 18 days 06:00:00 ... 33 days 00:00:00
+  * latitude   (latitude) float64 968B 90.0 88.5 87.0 85.5 ... -87.0 -88.5 -90.0
+  * longitude  (longitude) float64 2kB 0.0 1.5 3.0 4.5 ... 355.5 357.0 358.5
+Dimensions without coordinates: time
+Data variables:
+    msl        (member, time, step, latitude, longitude) float64 3GB dask.array<chunksize=(1, 5, 10, 60, 120), meta=np.ndarray>
+    tp         (member, time, step, latitude, longitude) float64 3GB dask.array<chunksize=(1, 5, 10, 60, 120), meta=np.ndarray>
+    2t         (member, time, step, latitude, longitude) float64 3GB dask.array<chunksize=(1, 5, 10, 60, 120), meta=np.ndarray>
+Attributes: (12/13)
+    title:            AIFS Ensemble Forecast - Icechunk Store (FP16-v2)
+    description:      Memory-efficient ensemble forecast with 50 members
+    source:           ECMWF AIFS processed through icechunk for memory effici...
+    grid_resolution:  1.5 degrees
+    forecast_date:    20260806
+    member:           member050
+    ...               ...
+    variables:        mslp, pr, tas
+    icechunk_store:   /tank/projects/aifs-run/20260806_0000/icechunk_v2
+    icechunk_ref:     cycle-20260806_0000
+    processing_date:  2026-08-08T10:20:47
+    members:          1-50
+    storage_backend:  icechunk
+
+📥 Step 2: Downloading climatology data...
+   Valid dates: 20260824, 20260831
+Downloading quintile climatology for tas...
+File '/climatologies/2026/tas_20yrCLIM_WEEKLYMEAN_quintiles_20260824.nc' has been downloaded to successfully.
+File '/climatologies/2026/tas_20yrCLIM_WEEKLYMEAN_quintiles_20260831.nc' has been downloaded to successfully.
+✓ Successfully downloaded tas climatology
+Downloading quintile climatology for mslp...
+File '/climatologies/2026/mslp_20yrCLIM_WEEKLYMEAN_quintiles_20260824.nc' has been downloaded to successfully.
+File '/climatologies/2026/mslp_20yrCLIM_WEEKLYMEAN_quintiles_20260831.nc' has been downloaded to successfully.
+✓ Successfully downloaded mslp climatology
+Downloading quintile climatology for pr...
+File '/climatologies/2026/pr_20yrCLIM_WEEKLYSUM_quintiles_20260824.nc' has been downloaded to successfully.
+File '/climatologies/2026/pr_20yrCLIM_WEEKLYSUM_quintiles_20260831.nc' has been downloaded to successfully.
+✓ Successfully downloaded pr climatology
+
+🔢 Step 3: Calculating quintile probabilities...
+📅 Using climatology for valid dates: 20260824, 20260831
+Processing msl -> mslp
+  Processing week1 using time chunks [0, 1]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 0: 12 steps
+      Added time chunk 1: 12 steps
+    Weekly mean (sum / 24 steps)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week1
+  Processing week2 using time chunks [2, 3, 4]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 2: 12 steps
+      Added time chunk 3: 12 steps
+      Added time chunk 4: 12 steps
+    Weekly mean (sum / 36 steps)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week2
+✓ Completed msl
+Processing tp -> pr
+  Processing week1 using time chunks [0, 1]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 0: 12 steps
+      Added time chunk 1: 12 steps
+    Weekly precipitation (scaled to 7 days)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week1
+  Processing week2 using time chunks [2, 3, 4]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 2: 12 steps
+      Added time chunk 3: 12 steps
+      Added time chunk 4: 12 steps
+    Weekly precipitation (scaled to 7 days)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week2
+✓ Completed tp
+Processing 2t -> tas
+  Processing week1 using time chunks [0, 1]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 0: 12 steps
+      Added time chunk 1: 12 steps
+    Weekly mean (sum / 24 steps)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week1
+  Processing week2 using time chunks [2, 3, 4]
+    Loaded climatology: (1, 4, 121, 240)
+      Added time chunk 2: 12 steps
+      Added time chunk 3: 12 steps
+      Added time chunk 4: 12 steps
+    Weekly mean (sum / 36 steps)
+      🚀 Using VECTORIZED calculation...
+      ✅ Vectorized calculation complete!
+    ✓ Completed week2
+✓ Completed 2t
+
+Quintile analysis complete:
+<xarray.Dataset> Size: 7MB
+Dimensions:        (latitude: 121, longitude: 240, time_week: 2, quintile: 5)
+Coordinates:
+  * latitude       (latitude) float64 968B 90.0 88.5 87.0 ... -87.0 -88.5 -90.0
+  * longitude      (longitude) float64 2kB 0.0 1.5 3.0 4.5 ... 355.5 357.0 358.5
+    week           (time_week) <U5 40B 'week1' 'week2'
+  * quintile       (quintile) float64 40B 0.2 0.4 0.6 0.8 1.0
+    time           int64 8B 0
+Dimensions without coordinates: time_week
+Data variables:
+    msl_quintiles  (time_week, quintile, latitude, longitude) float64 2MB 0.1...
+    tp_quintiles   (time_week, quintile, latitude, longitude) float64 2MB 0.2...
+    2t_quintiles   (time_week, quintile, latitude, longitude) float64 2MB 0.0...
+Attributes:
+    title:            Ensemble Forecast Quintile Probabilities
+    processing_date:  2026-08-08T10:22:14
+
+💾 Step 4: Saving results...
+✅ Saved to /tank/projects/aifs-run/20260806_0000/aiwq/ensemble_quintile_probabilities_20260806_v2.nc (6.7 MB)
+
+📊 Step 5: Analysis Summary
+----------------------------------------
+Mode: FP16-v2
+Processed variables: ['msl_quintiles', 'tp_quintiles', '2t_quintiles']
+Time periods: 2
+Grid resolution: 121x240
+
+Quintile probability statistics:
+
+  msl_quintiles:
+    Q1 (0.2): 0.209 mean probability
+    Q2 (0.4): 0.159 mean probability
+    Q3 (0.6): 0.155 mean probability
+    Q4 (0.8): 0.168 mean probability
+    Q5 (1.0): 0.310 mean probability
+
+  tp_quintiles:
+    Q1 (0.2): 0.243 mean probability
+    Q2 (0.4): 0.174 mean probability
+    Q3 (0.6): 0.172 mean probability
+    Q4 (0.8): 0.180 mean probability
+    Q5 (1.0): 0.231 mean probability
+
+  2t_quintiles:
+    Q1 (0.2): 0.118 mean probability
+    Q2 (0.4): 0.129 mean probability
+    Q3 (0.6): 0.148 mean probability
+    Q4 (0.8): 0.179 mean probability
+    Q5 (1.0): 0.427 mean probability
+
+📤 Step 6: Ready for AI Weather Quest submission
+   Output file: /tank/projects/aifs-run/20260806_0000/aiwq/ensemble_quintile_probabilities_20260806_v2.nc
+   Available variables: ['msl_quintiles', 'tp_quintiles', '2t_quintiles']
+   Use submit_forecast() function to submit results
+
+(aifs-gpu) ezra@e4drr-crafd-icpac:~/ea-aifs/fp16FahamuAIFSv2$ python ../shared/forecast_submission_cli.py --date 20260806 --v2 \
+    --output-dir /tank/projects/aifs-run/20260806_0000/aiwq --dry-run
+Loaded credentials from .env
+============================================================
+AI Weather Quest Forecast Submission (FP16-v2)
+============================================================
+
+Submitting 6 forecasts...
+  Team: Fahamu
+  Model: fp16FahamuAIFSv2
+  Date: 20260806
+  File: /tank/projects/aifs-run/20260806_0000/aiwq/ensemble_quintile_probabilities_20260806_v2.nc
+--------------------------------------------------
+
+[1/6] Submitting mslp_week1...
+  [DRY RUN] Would submit mslp week 1
+
+[2/6] Submitting mslp_week2...
+  [DRY RUN] Would submit mslp week 2
+
+[3/6] Submitting pr_week1...
+  [DRY RUN] Would submit pr week 1
+
+[4/6] Submitting pr_week2...
+  [DRY RUN] Would submit pr week 2
+
+[5/6] Submitting tas_week1...
+  [DRY RUN] Would submit tas week 1
+
+[6/6] Submitting tas_week2...
+  [DRY RUN] Would submit tas week 2
+
+============================================================
+SUBMISSION SUMMARY
+============================================================
+Mode: FP16-v2
+Date: 20260806
+Team: Fahamu
+Model: fp16FahamuAIFSv2
+Successful: 6
+Failed: 0
+
+[DRY RUN] No actual submissions were made.
+
+(aifs-gpu) ezra@e4drr-crafd-icpac:~/ea-aifs/fp16FahamuAIFSv2$ python ../shared/forecast_submission_cli.py --date 20260806 --v2 \
+    --output-dir /tank/projects/aifs-run/20260806_0000/aiwq
+Loaded credentials from .env
+============================================================
+AI Weather Quest Forecast Submission (FP16-v2)
+============================================================
+
+Submitting 6 forecasts...
+  Team: Fahamu
+  Model: fp16FahamuAIFSv2
+  Date: 20260806
+  File: /tank/projects/aifs-run/20260806_0000/aiwq/ensemble_quintile_probabilities_20260806_v2.nc
+--------------------------------------------------
+
+[1/6] Submitting mslp_week1...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Directory 'forecast_submissions/20260806' already exists.
+/forecast_submissions/20260806/mslp_20260806_p1_Fahamu_fp16FahamuAIFSv2.nc
+  Successfully submitted mslp_week1
+
+[2/6] Submitting mslp_week2...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+File not found on FTP. Creating a new file. Error: 150-Accepted data connection
+150 5.0 kbytes to download
+  Failed: 200 TYPE is now 8-bit binary
+
+[3/6] Submitting pr_week1...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Directory 'forecast_submissions/20260806' already exists.
+/forecast_submissions/20260806/pr_20260806_p1_Fahamu_fp16FahamuAIFSv2.nc
+  Successfully submitted pr_week1
+
+[4/6] Submitting pr_week2...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Directory 'forecast_submissions/20260806' already exists.
+/forecast_submissions/20260806/pr_20260806_p2_Fahamu_fp16FahamuAIFSv2.nc
+  Successfully submitted pr_week2
+
+[5/6] Submitting tas_week1...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Directory 'forecast_submissions/20260806' already exists.
+/forecast_submissions/20260806/tas_20260806_p1_Fahamu_fp16FahamuAIFSv2.nc
+  Successfully submitted tas_week1
+
+[6/6] Submitting tas_week2...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Directory 'forecast_submissions/20260806' already exists.
+/forecast_submissions/20260806/tas_20260806_p2_Fahamu_fp16FahamuAIFSv2.nc
+  Successfully submitted tas_week2
+
+============================================================
+SUBMISSION SUMMARY
+============================================================
+Mode: FP16-v2
+Date: 20260806
+Team: Fahamu
+Model: fp16FahamuAIFSv2
+Successful: 5
+Failed: 1
+
+Failed submissions:
+  - mslp_week2: 200 TYPE is now 8-bit binary
+
+# mslp_week2 hit the known transient FTP status-line bug -> single-target re-run
+(aifs-gpu) ezra@e4drr-crafd-icpac:~/ea-aifs/fp16FahamuAIFSv2$ python ../shared/forecast_submission_cli.py --date 20260806 --v2 \
+    --output-dir /tank/projects/aifs-run/20260806_0000/aiwq --variables mslp --weeks 2
+Loaded credentials from .env
+============================================================
+AI Weather Quest Forecast Submission (FP16-v2)
+============================================================
+
+Submitting 1 forecasts...
+  Team: Fahamu
+  Model: fp16FahamuAIFSv2
+  Date: 20260806
+  File: /tank/projects/aifs-run/20260806_0000/aiwq/ensemble_quintile_probabilities_20260806_v2.nc
+--------------------------------------------------
+
+[1/1] Submitting mslp_week2...
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+forecast submitted within competition time window
+Latitude found as 'latitude'
+Longitude found as 'longitude'
+Quintile found as 'quintile'
+All data is between 0 and 1.
+Fahamu is registered to the AI Weather Quest. You may submit your forecast.
+fp16FahamuAIFSv2 is registered to the AI Weather Quest. You may submit your forecast.
+     Unique_ID         expver_ID       Teamname            Modelname
+0    Nord2S_01      NordicS2S_01      NordicS2S           NordicS2S1
+1    CMAaDU_01      CMAandFDU_01      CMAandFDU             Fengshun
+2    UWAtIA_01  UWAtmosNVIDIA_01  UWAtmosNVIDIA          DLESyMS2Sv1
+3    CMAaDU_02      CMAandFDU_02      CMAandFDU       FengshunAdjust
+4    Sunner_01        Sunnier_01        Sunnier          Fakeweather
+..         ...               ...            ...                  ...
+111  Windne_02      WindBorne_02      WindBorne      WeatherMeshBeta
+112   BNUzz_01            BNU_01            BNU            BNUhybrid
+113  ECMWst_02      ECMWFtest_02      ECMWFtest            ECtesting
+114  Arcana_03         Arcana_03         Arcana  ArcanaSphericalBeta
+115  Fahamu_04         Fahamu_04         Fahamu     fp16FahamuAIFSv2
+
+[116 rows x 4 columns]
+Directory 'forecast_submissions/20260806' already exists.
+/forecast_submissions/20260806/mslp_20260806_p2_Fahamu_fp16FahamuAIFSv2.nc
+  Successfully submitted mslp_week2
+
+============================================================
+SUBMISSION SUMMARY
+============================================================
+Mode: FP16-v2
+Date: 20260806
+Team: Fahamu
+Model: fp16FahamuAIFSv2
+Successful: 1
+Failed: 0
+
+# server-side verification of all 6 targets
+(aifs-gpu) ezra@e4drr-crafd-icpac:~/ea-aifs/fp16FahamuAIFSv2$ python verify_ftp.py
+Fahamu/fp16FahamuAIFSv2 files in forecast_submissions/20260806:
+   mslp_20260806_p1_Fahamu_fp16FahamuAIFSv2.nc          1,182,087 bytes  Aug 8 10:29
+   mslp_20260806_p2_Fahamu_fp16FahamuAIFSv2.nc          1,182,087 bytes  Aug 9 00:26
+   pr_20260806_p1_Fahamu_fp16FahamuAIFSv2.nc            1,182,081 bytes  Aug 8 10:30
+   pr_20260806_p2_Fahamu_fp16FahamuAIFSv2.nc            1,182,081 bytes  Aug 8 10:31
+   tas_20260806_p1_Fahamu_fp16FahamuAIFSv2.nc           1,182,123 bytes  Aug 8 10:32
+   tas_20260806_p2_Fahamu_fp16FahamuAIFSv2.nc           1,182,123 bytes  Aug 8 10:33
+
+Verification:
+   PRESENT  mslp_20260806_p1_Fahamu_fp16FahamuAIFSv2.nc
+   PRESENT  mslp_20260806_p2_Fahamu_fp16FahamuAIFSv2.nc
+   PRESENT  pr_20260806_p1_Fahamu_fp16FahamuAIFSv2.nc
+   PRESENT  pr_20260806_p2_Fahamu_fp16FahamuAIFSv2.nc
+   PRESENT  tas_20260806_p1_Fahamu_fp16FahamuAIFSv2.nc
+   PRESENT  tas_20260806_p2_Fahamu_fp16FahamuAIFSv2.nc
+
+==> 6/6 confirmed on server
+
+(aifs-gpu) ezra@e4drr-crafd-icpac:~/ea-aifs/fp16FahamuAIFSv2$ 

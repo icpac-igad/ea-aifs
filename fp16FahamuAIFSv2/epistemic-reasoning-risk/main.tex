@@ -1,0 +1,883 @@
+% Beamer-Klasse mit 16:9-Seitenverhältnis (32:18)
+\documentclass[aspectratio=3218]{beamer}
+
+% Pakete laden
+\input{pakete}
+
+% ICPAC-Stil laden
+\usepackage{beamer_ovgu_169}
+
+% Sprecher-Notizen (gesprochenes Skript) anzeigen? Standardmäßig aus.
+% Zum Anzeigen die folgende Zeile einkommentieren:
+%\setbeameroption{show notes}
+
+\title[CRMA]{From Impact-Based Forecasting to Epistemic Risk Assessment}
+\subtitle{Continuous Risk Monitoring \& Assessment (CRMA): \\ an epistemic layer for early warning and anticipatory action in East Africa}
+\author{Nishadh Kalladath}
+\institute[CRMA \textbar\ CRAF'd \textbar\ ICPAC]{%
+	Disaster Risk Management Unit, IGAD Climate Prediction \& Applications Centre \\
+	%Developed under the CRAF'd project%
+}
+
+\begin{document}
+
+% Fußzeile (mit Logos) nur auf der Titelfolie unterdrücken
+{
+\setbeamertemplate{footline}{}
+\begin{frame}
+	\maketitle
+\end{frame}
+}
+
+
+
+\begin{frame}[label=outline]{Outline}
+	\vspace*{1ex}
+	\begin{center}\small
+	\begin{tabular}{@{}clp{9.5cm}@{}}
+		\toprule
+		 & \textbf{Part} & \textbf{Question it answers} \\
+		\midrule
+		1 & Impact-Based Forecasting & \emph{What is the risk?} - IBF as an \textbf{ontological} model \\
+		2 & The missing question & \emph{How well do we know it?} - the \textbf{epistemic} gap in EWS \& anticipatory action \\
+		3 & Two communities & Forecasters and DRM practitioners - and the seam between them \\
+		4 & CRMA & Bayesian network + evidence curation (hard / soft / virtual) \\
+		5 & Two directions & (a) AI automation of CRMA \quad (b) the DOC ``flight simulator'' \\
+		\bottomrule
+	\end{tabular}
+	\end{center}
+	\vspace*{1ex}
+	\begin{block}{}
+		\centering
+		CRMA is an \textbf{epistemic} framework that complements the
+		\textbf{ontological} assessment performed by Impact-Based Forecasting.
+	\end{block}
+	\note{SAY: ``The argument runs in five steps. First, impact-based forecasting
+		- what it is, and what kind of question it answers. Second, the question
+		it does not answer. Third, why that gap sits exactly on the seam between
+		the forecasting community and the disaster-risk-management community.
+		Fourth, CRMA as the layer that closes it. And fifth, the two directions
+		this is now taking.''}
+\end{frame}
+
+% =====================================================================
+\section{From IBF to epistemic risk}
+% nur für die Miniframe-Navigation
+\subsection*{}
+
+\begin{frame}{Impact-Based Forecasting - the ontology of risk}
+	IBF moved early warning from \emph{``what the weather \textbf{will be}''} to
+	\emph{``what the weather \textbf{will do}''}.
+	\begin{block}{The conventional risk model}
+		\centering\large
+		$\mathrm{Risk} \;=\; f(\;\mathrm{Hazard},\; \mathrm{Exposure},\;
+		\mathrm{Vulnerability}\;)$ \\[0.6ex]
+		\normalsize Impact $=$ Hazard intensity $\times$ Exposed elements
+		$\times$ their Vulnerability
+	\end{block}
+	\begin{itemize}
+		\item \textbf{Hazard} - forecast intensity, footprint, duration
+			(rainfall, discharge, SPI).
+		\item \textbf{Exposure} - people, crops, assets, infrastructure in the
+			footprint.
+		\item \textbf{Vulnerability} - the damage/loss function that converts
+			exposure into impact.
+	\end{itemize}
+	\centering
+	This is an \textbf{ontology}: a formal account of \emph{what exists in the
+	world} and how those entities combine to produce loss.
+	\note{SAY: ``Start where the field already is. Impact-based forecasting is
+		the shift from forecasting the weather to forecasting what the weather
+		will do. Its engine is the conventional risk model: risk as a function of
+		hazard, exposure and vulnerability. Hazard from the forecast, exposure
+		from the population and asset layers, vulnerability from a damage
+		function. Notice what kind of thing this is. It is an ontology - a
+		formal statement of what exists in the world and how those entities
+		combine to produce loss. Every term on the right-hand side names a real
+		object out there.''}
+\end{frame}
+
+\begin{frame}{What the equation answers - and what it assumes}
+	\begin{columns}[T]
+		\begin{column}{0.48\textwidth}
+			\textbf{IBF answers well}
+			\begin{itemize}
+				\item \emph{What is the flood risk?}
+				\item \emph{How many people may be affected?}
+				\item \emph{Which admin-1 is most exposed?}
+				\item \emph{What losses are expected?}
+			\end{itemize}
+			\vspace{1ex}
+			Statements \textbf{about the world}.
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\textbf{But it quietly assumes}
+			\begin{itemize}
+				\item the hazard input is \textbf{a value}, not a spread;
+				\item exposure \& vulnerability layers are \textbf{current and
+					correct};
+				\item the damage function \textbf{transfers} to this place, this
+					season;
+				\item evidence arrives \textbf{once}, not continuously and in
+					conflict.
+			\end{itemize}
+		\end{column}
+	\end{columns}
+	\vspace{1ex}
+	\begin{block}{}
+		\centering Uncertainty is \textbf{acknowledged}, but it is \textbf{not the
+		object} of the assessment.
+	\end{block}
+	\note{SAY: ``The equation answers a specific family of questions extremely
+		well - what is the risk, how many people, which region, what losses.
+		These are statements about the world. But look at what it assumes to be
+		able to answer them: that the hazard enters as a value rather than a
+		spread; that the exposure and vulnerability layers are current and
+		correct; that a damage function estimated somewhere else transfers here;
+		and that evidence arrives once, cleanly, rather than continuously and in
+		contradiction. Uncertainty is acknowledged in IBF - error bars,
+		probabilistic thresholds - but it is never the object of the assessment.
+		The object is always the risk itself.''}
+\end{frame}
+
+\begin{frame}{The missing question - epistemic risk assessment}
+	\begin{columns}[T]
+		\begin{column}{0.48\textwidth}
+			\begin{block}{Ontological (IBF)}
+				\centering \emph{What is the risk?} \\[0.8ex]
+				\footnotesize The object of assessment is \\ \textbf{the flood
+				risk itself}.
+			\end{block}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\begin{block}{Epistemic (CRMA)}
+				\centering \emph{Given all available evidence, what should we
+				\textbf{currently believe} about the risk?} \\[0.8ex]
+				\footnotesize The object of assessment is \\ \textbf{our knowledge
+				of the flood risk}.
+			\end{block}
+		\end{column}
+	\end{columns}
+	\vspace{1ex}
+	An epistemic assessment must therefore carry, explicitly:
+	\begin{center}\small
+		\textbf{confidence} \quad$\cdot$\quad \textbf{uncertainty}
+		\quad$\cdot$\quad \textbf{evidence quality} \quad$\cdot$\quad
+		\textbf{conflicting observations} \quad$\cdot$\quad \textbf{belief
+		updating} \quad$\cdot$\quad \textbf{knowledge gaps}
+	\end{center}
+	\centering
+	Estimating risk is not enough. We must also assess: \textbf{how justified is
+	that estimate?}
+	\note{SAY: ``So here is the distinction the whole talk rests on. The
+		ontological question is: what is the risk? The epistemic question is:
+		given all the evidence available right now, what should we believe about
+		the risk? In the first, the object of assessment is the flood. In the
+		second, the object of assessment is our knowledge of the flood. That
+		second assessment has to carry things the first one does not: confidence,
+		uncertainty, the quality of each piece of evidence, observations that
+		contradict each other, how belief updates, and what we still do not know.
+		Estimating the risk is not enough. We must also assess how justified that
+		estimate is.''}
+\end{frame}
+
+\begin{frame}{Why this matters for EWS and anticipatory action}
+	Both are built on a \textbf{trigger}: forecast $\rightarrow$ threshold
+	$\rightarrow$ pre-agreed action.
+	\begin{block}{}
+		\centering A trigger is an \textbf{ontological device}. It asks
+		\emph{``has the risk crossed X?''} - never \emph{``how well do we know
+		it has?''}
+	\end{block}
+	\begin{itemize}
+		\item \textbf{No record of belief.} We log that the trigger fired, not
+			\emph{what we knew, when, and on what evidence}.
+		\item \textbf{Conflicting evidence is invisible.} A gauge, a forecast and
+			a field report disagree - the threshold sees only one number.
+		\item \textbf{Confidence is discarded.} A 40\% exceedance and a 95\%
+			exceedance both simply ``cross''.
+		\item \textbf{No-regret space collapses.} Binary act/don't-act hides the
+			graded response an operations centre actually uses.
+		\item \textbf{Accountability is misplaced.} Decisions get judged by the
+			\textbf{outcome}, not by the \textbf{evidence available at the time}.
+	\end{itemize}
+	\centering\footnotesize A good decision $\neq$ a good outcome - but without an
+	epistemic record, we cannot tell them apart.
+	\note{SAY: ``Why does this matter operationally? Because early warning
+		systems and anticipatory action are both built on a trigger: forecast,
+		threshold, pre-agreed action. And a trigger is an ontological device. It
+		asks whether the risk has crossed a line. It never asks how well we know
+		that it has. The consequences are concrete. We keep no record of belief -
+		only that the trigger fired. Conflicting evidence is invisible to a
+		threshold. Confidence is discarded: a forty-percent exceedance and a
+		ninety-five-percent exceedance both simply cross. The no-regret space
+		collapses into act or don't act. And accountability lands in the wrong
+		place - decisions get judged by the outcome rather than by the evidence
+		available at the time. A good decision is not the same as a good outcome,
+		but without an epistemic record you cannot tell the two apart.''}
+\end{frame}
+
+\begin{frame}{Two communities, one seam}
+	The gap is not technical. It is \textbf{institutional} - it falls between two
+	well-established communities.
+	\begin{center}\small
+	\begin{tabular}{@{}lp{4.6cm}p{4.6cm}@{}}
+		\toprule
+		 & \textbf{Weather \& climate forecasting} & \textbf{Disaster risk management} \\
+		\midrule
+		\textbf{Core object} & the atmospheric state & the exposed \& vulnerable population \\
+		\textbf{Native currency} & \textbf{probability} (ensembles, spread, skill) & \textbf{consequence} (loss, damage, need) \\
+		\textbf{Trained to} & quantify uncertainty & act decisively despite it \\
+		\textbf{Time frame} & forecast cycle (6\,h -- season) & the operational decision window \\
+		\textbf{Hands over} & a probabilistic product & a plan requiring a commitment \\
+		\bottomrule
+	\end{tabular}
+	\end{center}
+	\begin{block}{The hand-off problem}
+		\centering
+		The forecaster's \textbf{spread} is flattened into the DRM
+		actor's \textbf{decision} - and the reasoning in between is never written
+		down.
+	\end{block}
+	\centering\footnotesize
+	Each community owns half the epistemics; neither owns the \emph{record} of
+	how evidence became a decision.
+	\note{SAY: ``And I want to be clear that this gap is not a technical failure.
+		It is institutional. It falls on the seam between two mature communities.
+		The forecasting community's object is the atmospheric state; its native
+		currency is probability; it is trained to quantify uncertainty honestly.
+		The disaster-risk-management community's object is the exposed
+		population; its currency is consequence; it is trained to act decisively
+		in spite of uncertainty. Both are right within their own frame. But at
+		the hand-off, the forecaster's carefully-constructed spread gets flattened
+		into a single decision - and the reasoning in between is never written
+		down anywhere. Each community owns half of the epistemics. Neither owns
+		the record of how evidence became a decision. That record is what CRMA
+		is.''}
+\end{frame}
+
+% =====================================================================
+\section{CRMA}
+\subsection*{}
+
+\begin{frame}{CRMA - the epistemic layer over IBF}
+	\begin{block}{}
+		\centering
+		Continuous Risk Monitoring \& Assessment (\textbf{CRMA}) is an
+		\textbf{epistemic} framework that complements the \textbf{ontological}
+		assessment performed by Impact-Based Forecasting.
+	\end{block}
+	CRMA is \emph{not} $\;$forecast $\rightarrow$ trigger. It is:
+	\begin{block}{}
+		\centering\Large
+		Observe $\rightarrow$ Assess $\rightarrow$ Update $\rightarrow$ Decide
+	\end{block}
+	\begin{itemize}
+		\item \textbf{IBF supplies the ontology} - hazard, exposure,
+			vulnerability, impact. CRMA does not replace it.
+		\item \textbf{CRMA supplies the epistemics} - evidence typing,
+			confidence, belief updating, and an \textbf{audit trail}.
+		\item Its output is a risk \textbf{indication} with its justification
+			attached - \textbf{not} a calibrated probability of disaster, and
+			\textbf{not} a decision.
+	\end{itemize}
+	\centering\footnotesize
+	Two ingredients make it work: a \textbf{Bayesian network}, and
+	\textbf{curated evidence} classified by type.
+	\note{SAY: ``So: CRMA. Continuous Risk Monitoring and Assessment is an
+		epistemic framework that complements the ontological assessment IBF
+		performs. It does not replace the risk equation - it sits on top of it.
+		IBF supplies the ontology; CRMA supplies the epistemics: evidence typing,
+		confidence, belief updating, and an audit trail. And its shape is not
+		forecast-then-trigger. It is observe, assess, update, decide - which is
+		what an operations centre actually does. Two ingredients make it work: a
+		Bayesian network, and evidence that has been curated and classified by
+		type.''}
+\end{frame}
+
+% \begin{frame}{Scenario Simulation}
+% 	\begin{block}%{In one sentence}
+    
+% 		An interactive scenario-based simulation that trains participants to
+% 		evaluate evolving evidence, update risk assessments under uncertainty,
+% 		and support operational decision-making - using real East African
+% 		drought and flood events.
+% 	\end{block}
+% 	\begin{itemize}
+% 		\item Continuous Risk Monitoring \& Assessment (\textbf{CRMA})
+% 		\item Developed under the \textbf{CRAF'd} project at \textbf{ICPAC}
+% 	\end{itemize}
+% 	\note{SAY (0:00--0:40): ``Welcome. Some of you read the abstract for this
+% 		session, From Forecast to Action. The aim of the next few minutes is to
+% 		make that abstract concrete. This is a scenario-based simulation:
+% 		participants step into real East African drought and flood events as
+% 		they unfolded, evaluate the evidence available at the time, and work
+% 		through the decisions an operations centre would face. I'll outline the
+% 		idea, demonstrate it once on a single event, and then open the floor for
+% 		the hands-on.''}
+% \end{frame}
+
+% \begin{frame}{What you read - the abstract}
+% 	\begin{block}{}
+% 		\small\itshape
+% 		``This simulation immerses participants in a drought--flood escalation
+% 		using the Continuous Risk Monitoring and Assessment platform developed
+% 		under the CRAF'd project at ICPAC \dots\ built from \textbf{11
+% 		event-based storylines} drawn from the \textbf{EM-DAT} disaster database
+% 		across \textbf{11 East African countries}. Participants assume the roles
+% 		of stakeholders to evaluate evolving forecast and risk evidence, and
+% 		assess when anticipatory actions should be initiated through local
+% 		governance structures and humanitarian actors. Decisions are explored
+% 		through a \textbf{Bayesian Network} linking forecast signals, exposure,
+% 		vulnerability, and action thresholds.''
+% 	\end{block}
+% 	\note{SAY (0:40--1:30): ``Here is the core of the abstract. A few anchors.
+% 		It is event-based: eleven real disasters across eleven countries, drawn
+% 		from the EM-DAT international disaster database. Participants take
+% 		stakeholder roles and evaluate evidence as each event escalates,
+% 		deciding when anticipatory action is justified - and through which
+% 		governance and humanitarian channels. And the reasoning is organised by
+% 		a Bayesian Network. I'll unpack each of these in plain terms over the
+% 		next few slides.''}
+% \end{frame}
+
+\begin{frame}{Project background}
+	\begin{block}{}
+		\centering\small\textbf{Hazard Modeling, Impact Estimation \& Event-Based
+		Climate Storylines on Drought and Flood Disasters in Eastern Africa} \\[0.5ex]
+		\footnotesize\url{https://icpac-igad.github.io/e4drr/ }
+        \footnotesize{Code \& docs: \url{https://github.com/icpac-igad/crma}}
+	\end{block}
+	\textbf{Aim:} Make the East Africa Hazard Watch (\textbf{EAHW}) a
+	decision-support tool for Disaster Operation Centres (\textbf{DOC}) in their
+	routine risk-monitoring \& assessment work.
+	\begin{itemize}
+		\item[] \textbf{Objectives}
+		\item Better risk knowledge through \textbf{event-based storylines}.
+		\item Impact Based Forecasting(IBF) that handles uncertainty: \textbf{Continuous Risk Monitoring
+			\& Assessment}.
+		\item \textbf{Capacity development} on the tools and methods from the
+			first two objectives.
+	\end{itemize}
+	\begin{block}{}
+		\textbf{Storyline} = a plausible ``what-if'' account of a hazard event. \\
+		\emph{``What if the 2015/16 Super El Ni\~no returned, under today's
+		exposure?''}
+	\end{block}
+	% \begin{center}\footnotesize
+	% 	Code \& docs: \url{https://github.com/icpac-igad/crma}
+	% \end{center}
+	\note{SAY: ``Before the session itself, a word on the project it grows out
+		of. The aim is to make the East Africa Hazard Watch a genuine
+		decision-support tool for Disaster Operation Centres in their routine
+		risk monitoring and assessment. Three objectives: better risk knowledge
+		through event-based storylines; impact-based forecasting that handles
+		uncertainty - continuous risk monitoring and assessment; and capacity
+		development on the tools and methods from the first two. A storyline is
+		simply a plausible what-if account of a hazard event - for example,
+		what if the 2015/16 Super El Ni\~no returned under today's exposure.''}
+\end{frame}
+
+\begin{frame}{Three building blocks}
+	\begin{itemize}
+		\item \textbf{Decision Layer:} updates risk as new evidence arrives (Analysis of Decision/Evidence).
+		\item \textbf{Data Layer:} analysis-ready, on-demand, cost-effective (API -> ARCO). \\
+			\emph{(a ``Netflix / YouTube'' for risk monitoring \& assessment)}.
+		\item \textbf{Risk Knowledge Layer:} storylines, Hazard Impact modeling(CLIMADA)(Contextualizing the impact).
+			{\footnotesize\url{https://icpac-igad.github.io/e4drr/blog/2026-01-28-ibf-storylines/}}
+	\end{itemize}
+	\begin{center}
+		\includegraphics[width=0.82\textwidth]{build-blocks.jpg}
+	\end{center}
+	\note{SAY: ``The project rests on three building blocks. The Decision Layer
+		updates the risk picture as new evidence arrives. The Data Layer keeps
+		everything analysis-ready, on-demand and cost-effective - think of it as
+		a Netflix or YouTube for risk monitoring and assessment, streaming only
+		the slice you need. And the Risk Knowledge Layer brings together the
+		event storylines and local expertise.''}
+\end{frame}
+
+\begin{frame}{Decision Layer: record-keeping of an operational EWS}
+	\begin{block}{}
+		\centering Bayesian Network + Continuous Risk Monitoring \& Assessment
+		(\textbf{CRMA})
+	\end{block}
+	\begin{enumerate}
+		\item The best IBF system we know? \textbf{The human brain.}
+		\item Forecasters already \textbf{reason conditionally under uncertainty}.
+		\item \textbf{Flood or Drought fast/slow}  = a daily(every 6hr)/seasonal forecast: an initial belief,
+			updated each cycle / new evidence.
+	\end{enumerate}
+	\textbf{Why must it be continuous?}
+	\begin{enumerate}
+		\item Each new ensemble cycle / observation / field report
+			\textbf{changes what we know}.
+		\item Record-keeping $\rightarrow$ \textbf{audit trail}: what we knew,
+			when, and on what evidence.
+	\end{enumerate}
+	\note{SAY: ``The Decision Layer is really record-keeping for an operational
+		early-warning system - a Bayesian Network paired with Continuous Risk
+		Monitoring and Assessment. The framing is simple. The best
+		impact-based-forecasting system we know is the human brain; forecasters
+		already reason conditionally under uncertainty; and GHACOF itself is a
+		seasonal forecast - an initial belief that is updated each cycle. Why
+		must it be continuous? Because each new ensemble cycle, observation or
+		field report changes what we know - and keeping a record of that gives
+		us an audit trail: what we knew, when, and on what evidence.''}
+\end{frame}
+
+\begin{frame}{What is a Bayesian Network?}
+	A \textbf{graph of evidence $\rightarrow$ risk}, with the logic written down.
+	\begin{itemize}
+		\item \textbf{Nodes \& links:} evidence nodes (rain, forecast, trend)
+			$\rightarrow$ hidden \textbf{risk grade} $\rightarrow$ \textbf{CRMA
+			decision}.
+		\item \textbf{Probabilistic logic:} each link is a \textbf{conditional
+			probability} - encodes ``\emph{if wet ground \& forecast deficit,
+			then\dots}'' as odds, not a hard rule.
+		\item \textbf{Bayesian updating:} new evidence revises the
+			\textbf{posterior} - the assessment moves coherently, never ad hoc.
+		\item \textbf{Record-keeper:} every state is logged - \emph{what we
+			believed, when, on what evidence} - an inspectable audit trail.
+	\end{itemize}
+	\begin{block}{In CRMA}
+		The BN \textbf{combines, updates, and makes reasoning transparent} - same
+		evidence in $\rightarrow$ same assessment out. Output = a risk
+		\emph{indication}, \textbf{not} a calibrated probability of disaster; the
+		decision stays with people.
+	\end{block}
+	\note{SAY (4:00--5:00): ``The reasoning is organised by a Bayesian Network
+		- and this is one of the distinctive contributions of the exercise,
+		so it stays visible. But think of it as a decision-support reasoning
+		framework, not a statistics lesson. It does three things: it combines
+		the available evidence, it updates the assessment as conditions change,
+		and it makes the reasoning transparent so you can see why the risk moved.
+		What it does NOT do is make the decision. And its output is a risk
+		indication - consistent and inspectable - not a validated
+		probability of disaster.''}
+\end{frame}
+
+
+
+\begin{frame}{Uncertainty is the point - not the problem}
+	Decisions are made \textbf{before the outcome is known} - \textbf{reason with
+	uncertainty}, don't wait for certainty.
+	\begin{columns}[T]
+		\begin{column}{0.5\textwidth}
+			\centering
+			\includegraphics[height=0.46\textheight]{uncertainity.jpg} \\
+			{\footnotesize \textbf{Deterministic} - one number, uncertainty
+			hidden.}
+		\end{column}
+		\begin{column}{0.5\textwidth}
+			\centering
+			\includegraphics[height=0.46\textheight]{gefs.jpg} \\
+			{\footnotesize \textbf{Ensemble} - a \textbf{spread}; ``40\% cross
+			the threshold''. The spread \emph{is} the information.}
+		\end{column}
+	\end{columns}
+	\centering\footnotesize The ensemble - the clearest expression of uncertainty
+	- \textbf{inspires how evidence is typed} (next slide).
+	\note{SAY: ``One concept underpins everything: uncertainty. In an operations
+		centre the decision must be made before the outcome is known -
+		uncertainty is permanent, and the skill is to reason WITH it rather than
+		wait for a certainty that never arrives. The clearest place to see this
+		is the forecast. A deterministic forecast gives one number and hides the
+		uncertainty; an ensemble runs the model many times and exposes it as a
+		spread of outcomes - and that spread is exactly the information we
+		need: forty percent of members cross the flood threshold is far more
+		useful than a single figure. That idea - that evidence carries
+		different amounts of uncertainty - is the inspiration for how we
+		classify evidence, which is the next slide.''}
+\end{frame}
+
+\begin{frame}{Evidence curation - three kinds of evidence}
+	Because evidence carries \textbf{different amounts of uncertainty}, it must
+	be \textbf{classified by type} - the type decides \textbf{how it enters
+	the reasoning}.
+	\begin{center}\small
+	\begin{tabular}{@{}lp{4.0cm}p{2.9cm}p{4.4cm}@{}}
+		\toprule
+		\textbf{Type} & \textbf{Examples} & \textbf{In a word} & \textbf{Enters the assessment as} \\
+		\midrule
+		\textbf{Hard} & gauges, satellites, river levels, local knowledge & what we \textbf{measure} & a near-certain value \\
+		\textbf{Soft} & forecasts, expert judgment, community reports & what we \textbf{estimate} & a probability spread (\emph{the spread is the confidence}) \\
+		\textbf{Virtual} & storylines, ``what-if'' scenarios(Downward Counterfactual) & what we \textbf{imagine - to prepare} & a reliability-weighted ``likelihood'' nudge \\
+		\bottomrule
+	\end{tabular}
+	\end{center}
+	\footnotesize Classifying each piece of evidence - and judging \textbf{how
+	reliable} it is - is the single most important skill the exercise trains.
+	\note{SAY: ``So evidence is not all the same - precisely because it
+		carries different uncertainty. HARD evidence is what we MEASURE -
+		gauges, satellites, river levels, local knowledge - and it enters the
+		assessment as a near-certain value. SOFT evidence is what we ESTIMATE
+		- forecasts, expert judgment, community reports - uncertain, so it
+		enters as a probability spread, and that spread is the confidence.
+		VIRTUAL evidence is what we IMAGINE in order to prepare - storylines
+		and `what-if' scenarios - injected as a reliability-weighted nudge to
+		test how the picture would change. Measure, estimate, imagine. In Act
+		One, participants classify every piece of evidence this way and judge how
+		reliable it is - and that single act of classification decides how much
+		each piece is allowed to move the assessment.''}
+\end{frame}
+
+\begin{frame}{What makes the analysis live - ARCO + streaming}
+	Interactive because the data layer is \textbf{analysis-ready \&
+	cloud-optimized (ARCO)}.
+	\begin{itemize}
+		\item \textbf{Stored once} in chunked formats (Zarr, Parquet, Icechunk) -
+			read one slice without the whole archive.
+		\item \textbf{Streams only the needed slice} (this date, this region) -
+			updates at the \textbf{speed of conversation}, even on conference
+			Wi-Fi.
+		\item \textbf{Pre-computed} risk posteriors \& CRMA states per date \&
+			boundary - the platform \textbf{serves a reading}, not a live model
+			run.
+		\item Same ARCO layers open in the \textbf{Colab / JupyterHub} notebooks.
+	\end{itemize}
+	\note{SAY: ``A brief word on what makes this work in a room like this. The
+		decision analysis feels instant because the data layer is
+		analysis-ready and cloud-optimized - ARCO. The forecasts, observations
+		and risk layers are stored once in chunked, cloud-native formats, so the
+		platform can read a single slice - one date, one region - without
+		touching the rest of the archive. Each step streams only that slice,
+		which is why the risk picture updates at the speed of conversation. The
+		risk posteriors are pre-computed per date and per boundary, so the
+		platform is serving a reading, not recomputing on the spot.''}
+\end{frame}
+
+% =====================================================================
+\section{Two directions}
+\subsection*{}
+
+\begin{frame}{Where CRMA goes next - two directions}
+	With the epistemic layer in place, the work forks into two complementary
+	directions.
+	\vspace{1ex}
+	\begin{columns}[T]
+		\begin{column}{0.48\textwidth}
+			\begin{block}{(a) AI automation of CRMA}
+				\emph{Machine keeps the record.} \\[0.5ex]
+				Scale the evidence curation and belief updating beyond what a
+				duty analyst can sustain across 11 countries, every cycle.
+			\end{block}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\begin{block}{(b) The DOC ``flight simulator''}
+				\emph{People learn the reasoning.} \\[0.5ex]
+				A scenario-based simulation on 11 real East African
+				drought \& flood events - the human side of the same loop.
+			\end{block}
+		\end{column}
+	\end{columns}
+	\vspace{1ex}
+	\centering
+	Both serve the same end: an \textbf{inspectable} risk assessment, and people
+	with \textbf{calibrated trust} in it.
+	\note{SAY: ``With the epistemic layer defined, the work forks. One direction
+		is automation: getting an AI layer to do the evidence curation and belief
+		updating at a scale no duty analyst can sustain - eleven countries,
+		every forecast cycle. The other direction is human: a scenario simulator
+		that trains people in exactly this reasoning. They are two halves of the
+		same thing - an inspectable assessment, and people who know when to trust
+		it and when to overrule it.''}
+\end{frame}
+
+\begin{frame}{Direction (a) - AI automation of CRMA}
+	The bottleneck is not modelling. It is \textbf{curation}: someone must find,
+	type, weigh and log each piece of evidence, every cycle.
+	\begin{center}\small
+	\begin{tabular}{@{}lp{5.4cm}p{5.2cm}@{}}
+		\toprule
+		\textbf{CRMA step} & \textbf{What the AI layer does} & \textbf{What stays human} \\
+		\midrule
+		\textbf{Observe} & harvest \& normalise evidence (ARCO layers, bulletins, field reports) & deciding what sources count \\
+		\textbf{Curate} & propose evidence \textbf{type} (hard / soft / virtual) \& reliability & confirming or overriding the typing \\
+		\textbf{Assess} & instantiate the BN, compute posteriors per admin-1 & the network structure \& priors \\
+		\textbf{Update} & re-run each cycle, flag \textbf{what changed and why} & judging whether the change is credible \\
+		\textbf{Decide} & draft the justification narrative \& audit entry & \textbf{the decision} \\
+		\bottomrule
+	\end{tabular}
+	\end{center}
+	\begin{block}{}
+		\centering
+		Automate the \textbf{record-keeping}, never the \textbf{judgement}. The
+		audit trail is what makes the automation checkable.
+	\end{block}
+	\note{SAY: ``Direction A. The bottleneck in CRMA is not the modelling - the
+		Bayesian network is cheap to run. The bottleneck is curation: somebody
+		has to find each piece of evidence, decide its type, judge its
+		reliability, and log it, every cycle, for every region. That is exactly
+		the kind of work an AI layer can carry. It harvests and normalises the
+		evidence, proposes a type and a reliability, instantiates the network,
+		recomputes the posteriors, and - crucially - flags what changed and why.
+		What stays human is the judgement: which sources count, whether a typing
+		is right, whether a change is credible, and the decision itself. The
+		principle is to automate the record-keeping and never the judgement. And
+		note the epistemic framing pays for itself here: because CRMA already
+		keeps an audit trail, the automation is checkable in a way an end-to-end
+		black-box impact model never is.''}
+\end{frame}
+
+\begin{frame}{Direction (b) - a ``flight simulator'' for the DOC}
+	\begin{itemize}
+		\item \textbf{Relive} a real drought or flood - only the evidence
+			available \textbf{at the time}.
+		\item \textbf{Grade each admin-1} with a risk colour - the call a DOC has
+			to make.
+		\item \textbf{Date cursor} steps the event window: flood
+			\emph{daily} ($\sim$15 d), drought \emph{monthly} (a full season).
+	\end{itemize}
+	\begin{block}{End outcome - a CRMA colour grade per admin-1}
+		\centering
+		\textcolor{green!60!black}{$\blacksquare$}~\textbf{Monitor} \quad
+		\textcolor{yellow!75!black}{$\blacksquare$}~\textbf{Evaluate} \quad
+		\textcolor{orange}{$\blacksquare$}~\textbf{Assess} \quad
+		\textcolor{red}{$\blacksquare$}~\textbf{Actionable Risk}
+	\end{block}
+	\note{SAY (1:30--2:15): ``In plain terms, it is a flight simulator for an
+		operations centre. Participants relive a real drought or flood as it
+		unfolded, with only the information that existed at the time. Their task
+		is the call a DOC actually has to make: grade every admin-1 region with a
+		risk colour - green Monitor, yellow Evaluate, orange Assess, red
+		Actionable Risk - and justify it on the evidence weighed. A date cursor
+		steps through the event window: daily over about fifteen days for a
+		flood, lead to escalation to onset; monthly over several months for a
+		drought, here the OND short-rains season. The outcome is revealed only
+		afterwards, and the decision is assessed against the evidence available at
+		the time, not the guess.''}
+\end{frame}
+
+\begin{frame}{What this session produces}
+	Beyond the learning, a concrete output:
+	\begin{block}{}
+		\centering
+		Recommendations for co-designing tools that bridge probabilistic
+		forecasting, evidence-based risk assessment, and humanitarian response.
+	\end{block}
+	\begin{itemize}
+		\item Where did a signal speak early - and where did it mislead?
+		\item Where did the assessment diverge from what happened, and why?
+		\item What would make these tools usable in a real DOC?
+	\end{itemize}
+	\note{SAY (5:40--6:20): ``The session is also intended to produce something
+		concrete: recommendations for co-designing tools that bridge
+		forecasting, risk assessment, and humanitarian response. Where did a
+		signal warn early, where did it mislead, where did the assessment
+		diverge from what happened - and what would make these tools genuinely
+		usable in an operations centre.''}
+\end{frame}
+
+\begin{frame}{"Flight" Simulator for DOC: three acts}
+	The concept resolves into \textbf{three questions} a DOC asks, in order:
+	\begin{center}
+	\begin{tabular}{@{}cp{4.8cm}p{5.2cm}@{}}
+		\toprule
+		\textbf{Act} & \textbf{Focus} & \textbf{Question} \\
+		\midrule
+		\textbf{I} & Understanding the Event & \emph{What is happening?} \\
+		\textbf{II} & Evidence Evaluation \& Risk Assessment & \emph{What do we think is happening?} \\
+		\textbf{III} & Decision \& Reflection & \emph{What should we do, and why?} \\
+		\bottomrule
+	\end{tabular}
+	\end{center}
+	\centering Each act's \textbf{output is the next act's input.}
+	\note{SAY (6:20--7:00): ``Everything resolves into three acts. Act One,
+		Understanding the Event - what is happening. Act Two, Evidence
+		Evaluation and Risk Assessment - what do we think is happening. Act
+		Three, Decision and Reflection - what should we do, and why. The
+		output of each act feeds the next. Let me demonstrate all three on one
+		real event before participants run it themselves.''}
+\end{frame}
+
+% \begin{frame}{The evidence and decision pathway}
+% 	\begin{block}{The pathway explored during the exercise}
+% 		\centering
+% 		Observations $\rightarrow$ Forecast Evidence $\rightarrow$ Risk
+% 		Assessment $\rightarrow$ Decision Options $\rightarrow$ Historical
+% 		Outcome
+% 	\end{block}
+% 	\begin{itemize}
+% 		\item \textbf{Observations \& reports} - current conditions;
+% 			situational awareness.
+% 		\item \textbf{Forecast evidence} - ensemble outlooks; uncertain,
+% 			probabilistic signals.
+% 		\item \textbf{Risk assessment} - evidence combined into a structured,
+% 			consistent picture.
+% 		\item \textbf{Decision options} - the operational choices a DOC must
+% 			weigh.
+% 		\item \textbf{Historical outcome} - the recorded loss \& damage,
+% 			revealed only at the end.
+% 	\end{itemize}
+% 	Aligned with CRMA: \textbf{Observe $\rightarrow$ Assess $\rightarrow$ Update
+% 	$\rightarrow$ Decide.}
+% 	\note{SAY (2:15--3:10): ``This is the pathway participants move along:
+% 		observations, forecast evidence, a structured risk assessment, the
+% 		decision options, and finally the historical outcome. The storylines are
+% 		constructed from real recorded events, but participants experience them
+% 		forward - they observe, assess, update as evidence arrives, and
+% 		decide - and only at the end is the recorded loss and damage revealed.
+% 		That ordering is deliberate: it mirrors how an operations centre
+% 		actually works, and it matches the CRMA philosophy - observe, assess,
+% 		update, decide.''}
+% \end{frame}
+
+
+
+
+
+% \begin{frame}{What the exercise provides}
+% 	\begin{center}
+% 	\begin{tabular}{@{}lp{8.5cm}@{}}
+% 		\toprule
+% 		\textbf{Ingredient} & \textbf{In the session} \\
+% 		\midrule
+% 		\textbf{Ensemble forecasts} & Forecast evidence and uncertainty \\
+% 		\textbf{Observations \& reports} & Current conditions and situational awareness \\
+% 		\textbf{Historical risk knowledge} & Past impacts and vulnerability context \\
+% 		\textbf{Risk-assessment engine} & Structured evidence-to-risk reasoning \\
+% 		\textbf{Event storylines} & Real East African drought and flood events \\
+% 		\bottomrule
+% 	\end{tabular}
+% 	\end{center}
+% 	\begin{block}{}
+% 		Hazard and impact modelling methods are used \textbf{behind the scenes}
+% 		to construct the storylines and historical event context - they are
+% 		\textbf{not required} to take part in the exercise.
+% 	\end{block}
+% 	\note{SAY (3:10--4:00): ``These are the materials participants work with:
+% 		ensemble forecasts as the source of uncertain evidence; observations and
+% 		reports for current conditions; historical risk knowledge for past
+% 		impacts and vulnerability context; a risk-assessment engine that turns
+% 		evidence into a consistent risk picture; and the event storylines
+% 		themselves. Hazard and impact modelling sit behind the scenes - they
+% 		are used to construct the storylines and the historical context, but
+% 		participants do not need to engage with them to take part.''}
+% \end{frame}
+
+
+
+% \begin{frame}{Participant roles}
+% 	Participants take the roles of \textbf{stakeholders around the operations
+% 	table} - the DOC duty analyst, the humanitarian actor, the
+% 	local-government focal point.
+% 	\begin{itemize}
+% 		\item \textbf{Evaluate} evolving forecast and risk evidence as a
+% 			storyline escalates.
+% 		\item \textbf{Assess} when anticipatory action should be initiated -
+% 			through \textbf{local governance structures and humanitarian
+% 			actors}.
+% 		\item \textbf{Justify} the decision using the \textbf{evidence available
+% 			at that moment}.
+% 	\end{itemize}
+% 	\note{SAY (5:00--5:40): ``Participants take stakeholder roles - the duty
+% 		analyst, the humanitarian responder, the local-government focal point.
+% 		As the storyline escalates, they evaluate the evidence and assess when
+% 		anticipatory action should begin, and through which governance and
+% 		humanitarian channels. And each decision must be defensible on the basis
+% 		of the evidence available at that moment.''}
+% \end{frame}
+
+
+
+
+
+% =====================================================================
+\section{Reflections}
+% nur für die Miniframe-Navigation
+\subsection*{}
+
+\begin{frame}{Reflections}
+	\begin{itemize}
+		\item \textbf{Evidence typology} - hard / soft / virtual, and why
+			forecasts are soft.
+		%\item \textbf{Coherent updating} - the same evidence yields the same
+		%	assessment; intuition varies, the framework does not.
+		\item \textbf{Decisions under uncertainty} - cost-loss reasoning;
+			\emph{a good decision $\neq$ a good outcome}.
+		\item \textbf{Calibrated trust in tools} - the question is never ``is
+			the assessment right?'' but ``is its reasoning transparent enough to
+			know when to overrule it?''
+	\end{itemize}
+	\note{SAY (approx.\ 2 min): ``To close the structured part: the exercise
+		trains four things - reading evidence by type; updating an assessment
+		coherently; deciding under uncertainty, where a good decision and a good
+		outcome are not the same; and, most valuably, calibrated trust in tools.
+		The question for an operations centre is never simply whether the
+		assessment is right, but whether its reasoning is transparent enough to
+		know when to overrule it.''}
+\end{frame}
+
+\begin{frame}{Feedback we're seeking - join on Kahoot}
+	\begin{columns}[c]
+		\begin{column}{0.62\textwidth}
+			\centering
+			Help us \textbf{co-design better tools} - give your feedback live: \\[1.2ex]
+			{\Large\textbf{\url{https://kahoot.it}}} \\[1.2ex]
+			{\large Game \textbf{PIN} shared on screen now.} \\[1.5ex]
+			{\footnotesize Or join the discussion: \\
+			\url{https://github.com/icpac-igad/crma/discussions}}
+		\end{column}
+		\begin{column}{0.36\textwidth}
+			\centering
+			\includegraphics[height=0.66\textheight]{kahoot.jpg}
+		\end{column}
+	\end{columns}
+	\note{SAY (approx.\ 1 min): ``Let's take the feedback on Kahoot - join at
+		kahoot.it with the PIN on screen. The questions, straight from the
+		abstract's aim: where did a signal warn early, and where did it mislead?
+		Where did the assessment diverge from what happened? And what would make
+		this usable in your own DOC or agency? These observations feed the
+		verification record and the next iteration.''}
+\end{frame}
+
+% Fußzeile (mit Logo) auf der Schlussfolie unterdrücken
+{
+\setbeamertemplate{footline}{}
+\begin{frame}
+%{Take it further - thank you}
+	% \begin{itemize}
+	% 	\item \textbf{Run another event} - contrast a \textbf{strong-signal
+	% 		drought} (\texttt{uganda\_karamoja\_drought\_2022}, $\approx$6-month
+	% 		lead) with a \textbf{tail-risk flood}.
+	% 	\item \textbf{Speed-run} - the same three acts in 5--10 minutes for
+	% 		briefings.
+	% 	\item \textbf{Go deeper} - the underlying data and methods are
+	% 		available in the \textbf{Colab / JupyterHub} notebooks.
+	% \end{itemize}
+	\begin{center}\Large\textbf{Thank you.}\end{center}
+	\vspace*{2ex}
+	\begin{center}\includegraphics[height=1.4cm]{logos-t.png}\end{center}
+	\note{SAY (approx.\ 30s): ``If time allows, run a second event - a
+		slow-onset drought after a flash flood feels entirely different. The
+		underlying data and methods are available in the notebooks for those who
+		wish to go further. Thank you.''}
+\end{frame}
+}
+
+% \begin{frame}{Appendix - Facilitator quick-reference}
+% 	\small
+% 	\begin{itemize}
+% 		\item \textbf{Index:} \texttt{\dots run.app/scenario} - filter Flood /
+% 			Drought.
+% 		\item \textbf{Worked demo event:} \texttt{kenya\_nairobi\_flood\_2024}
+% 			(tail-risk flood).
+% 		\item \textbf{Strong-signal contrast:}
+% 			\texttt{uganda\_karamoja\_drought\_2022} ($\approx$6-month lead).
+% 		\item \textbf{Acts gate forward:} Act I needs all 13 answers; the
+% 			engine/advisory is hidden until Act II.
+% 		\item \textbf{Assessment is formative} - process over prediction. No
+% 			leaderboard.
+% 		\item \textbf{Scope note:} the hands-on centres the observe $\rightarrow$
+% 			assess $\rightarrow$ update $\rightarrow$ decide pathway. Hazard and
+% 			impact modelling are used behind the scenes (not required);
+% 			\textbf{recorded EM-DAT loss is the ground-truth reference} in the
+% 			debrief.
+% 		\item \textbf{Offline:} questionnaire, decision \& debrief work without
+% 			backend; the live engine map / DAG / advisory need \texttt{crma-api}.
+% 	\end{itemize}
+% 	\note{NOTE: facilitator-only - skip past in delivery.}
+% \end{frame}
+
+\end{document}

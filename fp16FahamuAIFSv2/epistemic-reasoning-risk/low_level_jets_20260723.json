@@ -1,0 +1,216 @@
+{
+ "meta": {
+  "locus": "loc.llj.v1",
+  "tag": "cycle-20260723_0000",
+  "registry_version": "0.2.0",
+  "metric": "core speed = 95th percentile of |V| over the box cells, per member per step (a percentile, NOT a mean, so the core survives). Reported with the box max. Duration = fraction of window steps with core speed above each threshold.",
+  "reporting_rule": "counts above NAMED PHYSICAL thresholds, never a multi-way state split \u2014 see state_resolution_test: this ensemble does not resolve fine categorical partitions.",
+  "created": "2026-08-07T04:41:40+00:00"
+ },
+ "windows": {
+  "W1_wk3": {
+   "hours": [
+    432,
+    576
+   ],
+   "n_steps": 25,
+   "n_nocturnal_steps": 7,
+   "jets": {
+    "somali_findlater": {
+     "core_speed_m_s": {
+      "window_mean_of_core": {
+       "min": 16.38,
+       "median": 19.39,
+       "max": 22.66
+      },
+      "peak_core_any_step": {
+       "min": 18.58,
+       "median": 22.55,
+       "max": 25.71
+      },
+      "box_max_any_step": 31.09
+     },
+     "threshold_counts": {
+      "present_15.0m_s": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.982,
+       "max_duration_frac": 1.0
+      },
+      "strong_25.0m_s": {
+       "n_members_reaching": 7,
+       "n_members": 50,
+       "mean_duration_frac": 0.006,
+       "max_duration_frac": 0.04
+      }
+     },
+     "direction": {
+      "component": "v",
+      "required": "southerly (v>0)",
+      "n_members_satisfying": 50,
+      "n_members": 50,
+      "box_mean_component_m_s": 9.06
+     },
+     "box": "reg.SOMJET.v1",
+     "n_cells": 2862,
+     "level_hPa": 850,
+     "ess": 2.98
+    },
+    "turkana": {
+     "core_speed_m_s": {
+      "window_mean_of_core": {
+       "min": 9.13,
+       "median": 12.13,
+       "max": 13.31
+      },
+      "peak_core_any_step": {
+       "min": 13.39,
+       "median": 15.49,
+       "max": 17.75
+      },
+      "box_max_any_step": 24.31
+     },
+     "threshold_counts": {
+      "present_12.0m_s": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.602,
+       "max_duration_frac": 0.8
+      },
+      "typical_core_16.8m_s": {
+       "n_members_reaching": 3,
+       "n_members": 50,
+       "mean_duration_frac": 0.002,
+       "max_duration_frac": 0.04
+      },
+      "extreme_30.0m_s": {
+       "n_members_reaching": 0,
+       "n_members": 50,
+       "mean_duration_frac": 0.0,
+       "max_duration_frac": 0.0
+      }
+     },
+     "direction": {
+      "component": "u",
+      "required": "easterly (u<0)",
+      "n_members_satisfying": 50,
+      "n_members": 50,
+      "box_mean_component_m_s": -4.44
+     },
+     "nocturnal_0300_local": {
+      "n_steps": 7,
+      "core_mean": 14.01,
+      "core_max": 17.75,
+      "n_members_reaching_typical_core": 3
+     },
+     "box": "reg.TURKANA.v1",
+     "n_cells": 238,
+     "level_hPa": 925,
+     "ess": 5.02
+    }
+   }
+  },
+  "W2_wk45": {
+   "hours": [
+    582,
+    792
+   ],
+   "n_steps": 36,
+   "n_nocturnal_steps": 9,
+   "jets": {
+    "somali_findlater": {
+     "core_speed_m_s": {
+      "window_mean_of_core": {
+       "min": 13.33,
+       "median": 16.48,
+       "max": 21.6
+      },
+      "peak_core_any_step": {
+       "min": 16.98,
+       "median": 20.1,
+       "max": 25.46
+      },
+      "box_max_any_step": 29.9
+     },
+     "threshold_counts": {
+      "present_15.0m_s": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.727,
+       "max_duration_frac": 1.0
+      },
+      "strong_25.0m_s": {
+       "n_members_reaching": 2,
+       "n_members": 50,
+       "mean_duration_frac": 0.002,
+       "max_duration_frac": 0.083
+      }
+     },
+     "direction": {
+      "component": "v",
+      "required": "southerly (v>0)",
+      "n_members_satisfying": 50,
+      "n_members": 50,
+      "box_mean_component_m_s": 7.66
+     },
+     "box": "reg.SOMJET.v1",
+     "n_cells": 2862,
+     "level_hPa": 850,
+     "ess": 3.43
+    },
+    "turkana": {
+     "core_speed_m_s": {
+      "window_mean_of_core": {
+       "min": 9.89,
+       "median": 11.9,
+       "max": 13.22
+      },
+      "peak_core_any_step": {
+       "min": 13.34,
+       "median": 15.31,
+       "max": 17.53
+      },
+      "box_max_any_step": 25.5
+     },
+     "threshold_counts": {
+      "present_12.0m_s": {
+       "n_members_reaching": 50,
+       "n_members": 50,
+       "mean_duration_frac": 0.536,
+       "max_duration_frac": 0.722
+      },
+      "typical_core_16.8m_s": {
+       "n_members_reaching": 1,
+       "n_members": 50,
+       "mean_duration_frac": 0.001,
+       "max_duration_frac": 0.028
+      },
+      "extreme_30.0m_s": {
+       "n_members_reaching": 0,
+       "n_members": 50,
+       "mean_duration_frac": 0.0,
+       "max_duration_frac": 0.0
+      }
+     },
+     "direction": {
+      "component": "u",
+      "required": "easterly (u<0)",
+      "n_members_satisfying": 50,
+      "n_members": 50,
+      "box_mean_component_m_s": -4.27
+     },
+     "nocturnal_0300_local": {
+      "n_steps": 9,
+      "core_mean": 13.7,
+      "core_max": 17.53,
+      "n_members_reaching_typical_core": 1
+     },
+     "box": "reg.TURKANA.v1",
+     "n_cells": 238,
+     "level_hPa": 925,
+     "ess": 6.94
+    }
+   }
+  }
+ }
+}

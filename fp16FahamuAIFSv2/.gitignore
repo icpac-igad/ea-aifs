@@ -1,6 +1,17 @@
-# Secrets / credentials — never commit
+# Secrets / credentials — never commit.
+# Deliberately broad: a narrower rule once let coiled-data-e4drr_202505.json through,
+# and `source-coop creds --format env` writes a live STS token to whatever file you
+# point it at. Match the family, not the one filename you happen to be thinking of.
 .env
+.env.*
+*.env
+.ecmwfapirc
+.ecmwfapirc.*
 coiled-data.json
+*credential*
+*creds*
+*.pem
+*.key
 
 # Generated ETL / submission outputs
 input_states_v2/

@@ -1,0 +1,712 @@
+Given the scope—**AIFS-ENS at 0.25° extending to about 800 hours**—I would not begin with a large ontology of individual meteorological variables. Begin with a **small grouped physical DAG**, where each node represents a process and is estimated from only a few AIFS-ENS fields.
+
+The main limitation is important:
+
+> AIFS-ENS can represent the atmospheric forcing and perhaps antecedent land-state proxies, but it cannot independently resolve catchment saturation or river response at 25 km.
+
+Therefore, your first operational endpoint should probably be **catchment-scale hydroclimatic surplus or deficit potential**, rather than actual river discharge or impacts.
+
+## Recommended starting DAG
+
+```text
+Large-scale circulation
+          │
+          ▼
+Moisture supply and transport
+          │
+          ▼
+Rainfall-generation environment
+          │
+          ▼
+Precipitation forcing
+          │
+          ▼
+Antecedent catchment wetness
+          │
+          ▼
+Catchment water-balance pressure
+          │
+     ┌────┴─────┐
+     ▼          ▼
+Water-surplus  Water-deficit
+potential      potential
+```
+
+For flood-oriented reasoning, the pathway is:
+
+```text
+Moisture supply
+      +
+Rainfall-generation environment
+      ↓
+Heavy or persistent precipitation
+      +
+Antecedent wetness
+      ↓
+Catchment water-surplus potential
+```
+
+For drought-oriented reasoning:
+
+```text
+Weak moisture supply
+      +
+Persistent rainfall suppression
+      +
+Atmospheric evaporative demand
+      ↓
+Accumulating catchment water-deficit potential
+```
+
+This avoids trying to represent every atmospheric mechanism separately.
+
+# Four process groups to start with
+
+## 1. Large-scale circulation regime
+
+This node describes whether the circulation is favourable for transporting and concentrating moisture over the region.
+
+### Minimum variables
+
+* Mean sea-level pressure: `msl`
+* Geopotential height, preferably 500 hPa: `z500`
+* Zonal and meridional wind:
+
+  * `u850`, `v850`
+  * optionally `u700`, `v700`
+
+### What the node represents
+
+```text
+Pressure and geopotential pattern
+             ↓
+Direction, strength and persistence
+of regional atmospheric circulation
+```
+
+Do not put `msl`, `z500`, `u850`, and `v850` directly as four independent parents of rainfall. They are highly related. Derive one grouped state such as:
+
+```text
+Circulation regime
+├── unfavourable
+├── neutral
+├── moisture-convergent
+└── strongly moisture-convergent
+```
+
+For East Africa, this can capture whether the flow is bringing moisture from the Indian Ocean, Congo Basin, Red Sea or another source region.
+
+---
+
+## 2. Moisture supply and transport
+
+This is probably the **most important synoptic node** for your first experiment.
+
+### Minimum variables
+
+* Total column water vapour: `tcwv`
+* Specific humidity at 850 or 700 hPa: `q850`, `q700`
+* Winds at the corresponding levels:
+
+  * `u850`, `v850`
+  * `u700`, `v700`
+
+From these, derive vertically integrated or layer moisture transport.
+
+Conceptually:
+
+[
+\mathbf{IVT}
+============
+
+\frac{1}{g}
+\int q\mathbf{V},dp
+]
+
+If enough pressure-level humidity and wind fields are available, calculate IVT directly. Otherwise, use a lower-tropospheric moisture-flux approximation:
+
+[
+\mathbf{MFT}_{850}
+==================
+
+q_{850}(u_{850},v_{850})
+]
+
+### Derived evidence
+
+Use spatially meaningful indicators rather than raw grid-cell values:
+
+* Moisture-flux magnitude
+* Moisture-flux direction
+* Moisture-flux convergence
+* Duration of anomalous moisture transport
+* Ensemble probability of exceeding a local percentile
+
+The ontology node could be:
+
+```text
+Moisture supply and transport
+├── deficient
+├── normal
+├── enhanced
+└── extreme/persistent
+```
+
+For both flood and drought, this node is more informative than precipitation alone because it describes the physical supply of atmospheric water.
+
+---
+
+## 3. Rainfall-generation environment
+
+I would use this phrase instead of only **atmospheric instability**, because East African heavy rainfall is not always dominated by local convective instability. It can arise from moisture convergence, organised convection, orographic lifting and large-scale ascent.
+
+### Candidate variables
+
+Start with:
+
+* CAPE: `cape`
+* Temperature at 850 and 500 hPa: `t850`, `t500`
+* Relative or specific humidity at 700 hPa: `q700` or `r700`
+* Vertical velocity at 500 or 700 hPa: `w500` or `w700`, where available
+* Geopotential and wind fields for diagnosing troughs and convergence
+
+### Grouped interpretation
+
+```text
+Rainfall-generation environment
+├── suppressed
+├── weakly supportive
+├── supportive
+└── strongly supportive
+```
+
+This node should not mean only “high CAPE.” For example:
+
+```text
+Strong moisture convergence + moderate instability
+                    ↓
+          Supportive environment
+```
+
+and
+
+```text
+High CAPE + dry middle atmosphere + no convergence
+                    ↓
+       Only weakly supportive environment
+```
+
+That distinction prevents CAPE from being treated as a direct predictor of flooding.
+
+---
+
+## 4. Precipitation forcing
+
+This is the atmospheric output that directly enters the catchment.
+
+### Core variable
+
+* Total precipitation: `tp`
+
+### Derived features
+
+Do not use only accumulated rainfall at a single lead time. Derive:
+
+* 6-hour or 24-hour precipitation
+* 3-day accumulation
+* 7-day accumulation
+* Maximum rolling 24-hour rainfall
+* Number of wet forecast steps
+* Consecutive wet days
+* Ensemble exceedance probability
+* Forecast persistence between successive runs
+
+For example:
+
+```text
+Precipitation forcing
+├── below normal
+├── normal
+├── heavy episodic
+└── heavy persistent
+```
+
+The distinction between **episodic** and **persistent** is important:
+
+* A short extreme burst may cause flash flooding.
+* Moderate but persistent rainfall may saturate a large catchment.
+* Repeated rainfall episodes can produce delayed river flooding.
+
+---
+
+# Catchment wetness cannot come from the current forecast alone
+
+This is the first major blocking wall.
+
+A 15–33-day AIFS-ENS forecast tells you what may happen next, but catchment saturation depends strongly on what happened **before initialization**.
+
+You therefore need an antecedent-state node:
+
+```text
+Antecedent catchment wetness
+```
+
+This should ideally combine:
+
+* Observed rainfall over the preceding 7–30 days
+* Soil-moisture analysis or satellite soil moisture
+* Previous runoff or streamflow
+* Existing reservoir, lake or wetland conditions where relevant
+
+AIFS-ENS forecast precipitation alone should not be used to infer the initial catchment wetness.
+
+A simple first version could use:
+
+[
+AWI_t
+=====
+
+\sum_{i=1}^{n} P_{t-i}k^i
+]
+
+where `AWI` is an antecedent wetness index and older rainfall receives progressively less weight.
+
+The node could be:
+
+```text
+Antecedent wetness
+├── very dry
+├── dry
+├── normal
+├── wet
+└── saturated
+```
+
+## Combined catchment pressure node
+
+Then construct:
+
+```text
+Precipitation forcing ─────────┐
+                              ├──► Catchment water-balance pressure
+Antecedent catchment wetness ──┘
+```
+
+This target node might have five states:
+
+```text
+Strong deficit
+Mild deficit
+Balanced
+Elevated surplus
+Extreme surplus
+```
+
+That single ordered node can support both drought and flood reasoning.
+
+# Smallest viable variable set
+
+I would start with approximately **eight physical fields**, not thirty:
+
+| Process                 | Initial fields                              |
+| ----------------------- | ------------------------------------------- |
+| Circulation             | `msl`, `z500`                               |
+| Moisture transport      | `q850`, `u850`, `v850`, `tcwv`              |
+| Rainfall environment    | `cape` or `w500`                            |
+| Atmospheric water input | `tp`                                        |
+| Antecedent state        | External observed rainfall or soil moisture |
+
+If pressure-level coverage permits proper IVT calculation, add:
+
+* `q1000`, `q925`, `q850`, `q700`, `q500`
+* Corresponding `u` and `v`
+
+However, I would treat this as the **second iteration**. A lower-level moisture-flux proxy is adequate for testing the ontology.
+
+# The BN should contain grouped states, not every field
+
+A sensible initial BN would be:
+
+```text
+Circulation regime
+        │
+        ▼
+Moisture transport ──────────────┐
+        │                        │
+        ▼                        ▼
+Rainfall-generation ───► Precipitation forcing
+                                  │
+Antecedent wetness ───────────────┤
+                                  ▼
+                   Catchment water-balance pressure
+                             ┌────┴────┐
+                             ▼         ▼
+                      Surplus alert  Deficit alert
+```
+
+A slightly more physically explicit version is:
+
+```text
+Circulation regime ──► Moisture transport
+                              │
+                              ├──► Rainfall environment
+                              │            │
+                              └────────────┤
+                                           ▼
+                                Precipitation forcing
+                                           │
+Antecedent wetness ────────────────────────┤
+                                           ▼
+                             Catchment surplus/deficit
+```
+
+## Avoid this structure
+
+```text
+u850 ─┐
+v850 ─┤
+q850 ─┤
+tcwv ─┤
+cape ─┼──► Heavy rainfall
+w500 ─┤
+z500 ─┤
+msl  ─┘
+```
+
+This is difficult to interpret and likely to double-count correlated meteorological information.
+
+Instead:
+
+```text
+u850 + v850 + q850 + tcwv
+                 ↓
+       Moisture-transport index
+                 ↓
+          BN evidence node
+```
+
+The diagnostic calculation occurs **outside the BN**. The BN reasons with the resulting process state and its uncertainty.
+
+# Ensemble information should remain explicit
+
+Because this is AIFS-ENS, the evidence should not be reduced immediately to the ensemble mean.
+
+For each grouped node, retain:
+
+* Probability of each state
+* Ensemble spread
+* Agreement among members
+* Persistence across lead windows
+* Change from the previous forecast cycle
+
+For example:
+
+```text
+P(enhanced moisture transport) = 0.72
+P(extreme moisture transport)  = 0.18
+Ensemble agreement             = moderate
+Trend from previous cycle      = increasing
+```
+
+This becomes soft evidence in the BN rather than a hard category.
+
+# What I would implement first
+
+The first prototype should test only this chain:
+
+```text
+Lower-tropospheric moisture transport
+                ↓
+Rainfall-generation environment
+                ↓
+Ensemble precipitation forcing
+                +
+Antecedent wetness
+                ↓
+Catchment water-surplus probability
+```
+
+Use four diagnostic products:
+
+1. 850-hPa moisture flux or IVT.
+2. Moisture-flux convergence over and upstream of the catchment.
+3. Rolling precipitation accumulations and ensemble exceedance probabilities.
+4. Antecedent rainfall or soil-moisture percentile.
+
+For drought, use the same structure but evaluate longer windows:
+
+```text
+Deficient moisture transport
+             +
+Suppressed precipitation probability
+             +
+Dry antecedent state
+             ↓
+Increasing water-deficit probability
+```
+
+At the 800-hour horizon, the BN should progressively change its interpretation:
+
+* **0–120 hours:** event-scale surplus and heavy-rainfall reasoning.
+* **120–360 hours:** persistent wet/dry regime reasoning.
+* **360–800 hours:** broad water-balance tendency, not catchment-specific flood prediction.
+
+AIFS ENS v2 is currently ECMWF’s operational ensemble AI system, following its May 12, 2026 upgrade; ECMWF describes the AIFS products as global 0.25° forecast data, but the exact parameter subset depends on the chosen product stream and access route. ([ECMWF][1])
+
+The key starting principle is therefore:
+
+> **Use only a handful of fields, but organise them into physically meaningful process nodes: circulation, moisture transport, rainfall-generation environment, precipitation forcing and antecedent catchment state.**
+
+The most important first node is probably **moisture transport**, while the most important non-AIFS input is **antecedent catchment wetness**. Without the latter, the BN can estimate heavy-rainfall potential, but not credible catchment water-surplus risk.
+
+[1]: https://www.ecmwf.int/en/forecasts/dataset/aifs-machine-learning-data?utm_source=chatgpt.com "AIFS Machine Learning data"
+
+
+
+
+Yes—but **not all in the same way**, and not all as direct BN nodes in the first version.
+
+I would add them in layers after the initial moisture–rainfall–catchment setup is working.
+
+## Recommended order
+
+### First: atmospheric river, Somali jet and Turkana jet
+
+These are closer to the actual weather-producing mechanism and can be diagnosed from the same AIFS-ENS fields already used for moisture transport and circulation.
+
+They should usually be treated as **derived circulation regimes**, not as completely separate independent parents.
+
+For example:
+
+```text
+Large-scale circulation
+        │
+        ├── Somali-jet state
+        ├── Turkana-jet state
+        └── Atmospheric-river state
+                  │
+                  ▼
+        Moisture transport/convergence
+                  │
+                  ▼
+          Precipitation forcing
+```
+
+However, this structure can still double-count information because atmospheric rivers and low-level jets are identified from wind, humidity and IVT—the same variables already informing the moisture-transport node.
+
+A safer structure is:
+
+```text
+Somali/Turkana jet configuration ──► Moisture transport
+Atmospheric-river configuration ───► Moisture transport
+                                             │
+                                             ▼
+                                  Rainfall-generation environment
+```
+
+Or even more simply:
+
+```text
+Moisture-transport regime
+├── ordinary transport
+├── Somali-jet enhanced
+├── Turkana-channelled
+├── atmospheric-river-like
+└── weak/deficient transport
+```
+
+This avoids treating strongly related diagnostics as independent evidence.
+
+## ENSO and IOD come later
+
+ENSO and IOD are different. They are not immediate weather mechanisms over a catchment. They influence the **background probability of circulation and rainfall regimes**.
+
+So they belong upstream as prior-conditioning nodes:
+
+```text
+ENSO ─────┐
+          ├──► Seasonal background state
+IOD ──────┘              │
+                         ▼
+              Circulation-regime probability
+                         │
+                         ▼
+                 Moisture transport
+```
+
+They should not normally point directly to flood or drought risk:
+
+```text
+ENSO ──X──► Flood risk
+IOD  ──X──► Drought risk
+```
+
+That would be too coarse and could imply false causality.
+
+Instead:
+
+```text
+ENSO/IOD
+   ↓
+Probability of particular circulation regimes
+   ↓
+Moisture supply and rainfall persistence
+   ↓
+Catchment surplus or deficit tendency
+```
+
+## Why ENSO and IOD should not be first
+
+At short lead times, the actual AIFS ensemble circulation is more informative than a broad climate index.
+
+For example, even during an El Niño or positive IOD period:
+
+* a specific catchment may remain dry,
+* the expected circulation teleconnection may not materialise,
+* the rainfall anomaly may shift geographically,
+* local moisture transport may oppose the seasonal expectation.
+
+Therefore, ENSO and IOD should modify the prior, while AIFS-ENS provides the current evidence.
+
+In Bayesian terms:
+
+[
+P(\text{wet circulation}\mid \text{ENSO, IOD})
+]
+
+provides a prior, which is then updated by:
+
+[
+P(\text{AIFS circulation and moisture evidence})
+]
+
+## Suggested development sequence
+
+### Stage 1: process backbone
+
+```text
+Moisture transport
+        ↓
+Rainfall-generation environment
+        ↓
+Precipitation forcing
+        +
+Antecedent wetness
+        ↓
+Catchment surplus/deficit
+```
+
+### Stage 2: regional mechanisms
+
+Add:
+
+* Atmospheric-river-like moisture corridors
+* Somali jet state
+* Turkana jet state
+* Moisture-flux convergence
+* Orographic interception where relevant
+
+These improve physical explanation.
+
+### Stage 3: background climate conditioning
+
+Add:
+
+* ENSO
+* IOD
+* possibly MJO
+* seasonal climatological phase
+
+These change the prior likelihood of the Stage 2 regimes.
+
+A more complete DAG could be:
+
+```text
+ENSO ─────┐
+IOD ──────┼──► Background climate state
+MJO ──────┘              │
+                         ▼
+              Regional circulation regime
+              ├── Somali jet state
+              ├── Turkana jet state
+              └── moisture corridor/AR state
+                         │
+                         ▼
+               Moisture transport/convergence
+                         │
+                         ▼
+              Rainfall-generation environment
+                         │
+                         ▼
+                Precipitation forcing
+                         │
+Antecedent wetness ──────┤
+                         ▼
+             Catchment surplus/deficit state
+```
+
+## Atmospheric river needs careful treatment
+
+For East Africa, I would initially use the term:
+
+> **organised moisture-transport corridor**
+
+rather than immediately classifying every strong IVT event as an atmospheric river.
+
+Classical atmospheric-river thresholds and geometry were developed mainly for extratropical regions. In tropical East Africa, strong elongated moisture transport may occur through monsoon flow, low-level jets, tropical disturbances and Indian Ocean inflow without fitting a standard atmospheric-river definition.
+
+So the initial node could be:
+
+```text
+Moisture-corridor state
+├── absent
+├── weak
+├── organised
+└── extreme and persistent
+```
+
+Later, after event validation, you can decide which cases qualify as atmospheric rivers.
+
+## Somali jet and Turkana jet should remain distinct
+
+They serve different spatial and physical roles.
+
+The **Somali jet** may influence large-scale moisture transport from the Indian Ocean and monsoon circulation.
+
+The **Turkana jet** is strongly channelled by regional topography and can affect low-level transport and rainfall distribution around northern Kenya, South Sudan, Ethiopia and Uganda.
+
+They should therefore not simply be merged into one generic “jet” variable. But they may both influence the same grouped node:
+
+```text
+Somali jet state ─────┐
+                      ├──► Regional moisture-transport regime
+Turkana jet state ────┘
+```
+
+## My strongest recommendation
+
+Start with the physical process node:
+
+> **Regional moisture-transport regime**
+
+Then use Somali jet, Turkana jet and atmospheric-river diagnostics to explain or classify that regime.
+
+Add ENSO and IOD only after that mechanism performs reasonably well. They should act mainly as **prior-conditioning variables**, not as direct predictors of catchment risk.
+
+So the hierarchy is:
+
+```text
+ENSO / IOD
+    ↓
+Background likelihood
+
+Somali jet / Turkana jet / moisture corridor
+    ↓
+Weather-producing mechanism
+
+AIFS precipitation + antecedent wetness
+    ↓
+Immediate catchment evidence
+```
+
+That separation between **background climate**, **synoptic mechanism**, and **catchment evidence** will keep the BN interpretable and reduce double-counting.
