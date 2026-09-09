@@ -24,11 +24,12 @@ discards everything else. This folder builds the reasoning layer on top of it.
 5. **`EVIDENCE_MAP_AND_BASIN_PLAN.md`** — *the evidence map.* The six evidence nodes resolved
    against verified store contents, plus the HydroBASINS level-3 domain plan. Note §4 is
    partly superseded by (6).
-6. **`SHORT_RANGE_EVIDENCE_MAP.md`** — *the same six nodes at 0–7 days*, with exact fields
-   rather than concepts. Records that the ∇·/∇× blocker in (5) §4 was already solved in
-   `ts-mjo/grid_ops.py` five days before it was written down, re-verifies the operator on O96,
-   and argues that CAPE — the one real gap — is better served by stability indices than by
-   MU-CAPE at this vertical resolution.
+6. **`EVIDENCE_NODES_OVER_33_DAYS.md`** — *the same six nodes across the range the cycle
+   actually runs*, 0–792 h, with exact fields rather than concepts. Establishes that the nodes
+   are an **O96 (~112 km) product**: the 28 km sidecar carries 10 variables chosen for the
+   AI-WQ submission and the TS tracker, so two of the six nodes are unavailable there at any
+   lead. Records that the ∇·/∇× blocker in (5) §4 was already solved in `ts-mjo/grid_ops.py`
+   five days before it was written down, and prices the 28 km option.
 
 ## Phase-0 contracts (fix the failure modes before any counting)
 
