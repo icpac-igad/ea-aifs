@@ -23,3 +23,10 @@ __pycache__/
 20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.txt
 20*-aifs-*.txt
 *login*.txt
+
+# Editor swap/backup files — never commit.
+# A swap file of a secret-bearing transcript carries the same content, and the
+# transcript rules above (*login*.txt) do not match a .swp suffix.
+*.swp
+*.swo
+*~
