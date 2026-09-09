@@ -160,9 +160,12 @@ the logs.
 
 ## Related
 
-- [`run_commands_20260827.md`](run_commands_20260827.md) — the most recent
-  per-cycle record; also documents the `HF_HOME` trap and the 58-hour gap between
-  a finished rollout and its submission.
+- [`run_commands_20260903.md`](run_commands_20260903.md) — the most recent per-cycle
+  record, and the first tier-B cycle (O96 corpus + N320 sidecar, 209 GB instead of
+  583 GB). Documents the untagged-sidecar trap and why `--icechunk-tag` was omitted
+  from 3a.
+- [`run_commands_20260827.md`](run_commands_20260827.md) — the `HF_HOME` trap and the
+  58-hour gap between a finished rollout and its submission.
 - [`run_commands_20260820.md`](run_commands_20260820.md) — the pre-flight that
   works offline, and the note that `--dry-run` does **not** exercise the ECBox
   transport.
