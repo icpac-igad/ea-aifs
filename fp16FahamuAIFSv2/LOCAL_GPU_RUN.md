@@ -266,3 +266,59 @@ bash -c 'SECONDS=0; '"$PY"' fp16_automate_aifs_gpu_pipeline_v2.py --date 2026070
   --members 1 --lead-time 960 --input-dir '"$BASE"'/input_states \
   --output-dir '"$BASE"'/fp16_v2_forecasts_960h --no-upload --keep-local; echo "WALL=${SECONDS}s"'
 ```
+
+---
+
+## 6. Troubleshooting: the HuggingFace checkpoint
+
+**`export HF_HOME=/tank/projects/hf_cache` before every run.** Three plausible cache paths
+exist on this box — `/tank/projects/hf_cache`, `/tank/projects/hf_home` and
+`~/.cache/huggingface` — and **two of them contain a `models--ecmwf--aifs-ens-2.0`
+directory**. Only `hf_cache` is complete.
+
+### Symptom: the run stalls with the GPU idle
+
+The log stops after the pickle load and shows nothing further:
+
+```
+    ✅ Loaded pickle: …/input_state_member_001.pkl
+    Date: 2026-09-03 00:00:00 | Fields: 112
+Fetching 14 files:   0%|          | 0/14 [00:00<?, ?it/s]
+Warning: You are sending unauthenticated requests to the HF Hub.
+```
+
+GPU sits at ~2 MiB / 0 %. This is **not** a hang in inference — `anemoi-inference` is
+re-downloading the ~3–4 GB checkpoint because it was pointed at an incomplete cache, and
+unauthenticated Hub requests are rate-limited. Observed on 20260827: nine minutes lost before
+it was noticed (`run_commands_20260827.md`).
+
+### Diagnosis
+
+```bash
+# which cache is actually complete?
+du -sh /tank/projects/hf_cache /tank/projects/hf_home ~/.cache/huggingface 2>/dev/null
+
+# stale locks and part-files from a killed download
+ls -la /tank/projects/hf_cache/hub/models--ecmwf--aifs-ens-2.0/blobs/ | grep incomplete
+ls -la /tank/projects/hf_cache/hub/.locks/models--ecmwf--aifs-ens-2.0/
+```
+
+A previous killed download leaves `.incomplete` blobs and `.lock` files that block the retry
+rather than resuming it.
+
+### Recovery
+
+```bash
+pkill -f "run_local_icechunk_v2.py --date <DATE>"
+rm -f /tank/projects/hf_cache/hub/models--ecmwf--aifs-ens-2.0/blobs/*.incomplete
+rm -f /tank/projects/hf_cache/hub/.locks/models--ecmwf--aifs-ens-2.0/*.lock
+export HF_TOKEN=...        # optional; lifts the anonymous rate limit
+```
+
+**Then delete the empty store the killed run left behind** — a few tens of KB holding a repo
+and a first commit but no schema. Relaunching over it makes the grid guard compare against a
+schema-less directory. `rm -rf $BASE/icechunk_o96 $BASE/icechunk_n320_aiwq`, then re-run.
+
+Nothing is lost if no member had finished: `--skip-existing` requires a member present in
+**both** stores at each store's own final step, so a partial member is redone rather than
+skipped.
