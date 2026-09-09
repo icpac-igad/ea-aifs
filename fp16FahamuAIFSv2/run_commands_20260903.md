@@ -241,7 +241,9 @@ anything needing moisture, vertical motion or geopotential at 28 km must use the
 ~112 km instead. That is the right trade for this cycle's targets, but it is a real constraint
 on the evidence-node work: see
 [`epistemic-reasoning-risk/EVIDENCE_NODES_OVER_33_DAYS.md`](epistemic-reasoning-risk/EVIDENCE_NODES_OVER_33_DAYS.md),
-which prices raising those nodes to 28 km at ~309 GB for the full range.
+which prices it: the 23 missing variables take the sidecar to 33, costing **+117 GB
+and +1.5 h per cycle** for days 18–33 (326 GB total), or 522 GB for the full 0–792 h —
+the latter only ~10 % below the 583 GB shape tier B replaced.
 
 `--native-vars` is an **inference-time** choice. Recovering a variable that was not written
 costs a full 4½-hour rollout, so it is worth settling before the next cycle rather than after.
