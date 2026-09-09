@@ -99,7 +99,7 @@ exactly what the jet work showed must be preserved.
 ## 4. The unblocking idea: boundary integrals instead of gradients
 
 > **⚠️ Superseded in part — see
-> [`SHORT_RANGE_EVIDENCE_MAP.md`](SHORT_RANGE_EVIDENCE_MAP.md) §1.** The premise below is
+> [`EVIDENCE_NODES_OVER_33_DAYS.md`](EVIDENCE_NODES_OVER_33_DAYS.md) §3.** The premise below is
 > wrong: `ts-mjo/grid_ops.py` computes the vorticity **field** directly on the reduced
 > Gaussian axis, and `ts-mjo/ts_tracks.py` does object detection there too. It was committed
 > 2026-08-07, five days *before* this file. Vorticity is done and re-verified on O96;
