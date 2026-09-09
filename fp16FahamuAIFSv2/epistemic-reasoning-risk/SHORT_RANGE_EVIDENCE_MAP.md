@@ -13,6 +13,49 @@ contents; this one records two things it could not:
 
 Verified 2026-09-08 against `20260903_0000/icechunk_o96` (tier B, 124 arrays, full 0–792 h).
 
+> **Read §0 first.** At 0–7 days these nodes are available **only at O96 (~112 km)**. The
+> ~28 km data does not begin until day 18. That is a property of how the cycle is stored,
+> not of the model, and it cuts against the short-range framing this document adopts.
+
+---
+
+## 0. The lead-time the data actually supports — read before using §2
+
+The six-node question at 0–7 days is scientifically the *better* framing for this model:
+AIFS-ENS 2.0 is a **medium-range** system, so days 0–7 sit inside its design range, whereas
+the AI-WQ submission at days 18–31 runs it well beyond. But the storage layout inverts what
+that framing needs. Measured on `20260903_0000`:
+
+| store | cells | resolution | stored leads | steps inside days 0–7 |
+|---|---|---|---|---|
+| `icechunk_o96` | 40 320 | **~112 km** | 6–792 h (days 0.25–33) | **28** (6–168 h) |
+| `icechunk_n320_aiwq` | 542 080 | **~28 km** | 432–792 h (days 18–33) | **0** |
+
+**The finest grid exists only at the longest lead.** That is exactly backwards for
+diagnosing rainfall ingredients, where the short range is when mesoscale structure is both
+predictable and decisive. It is not an oversight — the write window `432-792` and the 10-var
+sidecar are sized for the AI-WQ sub-seasonal target, and a full-range N320 store costs 583 GB
+against the 209 GB the tier-B pair costs. The design is right for the submission; it simply
+does not serve a short-range product.
+
+What that means for §2 in practice:
+
+- **Every node in §2 is computable at 0–7 days** — the O96 corpus carries all 124 variables
+  over all 132 steps, and `grid_ops.py` is verified on O96 (§1). Nothing is missing.
+- **All of it is at ~112 km.** Area means over a basin survive that; a 112 km cell will not
+  resolve a mesoscale convective system, a sharp moisture front, or a compact vortex.
+- **The basin-size constraint tightens by ~4×.** `EVIDENCE_MAP_AND_BASIN_PLAN.md` §4 notes a
+  boundary integral needs a perimeter of at least a few hundred kilometres to populate the
+  band at N320's ~31 km. At 112 km that threshold roughly quadruples, which strains
+  HydroBASINS level 3 rather than comfortably satisfying it.
+
+**If a short-range product is actually wanted, this is the decision to take first**, because
+it is an inference-time choice and cannot be recovered afterwards: either widen
+`--native-write-hours` to cover days 0–7 as well (adding roughly the same ~55 GB per cycle
+that the current 61-step sidecar costs), or accept 112 km and design the nodes as basin area
+means rather than fields. Re-running inference to recover hours 0–168 at N320 later costs a
+full 4½-hour rollout per cycle.
+
 ---
 
 ## 1. The blocker in §4 is resolved — including the part it said would not be
@@ -159,5 +202,10 @@ data can carry over the one the textbook names.
 Three of the six ⚠️ marks were pessimistic by five days. The fourth is real and stays.
 
 **Next, in order of value per unit work:** add `divergence()` beside `relative_vorticity()` in
-`ts-mjo/grid_ops.py`, which closes nodes 2 and 4 together and delivers MFC; then decide between
-SB-CAPE and the stability indices for node 5 — §3 recommends the indices.
+`ts-mjo/grid_ops.py`, which closes nodes 2 and 4 together, delivers MFC, and is also the
+operator `chi200` needs for the VPM MJO index (`../ts-mjo/vpm-mjo.md`) — one method serving
+three purposes. Then decide between SB-CAPE and the stability indices for node 5 — §3
+recommends the indices.
+
+**But settle §0 before either.** Whether a short-range product gets 28 km or 112 km is fixed
+at inference time, and every cycle run under the current window forecloses it for that cycle.
