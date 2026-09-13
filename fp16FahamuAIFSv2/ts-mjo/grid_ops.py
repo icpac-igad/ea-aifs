@@ -59,33 +59,54 @@ class ReducedGaussianGrid:
         # rows adjacent to the poles cannot use a centred difference
         self.valid = (self.row_of > 0) & (self.row_of < self.nrows - 1)
 
+    def _d_dlambda(self, f):
+        """Centred, circular derivative along each latitude row. Exact: the row
+        is a closed circle of evenly spaced longitudes."""
+        out = np.empty_like(f)
+        for j in range(self.nrows):
+            a, b = self.row_start[j], self.row_end[j]
+            seg = f[:, a:b]
+            dlam = 2.0 * np.pi / (b - a)
+            out[:, a:b] = (np.roll(seg, -1, axis=1) - np.roll(seg, 1, axis=1)) / (2.0 * dlam)
+        return out
+
+    def _d_dphi(self, f):
+        """Derivative between adjacent rows, each point matched to the nearest
+        longitude above and below via the precomputed index maps."""
+        up, dn = f[:, self.idx_up], f[:, self.idx_dn]
+        phi = np.deg2rad(self.lat)
+        dphi = phi[self.idx_up] - phi[self.idx_dn]
+        dphi = np.where(np.abs(dphi) < 1e-12, np.nan, dphi)
+        return (up - dn) / dphi[None, :]
+
     def relative_vorticity(self, u, v):
         """(nsteps, npts) u, v  ->  (nsteps, npts) relative vorticity [1/s]."""
         u = np.asarray(u, dtype=np.float64)
         v = np.asarray(v, dtype=np.float64)
-        phi = np.deg2rad(self.lat)
-        cosphi = np.maximum(np.cos(phi), 1e-6)
-
-        # --- dv/dlambda : centred, circular, within each row ---
-        dv = np.empty_like(v)
-        for j in range(self.nrows):
-            a, b = self.row_start[j], self.row_end[j]
-            seg = v[:, a:b]
-            dlam = 2.0 * np.pi / (b - a)
-            dv[:, a:b] = (np.roll(seg, -1, axis=1) - np.roll(seg, 1, axis=1)) / (2.0 * dlam)
-
-        # --- d(u cos phi)/dphi : between adjacent rows ---
-        ucos = u * cosphi[None, :]
-        up, dn = ucos[:, self.idx_up], ucos[:, self.idx_dn]
-        phi_up = phi[self.idx_up]
-        phi_dn = phi[self.idx_dn]
-        dphi = phi_up - phi_dn
-        dphi = np.where(np.abs(dphi) < 1e-12, np.nan, dphi)
-        ducos = (up - dn) / dphi[None, :]
-
-        zeta = (dv - ducos) / (EARTH_RADIUS * cosphi[None, :])
+        cosphi = np.maximum(np.cos(np.deg2rad(self.lat)), 1e-6)
+        zeta = (self._d_dlambda(v) - self._d_dphi(u * cosphi[None, :])) \
+            / (EARTH_RADIUS * cosphi[None, :])
         zeta[:, ~self.valid] = np.nan
         return zeta
+
+    def divergence(self, u, v):
+        """(nsteps, npts) u, v  ->  (nsteps, npts) horizontal divergence [1/s].
+
+            D = 1/(a cos phi) * [ du/dlambda + d(v cos phi)/dphi ]
+
+        The same two operators as `relative_vorticity` with u and v exchanged
+        and the sign flipped -- deliberately sharing them, so the pair cannot
+        drift apart. Feeds moisture-flux convergence and upper-level divergence
+        for the evidence nodes, and the velocity potential the VPM MJO index
+        needs (`velocity_potential.py`).
+        """
+        u = np.asarray(u, dtype=np.float64)
+        v = np.asarray(v, dtype=np.float64)
+        cosphi = np.maximum(np.cos(np.deg2rad(self.lat)), 1e-6)
+        d = (self._d_dlambda(u) + self._d_dphi(v * cosphi[None, :])) \
+            / (EARTH_RADIUS * cosphi[None, :])
+        d[:, ~self.valid] = np.nan
+        return d
 
 
 def cyclonic(zeta, lat):

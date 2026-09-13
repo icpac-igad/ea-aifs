@@ -202,6 +202,70 @@ full corpus is **necessary** for MJO, and **not sufficient**.
 
 ---
 
+## 5. VPM is now implemented — everything except the basis
+
+Built and verified 2026-09-13. `vpm_index.py` runs the whole VPM pipeline on the store;
+`velocity_potential.py` supplies the one genuinely new capability.
+
+```bash
+$PY vpm_index.py --store /tank/projects/aifs-run/<DATE>_0000/icechunk_o96 \
+    --tag cycle-<DATE>_0000 --init <DATE> --dump-bands vpm_bands.npz
+# add --eofs VPM_EOFs.npz to finish; without it the script stops after step 8
+```
+
+**~2 min for 50 members** over the full 132-step corpus.
+
+### How chi200 is obtained
+
+`chi` solves the Poisson equation on the sphere, `laplacian(chi) = D`. The implementation:
+
+1. **`grid_ops.divergence()`** — new, on the **native reduced Gaussian grid**. The same two
+   operators as `relative_vorticity` with `u`/`v` exchanged and the sign flipped, now shared
+   between the two so they cannot drift apart.
+2. **regrid `D` only** to a regular 1.5 deg grid — one field per step instead of two, because
+   `meridional_band` already works on the flat native vector, so `U850`/`U200` never need a
+   regular grid at all.
+3. **`velocity_potential.solve_poisson_sphere()`** — a real FFT in longitude is *exact* on a
+   periodic grid, turning the problem into one tridiagonal system per zonal wavenumber. Cell-
+   centred latitudes keep `cos(phi)` non-zero, and the half-level cosines vanish at the poles,
+   which imposes no-flux automatically. `m = 0` is singular (chi is defined up to a constant),
+   so it is pinned and the area-weighted mean removed — physically meaningless and invariant
+   under every downstream step.
+
+Regridding is not a compromise here: VPM consumes chi200 as a cosine-weighted mean over
++-15 deg reduced to 144 longitudes, and the MJO is zonal wavenumber 1–3. Nothing that survives
+that averaging is resolution-limited at 1.5 deg.
+
+### Verification
+
+| test | result |
+|---|---|
+| Poisson vs analytic `Y_1^1`, `Y_1^0`, `Y_2^2`, `Y_3^1` | rel. err **4e-5 … 4e-4** |
+| round trip chi → divergent wind → `D` → solve → chi | rel. err **6.9e-4** (global and in-band) |
+| `divergence` on a solid-body rotation (non-divergent by construction) | **exactly 0.00e+00**, while vorticity stays 6.3e-6 |
+| `D200` global mean (mass balance) | **+4.5e-07 1/s** |
+| `relative_vorticity` after the shared-operator refactor | unchanged: zonal mean −3.6e-08, p1/p99 ∓8e-5 |
+| chi200 magnitude on the real store | **2.3e7 m²/s** — literature scale O(1e6–1e7) |
+| chi200 tropical band, zonal spectrum | **k=1 dominant** — the Walker/MJO signature |
+
+### What is still missing: the EOFs
+
+**The VPM basis is an external asset, exactly as WH04's is.** AI-WQ distributes
+`WH04_combinedEOFs.nc` for RMM and nothing for VPM; the reference basis is NOAA PSL's.
+
+Without `--eofs`, `vpm_index.py` **stops after normalisation** and writes the band series
+rather than inventing a basis — the same refusal `mjo_index.py` makes for truncated WH04. A
+self-computed EOF basis would not be VPM: it would be a new index with no published phase
+convention, whose phases correspond to neither VPM's nor RMM's, and calling its output an MJO
+phase forecast would be wrong.
+
+So the remaining work is **acquisition, not computation**: obtain VPM EOFs (3 x 144, ordered
+`[chi200, u850, u200]`) plus the two PC standard deviations, and the pipeline completes. The
+`--clim` and `--lowfreq` inputs of §4.3 remain required for the anomalies to be
+VPM-comparable, and both are still unmet.
+
+---
+
 ## Not done
 
 - No `ttr` in the store, so no true RMM without an emulator (§1).
