@@ -114,18 +114,28 @@ grep -niE "password|token|secret|Bearer|api[_-]?key"      fp16FahamuAIFSv2_${DAT
 Each cycle against its predecessors — the step banners should line up within a
 few lines, and a new transcript that does not is worth looking at:
 
-| | 20260820 | 20260827 | 20260903 | 20260910 |
+| | 20260827 | 20260903 | 20260910 | 20260917 |
 |---|---|---|---|---|
 | 3b command | 1 | 1 | 1 | 1 |
-| 3c command | 344 | 344 | 337 | 348 |
-| `SUBMISSION SUMMARY` | 952 | 1001 | 1030 | 1065 |
-| total lines | 960 | 1009 | 1038 | **1073** |
-| registered-team rows | 479 | 528 | 564 | 588 |
+| 3c command | 344 | 337 | 348 | 348 |
+| `SUBMISSION SUMMARY` | 1001 | 1030 | 1065 | 1065 |
+| total lines | 1009 | 1038 | 1073 | **1073** |
+| registered-team rows | 528 | 564 | 588 | 588 |
+
+**20260910 and 20260917 have identical line counts and banner positions.** That is
+coincidence, not a duplicated file: the registered-teams table did not grow between
+2026-09-13 and 2026-09-20, and the two 3b logs happen to match in length. The files differ
+on 136 lines and have different md5s — check that before assuming a copy/paste error:
+
+```bash
+md5sum fp16FahamuAIFSv2_20260910.txt fp16FahamuAIFSv2_20260917.txt
+diff fp16FahamuAIFSv2_20260910.txt fp16FahamuAIFSv2_20260917.txt | grep -c '^[<>]'
+```
 
 **The file grows every cycle for a reason unrelated to the forecast.** The AI-WQ
 package prints the full registered-teams CSV on every call — twice per file, six
 files — and that table keeps gaining teams. Measured across the numbered rows in
-the 3c log, it went 479 → 528 → 564 → 588 across the last four cycles, and the
+the 3c log, it went 479 → 528 → 564 → 588 → 588 across the last five cycles (flat for the first time), and the
 20260820 → 20260827 step of +49 rows was exactly the 49-line difference between
 those two transcripts. Roughly a third of the file is that table. A jump in length
 is not a signal that anything changed in the run — confirm it against the row count
@@ -160,8 +170,11 @@ the logs.
 
 ## Related
 
-- [`run_commands_20260910.md`](run_commands_20260910.md) — the most recent per-cycle
-  record. Step 2 was killed silently at member 39 and resumed, so this cycle has **two**
+- [`run_commands_20260917.md`](run_commands_20260917.md) — the most recent per-cycle
+  record, and the one that **solves the silent kill**: `apt-daily-upgrade.service`
+  replacing glibc and the Python runtime under a running rollout. Also has two Step 2 logs.
+- [`run_commands_20260910.md`](run_commands_20260910.md) — the same failure before it was
+  understood. Step 2 was killed silently at member 39 and resumed, so this cycle has **two**
   Step 2 logs; it also documents the 5-hour Step 1 and the 26-hour gap before the failure
   was noticed.
 - [`run_commands_20260903.md`](run_commands_20260903.md) — the first tier-B cycle (O96 corpus + N320 sidecar, 209 GB instead of
