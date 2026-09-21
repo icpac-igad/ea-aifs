@@ -27,6 +27,7 @@ Routine use at the start of a new date's run::
 import argparse
 import os
 import re
+import glob
 import shutil
 import subprocess
 import sys
@@ -40,9 +41,25 @@ HEAVY_DIRS = (
     "ensemble_nc_files",     # temp
 )
 # Any subdir matching these prefixes is also heavy (stores / GRIB output).
-HEAVY_PREFIXES = ("icechunk_v2", "fp16_v2_forecasts")
+# icechunk_o96 / icechunk_n320_aiwq are the tier-B pair (~214 GB/cycle, from 20260903);
+# without them a tier-B cycle reported "Deleted 4/4 paths" while leaving 105 GB behind.
+HEAVY_PREFIXES = ("icechunk_v2", "icechunk_o96", "icechunk_n320_aiwq", "fp16_v2_forecasts")
 # Inside aiwq/ only these are purged; the .nc files (quintile + climatology) stay.
 AIWQ_PURGE = ("ensemble_icechunk_store", "ensemble_nc_files")
+
+# Files at the cycle root are never removed -- purge_targets() skips non-directories --
+# but these are named so the intent survives a refactor. They are small and they are the
+# only lasting record of the cycle once its stores are gone.
+KEEP_FILES = (
+    "ts_days_probs_*.nc",    # ~20 KB; the cycle's contribution to the TS detector
+                             # climatology, and unrecoverable once the store is purged
+    "mjo_probs*.nc",
+    "vpm_probs*.nc",
+)
+# A store must not be purged before the TS product has been extracted from it: the tracker
+# needs 10u/10v/msl/t_200/t_300/t_500/u_850/v_850 at N320, which only the store has.
+TS_PRODUCT_GLOB = "ts_days_probs_*.nc"
+TS_SOURCE_PREFIXES = ("icechunk_v2", "icechunk_n320_aiwq")
 
 CYCLE_RE = re.compile(r"^\d{8}_\d{4}$")
 
@@ -133,12 +150,27 @@ def main():
     blocked = [c for c in selected if c in busy]
     selected = [c for c in selected if c not in busy]
 
+    # never destroy the last copy of the TS inputs before the product has been extracted
+    unextracted = []
+    for c in list(selected):
+        cd = os.path.join(args.run_root, c)
+        has_n320 = any(n.startswith(TS_SOURCE_PREFIXES)
+                       and os.path.isdir(os.path.join(cd, n)) for n in os.listdir(cd))
+        if has_n320 and not glob.glob(os.path.join(cd, TS_PRODUCT_GLOB)):
+            unextracted.append(c)
+            selected.remove(c)
+
     print(f"Run root : {args.run_root}")
     print(f"Cycles   : {', '.join(cycles)}")
     if protected:
         print(f"Protected (newest {args.keep_latest}): {', '.join(protected)}")
     if blocked:
         print(f"Protected (in use by a running process): {', '.join(blocked)}")
+    if unextracted:
+        print(f"\nSKIPPED -- TS product not yet extracted: {', '.join(unextracted)}")
+        print(f"  These cycles hold the only N320 fields the TS tracker can read.")
+        print(f"  Run ts-mjo/ts_days.py first, then re-run this. See TS_STORM_DAYS.md.")
+
     print(f"Mode     : {'DELETE' if args.yes else 'DRY-RUN (nothing will be removed)'}")
     print("=" * 72)
 

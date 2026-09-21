@@ -682,10 +682,18 @@ It runs on either store shape — `icechunk_n320_aiwq` (the tier-B sidecar, 10 v
 older full `icechunk_v2` — because the sidecar was sized to include the eight fields the
 tracker needs.
 
-`cleanup_aifs_run.py` keeps `aiwq/*.nc` but the TS product sits at the cycle root, so **it is
-not protected by anything today**. Until that changes, the tracker run is a manual
-pre-purge step. The cost of forgetting is not recoverable: the store is gone, and with it
-that cycle's contribution to the climatology.
+**Enforced in code since 2026-09-21.** `cleanup_aifs_run.py` now refuses to purge a cycle
+whose N320 store is present but whose `ts_days_probs_*.nc` is not:
+
+```
+SKIPPED -- TS product not yet extracted: 20260903_0000
+  Run ts-mjo/ts_days.py first, then re-run this.
+```
+
+(An earlier note here claimed the product was "not protected by anything". That was wrong:
+`purge_targets()` skips non-directories, so files at the cycle root were never at risk of
+deletion. The real risk was the *store* being purged before the product was extracted —
+which is what the guard now prevents.)
 
 ### What ARCO-ERA5 would still be for
 

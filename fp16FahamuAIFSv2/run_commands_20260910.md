@@ -246,7 +246,7 @@ NWP's 6.2 in the previous cycle and 8.2 here are the low end of the sample —
 the spread across cycles is real and is why a single cycle cannot be a climatology.
 
 > **Retention rule.** The store is **52 GB** and will be purged; this product is
-> **~20 KB** and is the entire scientific value of the cycle for this target. It sits at the
-> cycle root, which `cleanup_aifs_run.py` does **not** protect — so running the tracker is a
-> manual pre-purge step, and forgetting it is unrecoverable. See
+> **~20 KB** and is the entire scientific value of the cycle for this target. `cleanup_aifs_run.py` now
+> **refuses to purge a cycle whose N320 store is present but whose TS product is not** — the
+> store is the only source of the fields the tracker reads. See
 > [`ts-mjo/TS_STORM_DAYS.md`](ts-mjo/TS_STORM_DAYS.md).
