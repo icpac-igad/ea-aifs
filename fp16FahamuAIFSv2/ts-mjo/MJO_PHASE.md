@@ -649,6 +649,27 @@ supply it:
 So the local stride-2 run can only ever produce the climatology. The in-cloud stride-1 run
 produces the climatology *and* the input for §7 steps 2 and 3.
 
+### A rebuild brief, for doing this properly elsewhere
+
+[`ERA5_VPM_CLOUD_BRIEF.md`](ERA5_VPM_CLOUD_BRIEF.md) is a self-contained handover for an agent
+with a cloud VM and no access to this machine: what the forecast stores contain, why VPM
+rather than RMM, why the climatology is prior (§6c's numbers), what is wrong with each public
+ERA5 copy, and a tiered rebuild plan.
+
+Two findings from writing it are worth surfacing here:
+
+- **ERA5's native grid *is* the AIFS N320 grid.** `co/single-level-reanalysis.zarr-v2` has
+  542,080 points with latitude `89.78487690721863 … -89.78487690721863` and longitude
+  `0 … 340` — identical to our `icechunk_n320_aiwq`. Not a coincidence (AIFS is trained on
+  ERA5), but it means a native ERA5 archive needs **no regridding on either side** and every
+  diagnostic can run through identical code on both. The catch: `co/` is surface-only, and
+  pressure-level wind at native N320 is **not in ARCO** at all.
+- **The record reaches 1940**, not 1980 — `raw/date-variable-pressure_level/` has directories
+  from `1940/`, one file per date/variable/**level** (so no level penalty). It is 0.25°, not
+  native. The long record matters for the **EOF basis**, not for the climatology: a normal is
+  supposed to be a fixed reference, so 1991–2020 stays 1991–2020 and the long record is what
+  conditions the basis.
+
 ### What does not need keeping
 
 Caching the ~57 GB of raw wind locally is not worth it — and would not fit comfortably beside

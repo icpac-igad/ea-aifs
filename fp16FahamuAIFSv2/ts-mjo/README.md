@@ -48,3 +48,6 @@ Neither diagnostic is self-contained in a forecast. Both need observational refe
 that only the AI-WQ package or ERA5 can supply — tercile boundaries for TS, an EOF basis
 and a 120-day low-frequency mean for MJO. Each file's own table lists what, from where, and
 why the forecast cannot supply it.
+- [`ERA5_VPM_CLOUD_BRIEF.md`](ERA5_VPM_CLOUD_BRIEF.md) — self-contained handover for rebuilding
+  the ERA5 record the VPM index needs, for an agent on a cloud VM with no access to this box.
+  ERA5's native grid is the AIFS N320 grid; the record reaches 1940.
