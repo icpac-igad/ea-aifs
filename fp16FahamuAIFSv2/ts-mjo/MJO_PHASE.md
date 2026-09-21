@@ -361,10 +361,75 @@ different project. See [`TS_STORM_DAYS.md`](TS_STORM_DAYS.md).
 
 ---
 
+## 6b. Run on three cycles — the signal is buried, and that is measurable
+
+Run 2026-09-21 on `20260903`, `20260910`, `20260917`.
+
+**From the O96 corpus, not the N320 sidecar.** The sidecar carries `t_200` but **not
+`u_200`/`v_200`**, so it cannot supply chi200. This is the exact mirror of the TS target: MJO
+is planetary-scale and 112 km is ample, where the TS tracker needs 28 km and the sidecar is
+the only store that has it. Both targets are served, from different stores, for the same
+reason — resolution matched to the quantity.
+
+Normalisations are stable across cycles, which is the first sign the diagnostic is behaving:
+
+| cycle | chi200 | U850 | U200 |
+|---|---|---|---|
+| 20260903 | 1.344e7 | 2.771 | 7.030 |
+| 20260910 | 1.340e7 | 2.636 | 6.940 |
+| 20260917 | 1.304e7 | 2.573 | 6.985 |
+
+### The MJO is not visible, and the reason is the missing climatology
+
+| cycle | k=1 power | k=1 drift | excursion over 34 d |
+|---|---|---|---|
+| 20260903 | **1.00** (others ≤ 0.21) | **+0.3 °/day** | +32° |
+| 20260910 | **1.00** (≤ 0.17) | **−0.9 °/day** | −5° |
+| 20260917 | **1.00** (≤ 0.24) | **+0.5 °/day** | −8° |
+
+**The MJO propagates eastward at 4–8 °/day. This is stationary.**
+
+That is not a defect in `velocity_potential.py` or `vpm_index.py` — both are verified (§5).
+It is the expected consequence of steps 6 and 7 not being run. **Wavenumber-1 dominance in
+*raw* chi200 is the Walker circulation**, the time-mean divergent overturning, which is
+stationary by construction. The MJO anomaly is order 1e6 m²/s beneath a climatological mean
+state of ~1e7 — precisely the 1.3e7 standard deviation measured above. The signal is present
+and buried by roughly a factor of ten.
+
+```
+6. day-of-year climatology removed     [--clim]     <- removes the Walker mean state
+7. preceding 120-day rolling mean      [--lowfreq]  <- removes low-frequency background
+```
+
+The script already says so on every run:
+
+```
+!! no --clim: anomalies are not referenced to an observed climatology, so these are NOT VPM-comparable
+!! no --lowfreq: the preceding 120-day mean is not removed
+```
+
+Those warnings were correct. This section makes them quantitative.
+
+### What this changes about the plan
+
+§6 treated the ERA5 climatology as one of several remaining pieces and the **basis** as the
+interesting blocker. That ordering was wrong. **The climatology is prior**: without it there
+is no MJO anomaly to project, so no basis — NOAA's, ours, or anyone's — can recover a signal
+from these fields. Acquiring the ARCO-ERA5 history is therefore not optional polish; it is
+the step that makes the target exist at all.
+
+It also means a useful intermediate test is available before any EOF work: remove a
+climatology, recompute the drift, and check it moves toward 4–8 °/day eastward. **That is a
+falsifiable check on the whole approach**, it needs no basis, and if the drift does not
+appear then something is wrong upstream of the projection rather than in it.
+
+---
+
 ## 7. What remains, in order
 
 1. **Stream ARCO-ERA5** for `u200, v200, u850` over the calibration period — background job,
-   ~90 GB of transfer, nothing retained.
+   ~90 GB of transfer, nothing retained. **This is now step 1 on evidence, not by
+   convention**: §6b shows the MJO signal is invisible until the climatology is removed.
 2. **Build the basis** — EOFs of `[chi200, U850, U200]`. Reuse `velocity_potential.py`
    unchanged: it takes `(..., nlat, nlon)` on a regular grid, which is exactly ARCO's layout.
 3. **Learn `P(RMM phase | state)`** against `retrieve_daily_MJO_obs()` labels. `vpm-mjo.md`
