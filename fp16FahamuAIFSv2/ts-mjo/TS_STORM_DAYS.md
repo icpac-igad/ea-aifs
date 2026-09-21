@@ -385,16 +385,53 @@ A smaller gap fixed on the way: `--tercile-clim` expected an `.npz` with a `boun
 with dims `(tercile, basin)`. `--aiwq-tercile-dir` now reads the official files and
 `tercile_bounds` carries a `week` dimension.
 
-### 7. A constraint worth knowing before planning this
+### 7. Resolution — measured 2026-09-21, no longer a guess
 
-The detector needs `10u`, `10v`, `msl`, `t_300`, `u_850`, `v_850` over days 18–33, and
-`grid_ops.py` differentiates on the **N320 reduced Gaussian** rows. Only **two N320 stores
-now exist** — `20260806` and `20260820`; the rest of the archive was released or is O96-only.
-Two cycles is not enough to characterise the detector's own distribution, so a
-detector-native climatology is not currently reachable from what is on disk. The O96 corpora
-hold all six variables over the *full* 0–792 h, which is tempting, but O96 is ~112 km and
-under-resolves TC winds further than N320 already does — it would most likely move the bias,
-not remove it. **Untested; do not assume it substitutes.**
+This section used to say O96 "would most likely move the bias, not remove it. **Untested;
+do not assume it substitutes.**" Three cycles now hold **both** grids, so it was tested
+directly: same cycle, same dates, same detector, only the grid differs.
+
+| basin | N320 (~28 km) | O96 (~112 km) | O96 / N320 |
+|---|---|---|---|
+| **ATL** | 1.88 | 0.88 | **0.47** |
+| **NWP** | 7.92 | 5.17 | **0.65** |
+| SWIO | 0.62 | 0.31 | 0.49 |
+| SEIO | 0.44 | 0.24 | 0.56 |
+
+300 samples each (3 cycles × 2 weeks × 50 members). **The prediction was right: the bias
+moves, it does not cancel.** O96 detects roughly half the storm-days.
+
+**And the mechanism is visible, which matters more than the ratio.** O96 produces
+**about twice as many tracks** — 34.5, 30.1, 28.1 per member against 18.1, 16.7, 15.1 at
+N320 — while counting *fewer* storm-days. A 112 km grid smooths the wind maximum, so more
+centres pass the pressure/vorticity/warm-core net and fewer records clear
+`max |V10| >= 17 m/s`. That is the expected physics of an under-resolved cyclone, and it is
+why the deficit is not a simple multiplicative factor that could be divided out.
+
+It is not even stable per cycle. `20260910` week 09-28 gives N320 8.2 against O96 1.8
+(ratio 0.22); the very next week gives 7.5 against 9.2 (ratio 1.23). The pooled 0.47–0.65
+hides scatter that spans a factor of five.
+
+**Consequence: a climatology must be built at the resolution it will calibrate.** O96 counts
+cannot be pooled with N320 counts, and the O96 corpus is not a substitute source for the
+detector climatology however convenient its 0–792 h coverage looks.
+
+### 7b. Which stores can actually run the tracker
+
+Audited 2026-09-21 across everything on disk:
+
+| store | tracker-ready | note |
+|---|---|---|
+| `icechunk_v2` (20260827) | ✅ | all 120 vars |
+| `icechunk_n320_aiwq` (20260903/10/17) | ✅ | the 10-var tier-B sidecar |
+| `icechunk_n320_aiwq` (**20260813**) | ❌ | **3-var sidecar** — `msl`, `tp`, `2t` only; missing all 7 of `10u`, `10v`, `t_200/300/500`, `u_850`, `v_850` |
+| `icechunk_n320_nwh` (20260820) | ⚠️ | has the 10 vars but is the 1-member `--native-write-hours` test store |
+| `icechunk_o96` (any) | ⚠️ | runs, but see §7 — different resolution, not poolable |
+
+**20260813 is the concrete argument for the 10-variable `--native-vars`.** It was written
+under the original 3-variable tier-B default, so its N320 sidecar exists, is 12 GB, and is
+useless for this target. That cycle cannot contribute to the climatology and never will —
+recovering it would take a full re-rollout.
 
 ### 8. The correction — **done 2026-08-23. `ts_tracks.py`.**
 
