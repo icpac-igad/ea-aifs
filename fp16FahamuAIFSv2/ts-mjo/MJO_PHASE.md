@@ -309,10 +309,14 @@ That dataset is an unusually good fit:
 ### The chunking decides the cost — measure it before planning around it
 
 ```
-u_component_of_wind   chunks (8 time, 13 level, 240, 121)   compressor: None
+u_component_of_wind   chunks (8 time, 13 level, 240, 121)   compressor: Blosc(lz4, clevel=5)
 ```
 
-**All 13 levels sit in one chunk, uncompressed.** Selecting two levels therefore transfers
+*(Corrected: this section first recorded `compressor: None`. The arrays are Blosc/lz4, but
+the ratio is only **1.16×** — 10.39 MB on the wire per 12.08 MB chunk — so the conclusions
+below, which assume you pay nearly the raw size, all still hold. §7.1 has the measured rates.)*
+
+**All 13 levels sit in one chunk.** Selecting two levels therefore transfers
 all thirteen, and a one-week slice touches 4 time-chunks. Measured: a request for `u,v` at
 200 and 850 hPa for one week returned 13 MB of data after moving **~48 MB** over the wire, in
 **185 s**.
@@ -323,7 +327,9 @@ Two consequences, both of which change how the routine should be written:
    levels saves nothing and costs clarity.
 2. **Budget on chunks, not on the size of the array you asked for.** A 20-year `u`+`v`
    calibration is roughly **90 GB of transfer**, not the 2.5 GB the selected array would
-   suggest.
+   suggest. (§7.1 refines this against a measured 1.4 MB/s link: 30 years at stride 2 is
+   ~57 GB and ~13 h. Point 1 above needs one caveat — you pay for all 13 levels *per read*,
+   so asking for two levels in two separate calls pays twice. Read the variable once.)
 
 ### Why this is still the right design
 
@@ -418,18 +424,114 @@ is no MJO anomaly to project, so no basis — NOAA's, ours, or anyone's — can 
 from these fields. Acquiring the ARCO-ERA5 history is therefore not optional polish; it is
 the step that makes the target exist at all.
 
-It also means a useful intermediate test is available before any EOF work: remove a
-climatology, recompute the drift, and check it moves toward 4–8 °/day eastward. **That is a
-falsifiable check on the whole approach**, it needs no basis, and if the drift does not
-appear then something is wrong upstream of the projection rather than in it.
+It also means a useful intermediate test looked available before any EOF work: remove a
+climatology, recompute the drift, and check it moves toward 4–8 °/day eastward.
+
+**That test does not work, and §6c measures why.** It was run, and the reasoning behind it
+was wrong in a way worth keeping on the record: a 34-day window cannot define its own MJO
+anomaly, so an absent MJO and a broken pipeline leave the same incoherent residual. The
+sentence this section originally ended on — "if the drift does not appear then something is
+wrong upstream of the projection rather than in it" — **is false**, and §6c shows ERA5
+failing that exact test eight times out of nine on data containing a documented strong MJO.
+
+---
+
+## 6c. The chain is correct — validated against ERA5, and the window is the problem
+
+§6b's test was run, and then a control was run that §6b did not think to propose. The
+control is what settled the question.
+
+### First, the free version of §6b's test
+
+Removing a stationary field (the forecast-window mean per longitude) from χ200 does move the
+drift off zero — a stationary field cannot *create* propagation, so anything that appears was
+already there. The wavenumber-1 amplitude falls from ~0.9 sd to ~0.33 sd, confirming that
+about two thirds of the raw wavenumber 1 is the stationary mean state.
+
+But the resulting drifts were **−18.1, +3.2, +12.1 °/day** across the three cycles. That is
+not a measurement. The cause is the diagnostic: fitting the drift of a wavenumber-1 crest
+needs phase unwrapping, and once the wave is weak the phase is noise, so the fit returns a
+confident wrong number rather than a wide error bar. `mjo_propagation.py` replaces it with a
+**lag-longitude correlation**, which never unwraps anything and degrades to a low correlation
+instead.
+
+### Second, the control: does the chain recover a *known* MJO?
+
+`era5_vpm_clim.py --mode series` runs the identical chain — divergence → Poisson solve → ±15°
+band mean → 144 longitudes — on ERA5 over **2011-10-01 … 2012-01-31**, the DYNAMO field
+campaign, which contains documented strong MJO events. 123 days, 18 min of streaming.
+
+| series | phase speed | lag-1 corr | |
+|---|---|---|---|
+| ERA5, 123 days, raw | **+6.54 °/day** | 0.90 | **eastward, squarely in the MJO band** |
+| ERA5, 20–60 d bandpass | +8.97 | 0.98 | eastward, just above the band |
+| ERA5, 20–80 d bandpass | +8.60 | 0.99 | eastward, just above the band |
+| ERA5, days shuffled ×3 | *no coherent propagation* | — | the null control fires correctly |
+
+**The chain is correct.** The Poisson solver, the polar handling, the band reduction and the
+daily means recover the MJO from observations at the textbook speed, and the shuffled-day
+nulls confirm the diagnostic is not biased toward finding eastward motion.
+
+### Third: the forecasts, and why their numbers mean less than they look like
+
+| cycle | phase speed | lag-1 corr |
+|---|---|---|
+| 20260903 | +9.85 °/day | 0.68 |
+| 20260910 | +21.47 °/day | 0.50 |
+| 20260917 | −10.26 °/day | 0.74 |
+
+Scattered, and all with correlations well below ERA5's 0.90. The obvious reading is that
+these cycles have no MJO. **That reading is not supported**, because the forecasts differ
+from the ERA5 control in one more way: 34 days against 123.
+
+So the ERA5 series — the *same data*, known to contain a strong MJO, measured at +6.54 °/day
+over its full length — was chopped into 34-day windows and put through the identical
+diagnostic:
+
+| window start | 2011-10-01 | 10-11 | 10-21 | 10-31 | 11-10 | 11-20 | 11-30 | 12-10 | 12-20 |
+|---|---|---|---|---|---|---|---|---|---|
+| °/day | +11.9 | +10.1 | +9.9 | +10.4 | **+7.4** | +8.8 | +8.5 | **−9.7** | **−9.4** |
+
+**One window in nine lands in 4–8 °/day. Two of them run westward.** The spread is −9.7 to
++11.9 on data whose 123-day answer is +6.5.
+
+The three forecast numbers sit *inside that distribution*. They are therefore not evidence of
+a missing MJO, and not evidence of a broken pipeline — they are what this diagnostic does to
+a 34-day window regardless of what is in it.
+
+### Why, and what it costs
+
+The MJO period is 30–60 days. A 34-day window is about one cycle, so its own time mean
+contains a large part of the oscillation: subtracting it removes the Walker cell *and* much
+of the signal. ERA5's 123 days span three to four cycles, which is why it can self-reference
+and the forecast cannot.
+
+This is the concrete, measured statement of why the climatology is prior. It is not that an
+anomaly is conceptually required — it is that **the forecast window is too short to supply
+its own reference, and no amount of care downstream can recover what the window mean removed.**
+An external climatology is the only way a 34-day series gets an anomaly at all.
+
+### Two code fixes this work turned up
+
+- **`vpm_index.py` mis-used `phase_from_pcs`.** It returns `(phase, amplitude)` and is already
+  vectorised, but the `--eofs` branch mapped it element-wise and `np.stack`ed the result,
+  silently building a `(member, day, 2)` array where a `(member, day)` phase was intended.
+  It had never fired, because that branch needs a basis and there is none — it would have
+  failed on the *first* run that had one. `mjo_index.py` at the equivalent line unpacks the
+  tuple correctly; the two had drifted.
+- **New: `mjo_propagation.py`** — the lag-longitude diagnostic, with the bandpass refusing a
+  window shorter than twice its longest retained period rather than returning something that
+  looks filtered and is mostly edge effect.
+- **New: `era5_vpm_clim.py` / `run_era5_clim.sh`** — the ARCO-ERA5 stream, in `series`,
+  `clim` and `combine` modes.
 
 ---
 
 ## 7. What remains, in order
 
-1. **Stream ARCO-ERA5** for `u200, v200, u850` over the calibration period — background job,
-   ~90 GB of transfer, nothing retained. **This is now step 1 on evidence, not by
-   convention**: §6b shows the MJO signal is invisible until the climatology is removed.
+1. **Stream ARCO-ERA5** for `u200, v200, u850` — **running now**; see §7.1 for the sizing.
+   **This is step 1 on evidence, not by convention**: §6b shows the signal is invisible
+   until a climatology is removed, and §6c shows the 34-day window cannot supply one itself.
 2. **Build the basis** — EOFs of `[chi200, U850, U200]`. Reuse `velocity_potential.py`
    unchanged: it takes `(..., nlat, nlon)` on a regular grid, which is exactly ARCO's layout.
 3. **Learn `P(RMM phase | state)`** against `retrieve_daily_MJO_obs()` labels. `vpm-mjo.md`
@@ -439,6 +541,66 @@ appear then something is wrong upstream of the projection rather than in it.
    where these plug in.
 
 Steps 2-4 are determined work. Step 1 is a download that needs no permission.
+
+### 7.1 Collecting the climatology: the grid, the cost, and what was measured
+
+**It does not need the O96 grid, and it never touches one.** That was the natural assumption
+— the forecast corpus is O96, so a matching climatology sounds like it should be O96 too —
+but the χ200 path regrids to a **1.5° regular grid before the Poisson solve** (`REGRID_DEG`
+in `vpm_index.py`); O96 is only where the *forecast wind* happens to live. What a climatology
+must match is the grid the solve happens on, and ARCO-ERA5 publishes exactly it:
+
+```
+ar/1959-2022-6h-240x121_equiangular_with_poles_conservative.zarr
+```
+
+240×121 is 1.5°, 6-hourly, levels 50…1000 including **200 and 850**, spanning 1959–2021. No
+regridding, no `earthkit` call, no interpolation error on the climatology side at all. The
+polar rows are *kept* rather than trimmed, because `vpm_index.py` keeps them — `cos φ` is
+6e-17 there, not 0, so the `m²/cos φ` term pins χ≈0 at the poles. That is inelegant, but a
+climatology must be computed the same way as the field it will be subtracted from, and the
+±15° band is 75° away from either choice.
+
+**The cost is set by bandwidth, and bandwidth does not improve with concurrency.** Measured
+against the bucket: one chunk is 10.39 MB on the wire (12.08 MB raw, lz4 ratio only 1.16×),
+and 8, 16 and 32 concurrent readers all returned **1.4 MB/s**. That is the link, not latency,
+so there is no parallel speed-up to buy. End-to-end the pipeline runs at **2.18 s per
+6-hourly step**.
+
+Two things followed from measuring rather than assuming:
+
+- Chunks are `(8, 13, 240, 121)` — **all 13 levels in one chunk**. So `.sel(level=200)` and
+  `.sel(level=850)` on the same variable fetch *the same chunks twice*. Reading each variable
+  once and slicing levels in memory cut a third off the job.
+- `--stride` skips blocks, and blocks are counted from the start of each year, so without
+  `--phase` every year would sample **the same calendar days** — half the calendar covered 30
+  times and half never. The driver sets `phase = year % stride`.
+
+| base period | stride | steps | wall clock | transferred | samples/calendar day |
+|---|---|---|---|---|---|
+| 1991–2020 | 1 | 43,832 | ~26 h | ~114 GB | ~30 |
+| **1991–2020** | **2** | **21,916** | **~13 h** | **~57 GB** | **~15** |
+| 1991–2020 | 3 | 14,611 | ~9 h | ~38 GB | ~10 |
+
+Stride 2 over the WMO 1991–2020 normal is what is running. Thinning is safe here because the
+climatology is **smoothed onto 3 annual harmonics** (7 parameters per longitude per field),
+as MJO climatologies conventionally are — that does not need every calendar day sampled in
+every year, and it fills any day that drew none.
+
+**Nothing large is retained.** ~57 GB passes through memory; what lands on disk is one
+~600 KB `.npz` per year and a ~1.3 MB climatology. Disk is at 97 GB free and this does not
+touch it — a useful property, given that the standing constraint on this box is storage.
+
+**It is restartable by year.** `run_era5_clim.sh` runs one year per invocation and skips
+years already on disk, then folds them with `--mode combine`. That is not fastidiousness:
+this box has lost three overnight rollouts to `apt-daily-upgrade` replacing glibc and
+python3.12 underneath a running process, and a 13-hour single process is exactly the shape of
+job that loses. A killed year costs ~27 min, not the run.
+
+Two guards sit on the fold, because a climatology that is quietly wrong is worse than one
+that fails: it refuses to fit if fewer than 4× the parameter count of calendar days carry
+samples, and it refuses if the fitted curve has more than 3× the variance of the data it was
+fitted to — a smoother cannot amplify, so if it does, it is extrapolating through gaps.
 
 ### One caution `vpm-mjo.md` raises that our own results argue against
 
@@ -455,11 +617,18 @@ than assuming in either direction.
 ## Not done
 
 - No `ttr` in the store, so no true RMM without an emulator (§1).
-- χ200 is derivable, but the divergence + Poisson inversion is **not written**.
-- No VPM EOF basis obtained or built; the VPM-vs-RMM phase offset is **not measured**.
-- No EOF / climatology / low-frequency reference files are bundled here — they are
-  observational products and belong with the AI-WQ package data, not in this repo.
-- `mjo_index.py` has run only against `20260730`, and only as far as step 5 (normalised
-  band anomalies, `--dump-bands`).
-- The O96 full-corpus route (§2) is reasoned from the store schema and the submission
-  checks, **not exercised** — no MJO product has been built from `icechunk_o96`.
+- **No VPM EOF basis obtained or built**; the VPM-vs-RMM phase offset is **not measured**.
+  This is now the only structural gap: §6c validated everything upstream of the projection.
+- No `P(RMM phase | state)` lookup (§7 step 3). Nothing has been submitted for MJO.
+- The climatology is **running, not finished** — 1991–2020 at stride 2, ~13 h
+  (§7.1). Until it lands, `vpm_index.py` still stops at step 8.
+- The **120-day low-frequency filter** (§4.3) is still unsourced. The climatology stream
+  gives the machinery for it but the preceding-120-day means are a separate product.
+- No MJO result has been checked against `retrieve_daily_MJO_obs()` labels for any date.
+  §6c validates the chain against ERA5 *propagation*, which is weaker than matching an
+  observed RMM phase.
+- The ERA5 control is **one 123-day window over one season**. It shows the chain recovers a
+  strong MJO; it does not establish behaviour in a weak or inactive period, which would need
+  a second control window chosen for the opposite reason.
+- §6c's 34-day windows come from a single ERA5 season, so "1 in 9" is an illustration of
+  the spread, **not a calibrated false-negative rate**.

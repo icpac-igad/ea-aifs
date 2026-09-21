@@ -178,9 +178,10 @@ def main():
         raise SystemExit(f"state vector {x.shape[2]} != EOF length {e1.size}. "
                          f"VPM EOFs must be 3*{N_LON_BINS} ordered [chi200, u850, u200].")
     vpm1, vpm2 = (x @ e1) / sd1, (x @ e2) / sd2
-    amp = np.sqrt(vpm1**2 + vpm2**2)
-    ph = np.stack([[phase_from_pcs(a, b) for a, b in zip(r1, r2)]
-                   for r1, r2 in zip(vpm1, vpm2)])
+    # `phase_from_pcs` returns (phase, amplitude) and is already vectorised, so
+    # it takes the whole (member, day) array at once. Mapping it element-wise and
+    # stacking the result silently built a (member, day, 2) array instead.
+    ph, amp = phase_from_pcs(vpm1, vpm2)
 
     import xarray as xr
     probs = np.stack([(ph == c).mean(axis=0) for c in range(9)], axis=-1)
