@@ -629,10 +629,15 @@ Run against a refreshed IBTrACS:
 | | 20260820 wk1 | 20260827 wk1 |
 |---|---|---|
 | **ATL** | obs **0**, P(below) **0.92** → ✅ **right** | obs **0**, P(below) **0.92** → ✅ **right** |
-| **NWP** | obs **0**, P(above) **0.84** → ❌ **wrong** | obs **2**, P(above) **0.76** → ❌ **wrong** |
+| **NWP** | obs **0**, P(above) **0.84** → ❌ **wrong** | obs **≥2** ⚠️, P(above) **0.76** → ❌ **wrong** |
 
 The zeros are genuine, not missing data: in 09-07…09-13 all 77 TS-strength IBTrACS records
 sat at lon −169.5…−117.3 — entirely North-East Pacific, which AI-WQ does not score.
+
+**The 09-14 figures are a lower bound**, not a final count: IBTrACS is processed through
+09-17 and that week runs to 09-20, so three days are missing. Recompute when the archive
+catches up. The gap is wide enough (10.4 forecast against ≥2) that the verdict is unlikely
+to reverse, but the number will move.
 
 **This resolves §8's open question, and it resolves it differently for each basin.**
 
@@ -645,6 +650,54 @@ sat at lon −169.5…−117.3 — entirely North-East Pacific, which AI-WQ does
 
 Two weeks is still two weeks. But it is the difference between an inferred claim and a
 measured one, and the two point the same way.
+
+---
+
+## Forecast vs observation — every week we have forecast
+
+All five tracked cycles, all four basins. Several weeks are forecast **twice**, once at
+d+18–24 and once at d+25–31, because consecutive Thursday inits overlap.
+
+**IBTrACS processed through 2026-09-17**, so anything later is not yet verifiable. That is
+the normal reporting lag, not a fault: the archive lands weeks behind real time.
+
+| week (valid) | init | lead | ATL | NWP | SWIO | SEIO | observed ATL / NWP |
+|---|---|---|---|---|---|---|---|
+| 2026-09-07 | 20260820 | d+18–24 | 1.9 | 10.3 | 0.6 | 0.4 | **0** / **0** |
+| 2026-09-14 | 20260827 | d+18–24 | 1.1 | 10.4 | 0.4 | 0.4 | **0** / **2** ⚠️ |
+| 2026-09-14 | 20260820 | d+25–31 | 2.2 | 9.1 | 0.5 | 0.3 | **0** / **2** ⚠️ |
+| 2026-09-21 | 20260903 | d+18–24 | 2.7 | 9.4 | 0.7 | 0.6 | *pending* |
+| 2026-09-21 | 20260827 | d+25–31 | 2.3 | 9.7 | 0.4 | 0.4 | *pending* |
+| 2026-09-28 | 20260910 | d+18–24 | 2.2 | 8.2 | 0.9 | 0.5 | *pending* |
+| 2026-09-28 | 20260903 | d+25–31 | 2.0 | 6.2 | 0.7 | 0.4 | *pending* |
+| 2026-10-05 | 20260917 | d+18–24 | 0.9 | 8.7 | 0.5 | 0.4 | *pending* |
+| 2026-10-05 | 20260910 | d+25–31 | 2.4 | 7.5 | 0.6 | 0.3 | *pending* |
+| 2026-10-12 | 20260917 | d+25–31 | 1.1 | 7.6 | 0.5 | 0.4 | *pending* |
+
+Values are ensemble means over 50 members. SWIO/SEIO are shown for completeness but are
+**not scored for these inits** (Jun–Nov scores ATL and NWP only), and their observed
+climatology is zero in 93–100 % of weeks.
+
+> **⚠️ The 2026-09-14 observation is partial.** That week runs to 09-20 and IBTrACS has
+> processed to 09-17, so `ATL 0 / NWP 2` covers **four of seven days** and is a **lower
+> bound**. The checkpoint reported above treats it as final; it is not. The direction is
+> unlikely to change — a forecast of 10.4 against an observation of ≥2 is a wide gap — but
+> the magnitude will, and it should be recomputed once the archive catches up.
+
+### What the table shows beyond the two checkpoints
+
+**Lead time does not obviously matter over this range.** Where a week is forecast twice, the
+d+18–24 and d+25–31 means sit close: 09-21 gives 9.4 vs 9.7 in NWP, 09-28 gives 8.2 vs 6.2,
+10-05 gives 8.7 vs 7.5. No systematic drift with lead is visible. That is mildly reassuring
+about the extended rollout, on four pairs — not an established result.
+
+**NWP declines through the sample**, 10.3 → 7.6 across five weeks, which is the seasonal
+direction for the North-West Pacific in October. The detector is at least responding to
+season rather than emitting a constant.
+
+**ATL never exceeds 2.7 and the observations so far are 0.** Whether that is a quiet Atlantic
+correctly forecast (which the checkpoints support) or a floor in the detector cannot be
+separated until a genuinely active Atlantic week is verified.
 
 ---
 
