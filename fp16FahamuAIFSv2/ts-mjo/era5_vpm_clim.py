@@ -239,7 +239,7 @@ def main():
     print(f"ERA5 VPM | {args.mode} | {args.start} .. {args.end} | {i1-i0} steps "
           f"({(i1-i0)/4/365.25:.1f} yr) | grid {lat.size}x{lon.size}", flush=True)
 
-    acc, dates_all, t0 = [], [], time.time()
+    acc, dates_all, t0, nread = [], [], time.time(), 0
     # with --stride N we read `block` steps then skip (N-1)*block, starting
     # --phase blocks in so that successive years cover complementary days
     for a in range(i0 + args.phase * args.block, i1, args.block * args.stride):
@@ -247,10 +247,16 @@ def main():
         bands = bands_for_slice(ds, slice(a, b), lat, lon, lon180)
         d, dd = daily(bands, t[a:b])
         acc.append(d); dates_all.append(dd)
+        nread += b - a
+        # `done` is progress through the *calendar*, which is what the ETA must
+        # extrapolate on; `nread` is how many steps were actually fetched. With
+        # --stride they differ, and reporting only the first reads as if the
+        # skipped steps had been downloaded.
         done = (b - i0) / (i1 - i0)
         el = time.time() - t0
-        print(f"  {b-i0:7d}/{i1-i0} steps ({100*done:5.1f}%)  "
-              f"elapsed {el/60:6.1f} min  eta {el*(1-done)/max(done,1e-9)/60:6.1f} min", flush=True)
+        print(f"  {b-i0:7d}/{i1-i0} calendar ({100*done:5.1f}%)  "
+              f"{nread:6d} steps read  elapsed {el/60:6.1f} min  "
+              f"eta {el*(1-done)/max(done,1e-9)/60:6.1f} min", flush=True)
 
     dates = np.concatenate(dates_all)
     series = {k: np.concatenate([a[k] for a in acc]) for k in FIELDS}
