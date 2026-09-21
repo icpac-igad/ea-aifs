@@ -602,6 +602,61 @@ that fails: it refuses to fit if fewer than 4× the parameter count of calendar 
 samples, and it refuses if the fitted curve has more than 3× the variance of the data it was
 fitted to — a smoother cannot amplify, so if it does, it is extrapolating through gaps.
 
+A naming bug in the first launch is worth recording, because it defeated exactly the property
+the per-year split exists for. `np.savez` **appends `.npz`** when the path lacks it, so
+`--out "$f.part"` wrote `$f.part.npz` and every `mv "$f.part" "$f"` failed. The band series
+were correct, but the `[ -s "$f" ]` resume test never matched and the `era5_vpm_????.npz`
+combine glob found nothing — a crash at year 20 would have redone all twenty. Partials now go
+to a dotfile that cannot match the glob.
+
+### 7.2 A cluster does not help; moving the compute does
+
+The obvious response to a 12-hour job is to parallelise it. **That is the wrong lever here,
+and the split is worth measuring before spending effort on it.** For one 80-step block:
+
+| | |
+|---|---|
+| divergence | 0.09 s |
+| Poisson solve | 0.08 s |
+| band mean | 0.00 s |
+| **compute total** | **0.17 s — 2 ms/step, 0.1% of wall clock** |
+| **transfer** | **148 s — 85% of wall clock** |
+
+Cores are already 99.9% idle. And the link does not respond to concurrency either: 8, 16 and
+32 readers all returned 1.4 MB/s, so the constraint is bandwidth out of the building, not
+latency and not parallelism. A Dask cluster, local or remote, multiplies the resource that
+is not scarce.
+
+The lever that does work is **moving the reduction to where the bytes already are.**
+ARCO-ERA5 is in GCS, so compute inside GCP (Colab, or a VM in the bucket's region) reads it
+at hundreds of MB/s, and only the *reduced* band series — a few tens of MB — crosses the slow
+link. Same code, same answer, transfer cut by ~1500×.
+
+`era5_vpm_colab.py` is that job. It is **generated** by `make_colab_bundle.py` from
+`velocity_potential.py` and `era5_vpm_clim.py` rather than written by hand, so the cloud copy
+cannot drift from the local one; the generated solver is verified bit-identical to the repo's
+on random fields. Regenerate it whenever either source changes.
+
+**And it buys more than speed.** Once bandwidth stops being the constraint the right setting
+is `STRIDE = 1` — a *contiguous daily* series, which the local run cannot afford. That
+matters because two remaining pieces need unbroken daily history and a stride-2 series cannot
+supply it:
+
+- the **120-day low-frequency filter** (§4.3), which is a rolling mean over preceding days;
+- **building a VPM EOF basis**, which is computed on anomalies after both references are
+  removed.
+
+So the local stride-2 run can only ever produce the climatology. The in-cloud stride-1 run
+produces the climatology *and* the input for §7 steps 2 and 3.
+
+### What does not need keeping
+
+Caching the ~57 GB of raw wind locally is not worth it — and would not fit comfortably beside
+97 GB free. The reusable artifact is the **band series**, 643 KB per year and ~19 MB for the
+full period, and that is already what lands on disk. Raw wind would only be needed to change
+the band definition itself (the ±15° window, the 144 longitudes, the two levels), which is
+fixed by the VPM index definition and is not a free parameter.
+
 ### One caution `vpm-mjo.md` raises that our own results argue against
 
 It advises against rolling AIFS past D+15 and propagating statistically to D+22/29 instead
@@ -620,8 +675,10 @@ than assuming in either direction.
 - **No VPM EOF basis obtained or built**; the VPM-vs-RMM phase offset is **not measured**.
   This is now the only structural gap: §6c validated everything upstream of the projection.
 - No `P(RMM phase | state)` lookup (§7 step 3). Nothing has been submitted for MJO.
-- The climatology is **running, not finished** — 1991–2020 at stride 2, ~13 h
+- The climatology is **running, not finished** — 1991–2020 at stride 2, ~12 h remaining
   (§7.1). Until it lands, `vpm_index.py` still stops at step 8.
+- `era5_vpm_colab.py` (§7.2) is generated and its solver verified bit-identical, but it has
+  **not been run** — the in-GCP speed-up is inferred from where the data sits, not measured.
 - The **120-day low-frequency filter** (§4.3) is still unsourced. The climatology stream
   gives the machinery for it but the preceding-120-day means are a separate product.
 - No MJO result has been checked against `retrieve_daily_MJO_obs()` labels for any date.
