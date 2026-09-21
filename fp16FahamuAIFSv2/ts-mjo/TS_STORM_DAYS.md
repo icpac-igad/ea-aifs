@@ -584,6 +584,36 @@ the case to watch.
 
 ---
 
+## ARCO-ERA5 does not solve the TS climatology — checked 2026-09-21
+
+`MJO_PHASE.md` §6 establishes that ERA5 is reachable as lazily-read Zarr over plain HTTPS, no
+credentials and no download:
+
+```python
+U = ("https://storage.googleapis.com/gcp-public-data-arco-era5/ar/"
+     "1959-2022-6h-240x121_equiangular_with_poles_conservative.zarr")
+```
+
+That closes the MJO data dependency. **It does not close this one**, and the reason is
+resolution, not access.
+
+| | MJO needs | TS needs |
+|---|---|---|
+| quantity | planetary wavenumber 1-3, banded to 144 longitudes | **individual cyclone centres** |
+| resolution | 1.5 deg is ample | must match the forecast it calibrates — N320, **~28 km** |
+| ARCO 1.5 deg product | ✅ exact fit | ❌ **~165 km** — coarser than the O96 corpus, cannot resolve a TC |
+
+ARCO's 0.25 deg product does match. But its chunking is the same shape — all levels in one
+uncompressed chunk — and at 1440x721 with 37 levels, a 20-year stream of the eight variables
+`ts_tracks.py` reads comes to roughly **1 TB of transfer**. That is not a weekly routine; it
+is a separate project with its own storage plan.
+
+**So the TS blocker is unchanged**: a detector-native climatology still has no cheap source.
+What *has* changed is the reason to want one. The 2026-09-14 checkpoint (above) found ATL
+confidently **right** and NWP confidently **wrong**, so a detector climatology is not the fix
+for ATL at all, and for NWP the cheaper first move is a second observational point — 20260827
+week 1 verified 09-14..09-20 — before committing to a terabyte.
+
 ## Not done
 
 - The detector/tracker is unvalidated against observed tracks: no cycle has been verified

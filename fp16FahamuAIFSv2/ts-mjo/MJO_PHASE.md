@@ -248,21 +248,142 @@ that averaging is resolution-limited at 1.5 deg.
 | chi200 magnitude on the real store | **2.3e7 m²/s** — literature scale O(1e6–1e7) |
 | chi200 tropical band, zonal spectrum | **k=1 dominant** — the Walker/MJO signature |
 
-### What is still missing: the EOFs
+### What is still missing — and it is not the EOFs
 
-**The VPM basis is an external asset, exactly as WH04's is.** AI-WQ distributes
-`WH04_combinedEOFs.nc` for RMM and nothing for VPM; the reference basis is NOAA PSL's.
+An earlier version of this section said the blocker was "acquisition, not computation:
+obtain the NOAA VPM EOFs". **That framing was too narrow**, and `vpm-mjo.md` is right to
+push back on it.
 
-Without `--eofs`, `vpm_index.py` **stops after normalisation** and writes the band series
-rather than inventing a basis — the same refusal `mjo_index.py` makes for truncated WH04. A
-self-computed EOF basis would not be VPM: it would be a new index with no published phase
-convention, whose phases correspond to neither VPM's nor RMM's, and calling its output an MJO
-phase forecast would be wrong.
+The submitted object is `P(RMM phase = 0..8)`, not VPM1/VPM2. So the architecture is
 
-So the remaining work is **acquisition, not computation**: obtain VPM EOFs (3 x 144, ordered
-`[chi200, u850, u200]`) plus the two PC standard deviations, and the pipeline completes. The
-`--clim` and `--lowfreq` inputs of §4.3 remain required for the anomalies to be
-VPM-comparable, and both are still unmet.
+```
+AIFS -> chi200,U850,U200 -> [basis] -> state -> P(RMM phase | state) -> 9x4
+```
+
+and the `P(RMM phase | state)` step is **learned empirically**. That means **the basis does
+not have to be NOAA's**. Any *fixed* 2-D projection of `[chi200, U850, U200]` serves as a
+state representation provided the **same** basis is used for the historical calibration and
+the forecast — the calibration absorbs the choice. Build the basis from ERA5 and the result
+is a legitimate index; it simply must be called `AIFS-MJO` rather than VPM, because it does
+not reproduce Ventrice's published preprocessing.
+
+The labels are free. AI-WQ ships all three reference pieces:
+
+| call | gives |
+|---|---|
+| `retrieve_daily_MJO_obs(date, password, phase_probs=True)` | **observed RMM phases** — the calibration labels |
+| `retrieve_20yr_MJO_clim(...)` | climatological phase probabilities — the BSS reference |
+| `retrieve_MJO_projection_data(...)` | WH04 EOFs — OLR space, unusable here |
+
+So there is **no need to reproduce the competition's RMM calculation**, which also avoids
+subtle mismatches in EOF sign, normalisation, filtering and phase convention.
+
+**The one real dependency is a historical record of `chi200`, `U850`, `U200`** — needed once,
+to build the basis and learn the conditional probabilities.
+
+---
+
+## 6. ERA5 without downloading it: ARCO-ERA5
+
+Verified reachable from this box 2026-09-21, **over plain HTTPS, with no new dependency and
+no credentials** — `gcsfs` is not installed and is not needed:
+
+```python
+import xarray as xr
+U = ("https://storage.googleapis.com/gcp-public-data-arco-era5/ar/"
+     "1959-2022-6h-240x121_equiangular_with_poles_conservative.zarr")
+ds = xr.open_zarr(U, chunks={}, consolidated=True)          # lazy, opens in seconds
+```
+
+That dataset is an unusually good fit:
+
+| | |
+|---|---|
+| grid | **240 x 121 = 1.5 deg** — the exact grid step 3a already produces |
+| cadence | **6-hourly** — the store's cadence |
+| levels | **50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000** — identical to the store's `q` levels |
+| span | 1959-01-02 .. 2021-12-31 (92 040 steps) |
+| fields present | `u/v_component_of_wind`, `temperature`, `specific_humidity`, `10m_u/v`, `mean_sea_level_pressure` |
+| absent | `total_precipitation` (in the 0.25 deg product instead) |
+
+### The chunking decides the cost — measure it before planning around it
+
+```
+u_component_of_wind   chunks (8 time, 13 level, 240, 121)   compressor: None
+```
+
+**All 13 levels sit in one chunk, uncompressed.** Selecting two levels therefore transfers
+all thirteen, and a one-week slice touches 4 time-chunks. Measured: a request for `u,v` at
+200 and 850 hPa for one week returned 13 MB of data after moving **~48 MB** over the wire, in
+**185 s**.
+
+Two consequences, both of which change how the routine should be written:
+
+1. **Ask for every level you might want** — you are paying for all 13 regardless. Subsetting
+   levels saves nothing and costs clarity.
+2. **Budget on chunks, not on the size of the array you asked for.** A 20-year `u`+`v`
+   calibration is roughly **90 GB of transfer**, not the 2.5 GB the selected array would
+   suggest.
+
+### Why this is still the right design
+
+The 90 GB is a **one-off stream**, and nothing is kept:
+
+```
+ARCO-ERA5 (streamed once)  ->  basis + P(RMM|state) lookup  ->  a few MB on disk
+                                                                      |
+weekly run:  AIFS chi200/U850/U200  ->  state  ->  lookup  ->  9x4    v
+             ZERO bytes of ERA5, no CDS account, no archive to maintain
+```
+
+Against the alternative — a CDS account, licence acceptance, bulk retrieval and a local ERA5
+archive to keep current — this is strictly better: no credentials, no storage, and the weekly
+path never touches ERA5 at all. The one-off is a background job, not an interactive wait.
+
+If the 90 GB matters, a 10-year calibration halves it, and the MJO literature generally uses
+20-40 years because the index is defined that way rather than because the conditional
+`P(RMM | state)` needs it.
+
+**Currency is the one limitation**: this product ends **2021-12-31**. Fine for building a
+basis and a conditional lookup — both are climatological — but it cannot supply anything
+about recent or current conditions.
+
+### This route does *not* solve the TS requirement
+
+Worth stating plainly, because the two targets look similar and are not. The TS tracker
+detects cyclone centres and needs resolution comparable to the forecast it runs on
+(N320, ~28 km). This dataset is **1.5 deg (~165 km)** — coarser than the O96 corpus, and far
+too coarse to resolve a tropical cyclone.
+
+ARCO's 0.25 deg product would match, but at 1440x721x37 levels the same chunk arithmetic puts
+a 20-year, 8-variable stream near **1 TB**. That is not a weekly-routine problem, it is a
+different project. See [`TS_STORM_DAYS.md`](TS_STORM_DAYS.md).
+
+---
+
+## 7. What remains, in order
+
+1. **Stream ARCO-ERA5** for `u200, v200, u850` over the calibration period — background job,
+   ~90 GB of transfer, nothing retained.
+2. **Build the basis** — EOFs of `[chi200, U850, U200]`. Reuse `velocity_potential.py`
+   unchanged: it takes `(..., nlat, nlon)` on a regular grid, which is exactly ARCO's layout.
+3. **Learn `P(RMM phase | state)`** against `retrieve_daily_MJO_obs()` labels. `vpm-mjo.md`
+   recommends a binned lookup with Dirichlet smoothing before any ML, shrunk toward
+   `retrieve_20yr_MJO_clim()` where support is thin — interpretable and hard to overfit.
+4. **Wire into `vpm_index.py`** — `--eofs` and the lookup; the pipeline already stops exactly
+   where these plug in.
+
+Steps 2-4 are determined work. Step 1 is a download that needs no permission.
+
+### One caution `vpm-mjo.md` raises that our own results argue against
+
+It advises against rolling AIFS past D+15 and propagating statistically to D+22/29 instead
+(its §"There is a larger AIFS problem at D+22 and D+29"). The caution is reasonable a priori
+— ECMWF documents AIFS-ENS v2 as a 15-day system. But we submit days 18-31 every week, and
+cycle `20260709` scored **+0.071 / +0.055 / +0.106** on the official leaderboard: real skill
+beyond climatology, well outside the documented horizon. The rollout holds up for the gridded
+variables. Whether it holds for MJO specifically is **untested**, and worth testing rather
+than assuming in either direction.
 
 ---
 
