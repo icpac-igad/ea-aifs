@@ -182,3 +182,29 @@ of a quiet Atlantic, called at 0.92. A detector-native climatology is aimed at t
 for ATL. **NWP's over-count is the real defect.** One week is one sample — 20260827's week 1
 (09-14…09-20) gives a second point from 2026-09-21. See
 [`ts-mjo/TS_STORM_DAYS.md`](ts-mjo/TS_STORM_DAYS.md).
+
+---
+
+## Tropical-storm days — run before this store is purged
+
+The tracker was run on this cycle on **2026-09-21**, contributing 100 samples to the
+detector-native climatology:
+
+```bash
+$PY ts-mjo/ts_days.py --store $BASE/icechunk_n320_aiwq --tag cycle-20260917_0000 \
+    --init 20260917 --out $BASE/ts_days_probs_20260917_tracked.nc
+```
+
+| week | ATL mean | NWP mean |
+|---|---|---|
+| 2026-10-05 | 0.9 | 8.7 |
+| 2026-10-12 | 1.1 | 7.6 |
+
+ATL at 0.9 and 1.1 is the quietest of the five cycles, consistent with the two
+verified-zero Atlantic weeks that preceded it.
+
+> **Retention rule.** The store is **53 GB** and will be purged; this product is
+> **~20 KB** and is the entire scientific value of the cycle for this target. It sits at the
+> cycle root, which `cleanup_aifs_run.py` does **not** protect — so running the tracker is a
+> manual pre-purge step, and forgetting it is unrecoverable. See
+> [`ts-mjo/TS_STORM_DAYS.md`](ts-mjo/TS_STORM_DAYS.md).

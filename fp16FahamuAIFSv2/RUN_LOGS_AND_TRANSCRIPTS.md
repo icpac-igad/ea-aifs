@@ -187,4 +187,7 @@ the logs.
   transport.
 - [`LOCAL_GPU_RUN.md`](LOCAL_GPU_RUN.md) — Step 2 on the local box.
 - `cleanup_aifs_run.py` — reclaims a finished cycle; leaves `/tank/projects/*.log`
-  alone.
+  alone. ⚠️ It also does **not** protect `ts_days_probs_<DATE>_tracked.nc` at the cycle
+  root — run the TS tracker **before** purging, or that cycle is lost to the
+  detector climatology permanently. See
+  [`ts-mjo/TS_STORM_DAYS.md`](ts-mjo/TS_STORM_DAYS.md).

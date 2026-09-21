@@ -9,7 +9,7 @@ store. Detector, tracker, IBTrACS calibration, and the state of a submission.
 | Evaluation | [RPSS on terciles per basin](https://ecmwf-ai-weather-quest.readthedocs.io/en/latest/forecast_evaluation.html#tropical-storm-days-ts) |
 | Code | `ts_days.py` (driver), `ts_tracks.py` (tracker), `grid_ops.py`, `store_io.py` |
 | Test | `test_tercile_binning.py` |
-| Status | **not submittable** — see [§8](#8-the-correction--done-2026-08-23-ts_trackspy) |
+| Status | **not submittable** — NWP over-count; ATL verified correct 2026-09-21 |
 
 ```bash
 PY=/tank/projects/micromamba/envs/aifs-gpu/bin/python
@@ -584,47 +584,130 @@ the case to watch.
 
 ---
 
-## ARCO-ERA5 does not solve the TS climatology — checked 2026-09-21
+## The checkpoints fired — and they split the question
 
-`MJO_PHASE.md` §6 establishes that ERA5 is reachable as lazily-read Zarr over plain HTTPS, no
-credentials and no download:
+`20260820` week 1 (valid 09-07…09-13) and `20260827` week 1 (09-14…09-20) both verified.
+Run against a refreshed IBTrACS:
 
-```python
-U = ("https://storage.googleapis.com/gcp-public-data-arco-era5/ar/"
-     "1959-2022-6h-240x121_equiangular_with_poles_conservative.zarr")
+| | 20260820 wk1 | 20260827 wk1 |
+|---|---|---|
+| **ATL** | obs **0**, P(below) **0.92** → ✅ **right** | obs **0**, P(below) **0.92** → ✅ **right** |
+| **NWP** | obs **0**, P(above) **0.84** → ❌ **wrong** | obs **2**, P(above) **0.76** → ❌ **wrong** |
+
+The zeros are genuine, not missing data: in 09-07…09-13 all 77 TS-strength IBTrACS records
+sat at lon −169.5…−117.3 — entirely North-East Pacific, which AI-WQ does not score.
+
+**This resolves §8's open question, and it resolves it differently for each basin.**
+
+- **ATL: there is no bias to correct.** The "~4× low" was a correct forecast of a quiet
+  Atlantic, called confidently and correctly **twice**. The §8 note that this "cannot
+  separate a detector defect from a genuine forecast of a quiet fortnight" is now settled in
+  favour of the forecast.
+- **NWP: the over-count is real and consistent.** Forecast means 10.3 and 10.4 against
+  observed 0 and 2. This is the defect worth fixing, and it is the only one.
+
+Two weeks is still two weeks. But it is the difference between an inferred claim and a
+measured one, and the two point the same way.
+
+---
+
+## The detector-native climatology, built from the stores we already have
+
+An earlier version of this section argued for streaming ~1 TB of 0.25° ERA5. **That was the
+wrong route.** The N320 stores on disk already carry exactly the eight fields
+`ts_tracks.py` reads, at exactly the resolution the forecast runs at.
+
+Running the tracker over all five N320 cycles — **35 min of compute, 0 GB of new storage**:
+
+| cycle | week | ATL | NWP | week | ATL | NWP |
+|---|---|---|---|---|---|---|
+| 20260820 | 09-07 | 1.9 | 10.3 | 09-14 | 2.2 | 9.1 |
+| 20260827 | 09-14 | 1.1 | 10.4 | 09-21 | 2.3 | 9.7 |
+| 20260903 | 09-21 | 2.7 | 9.4 | 09-28 | 2.0 | 6.2 |
+| 20260910 | 09-28 | 2.2 | 8.2 | 10-05 | 2.4 | 7.5 |
+| 20260917 | 10-05 | 0.9 | 8.7 | 10-12 | 1.1 | 7.6 |
+
+**Pooled, 500 samples over Sept 14 – Oct 12:**
+
+| basin | detector p33 / p67 | official IBTrACS p33 / p67 | mean | max |
+|---|---|---|---|---|
+| **ATL** | **0 / 2** | 5 / 11 | 1.9 | 14 |
+| **NWP** | **7 / 11** | 5 / 8 | 8.7 | 24 |
+| SWIO | 0 / 0 | 0 / 0 | 0.6 | 5 |
+| SEIO | 0 / 0 | 0 / 0 | 0.4 | 4 |
+
+### Why this beats the ERA5 route on the merits, not just on cost
+
+§8 gave three reasons not to build ERA5 terciles. The second was the strongest:
+
+> **ERA5 is an analysis climatology; the forecast is day 18–33.** It would correct the
+> detector, not the model's behaviour at that lead. Standard S2S practice calibrates against
+> a **model climatology at matching lead** — hindcasts.
+
+Accumulated forecasts **are** a model climatology at matching lead. They carry the detector
+error *and* the model's day-18–33 behaviour together, which is what has to cancel. ERA5
+carries only the first.
+
+It also works. The same `20260827` forecast, scored both ways:
+
+| NWP wk1 | P(below / near / above) |
+|---|---|
+| against **official IBTrACS** terciles (5/8) | 0.08 / 0.16 / **0.76** — confidently wrong |
+| against its **own** detector terciles (8/12) | 0.24 / 0.36 / 0.40 — appropriately uncertain |
+
+### Two honest limits
+
+**Five cycles spanning four weeks is a local sample, not a seasonal climatology.** It can
+calibrate an autumn init; it says nothing about December, when SWIO/SEIO become the scored
+basins. Only accumulation fixes that.
+
+**It is self-referential in exactly the way §8 warns.** Calibrating our forecasts against our
+own forecast distribution guarantees well-spread probabilities but cannot tell us whether the
+detector is *right*. That is what the IBTrACS checkpoints are for. The two are complementary:
+the detector climatology sets the spread, the checkpoints test the truth.
+
+---
+
+## Retention rule — run the tracker before the store is purged
+
+**The store is 51–583 GB and gets deleted. The TS product is ~20 KB and is the entire
+scientific value.** Five cycles cost **99 KB**; a full year would cost about 1 MB.
+
+```bash
+# BEFORE cleanup_aifs_run.py touches a cycle:
+$PY ts_days.py --store $BASE/icechunk_n320_aiwq --tag cycle-<DATE>_0000     --init <DATE> --out $BASE/ts_days_probs_<DATE>_tracked.nc
 ```
 
-That closes the MJO data dependency. **It does not close this one**, and the reason is
-resolution, not access.
+It runs on either store shape — `icechunk_n320_aiwq` (the tier-B sidecar, 10 vars) or the
+older full `icechunk_v2` — because the sidecar was sized to include the eight fields the
+tracker needs.
 
-| | MJO needs | TS needs |
-|---|---|---|
-| quantity | planetary wavenumber 1-3, banded to 144 longitudes | **individual cyclone centres** |
-| resolution | 1.5 deg is ample | must match the forecast it calibrates — N320, **~28 km** |
-| ARCO 1.5 deg product | ✅ exact fit | ❌ **~165 km** — coarser than the O96 corpus, cannot resolve a TC |
+`cleanup_aifs_run.py` keeps `aiwq/*.nc` but the TS product sits at the cycle root, so **it is
+not protected by anything today**. Until that changes, the tracker run is a manual
+pre-purge step. The cost of forgetting is not recoverable: the store is gone, and with it
+that cycle's contribution to the climatology.
 
-ARCO's 0.25 deg product does match. But its chunking is the same shape — all levels in one
-uncompressed chunk — and at 1440x721 with 37 levels, a 20-year stream of the eight variables
-`ts_tracks.py` reads comes to roughly **1 TB of transfer**. That is not a weekly routine; it
-is a separate project with its own storage plan.
+### What ARCO-ERA5 would still be for
 
-**So the TS blocker is unchanged**: a detector-native climatology still has no cheap source.
-What *has* changed is the reason to want one. The 2026-09-14 checkpoint (above) found ATL
-confidently **right** and NWP confidently **wrong**, so a detector climatology is not the fix
-for ATL at all, and for NWP the cheaper first move is a second observational point — 20260827
-week 1 verified 09-14..09-20 — before committing to a terabyte.
+Not the climatology — the **validation**. The checkpoints compare our forecast against
+observed counts; they cannot tell us whether the *detector* would reproduce IBTrACS given
+the true atmosphere. Running the tracker over a handful of past weeks of 0.25° ERA5 and
+comparing against IBTrACS for those same weeks answers that directly, and needs tens of GB
+rather than a terabyte. That remains the useful probe, and it is now the only reason to
+touch ERA5 for this target.
 
 ## Not done
 
 - The detector/tracker is unvalidated against observed tracks: no cycle has been verified
   storm-by-storm against IBTrACS positions, only distribution-against-climatology.
-- **Still not submittable**: a per-basin amplitude discrepancy of opposite sign remains
-  (ATL ~4× low, NWP ~1.6× high) against the observed IBTrACS terciles. Whether that is a
-  **detector** error or a genuine forecast is **not yet established** — it rests on one
-  cycle against climatology. The free test is `20260820`'s week-1 verification from
-  **2026-09-14** ([§8](#the-next-checkpoint-costs-nothing-2026-09-14)); a detector-native
-  ERA5 climatology is a *candidate* fix, not a confirmed one, and has unmet prerequisites
-  (no CDS credentials, ~200 GB free disk).
+- **ATL is settled**: the checkpoints (2026-09-21) found it confidently right twice, so
+  there is no ATL bias to correct and no ERA5 job aimed at it.
+- **NWP is the remaining defect**: a real, consistent over-count (10.3/10.4 forecast against
+  0/2 observed). A detector-native climatology built from accumulated cycles is the fix, and
+  the first 500-sample version exists; it needs a seasonal span before it can carry a
+  submission.
+- **Still not submittable** — but the blocker is now one basin and one missing season,
+  not a method.
 - Tercile binning matches AI-WQ's scorer exactly (`tercile_probs`, guarded by
   `test_tercile_binning.py`); §8's tables were regenerated against it on 2026-08-27.
 - Tested against `20260730` (old detector) and `20260820` (both).

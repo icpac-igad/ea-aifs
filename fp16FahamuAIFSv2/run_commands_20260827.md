@@ -220,3 +220,31 @@ rollout always leaves a submission-ready product, and the only remaining human d
 | 3a started | 2026-08-29 22:33 UTC — **+58 h** |
 | 3c done | 2026-08-30 06:21 UTC |
 | window closed | 2026-08-30 23:59 UTC — **17 h 38 m spare** |
+
+---
+
+## Tropical-storm days — run before this store is purged
+
+The tracker was run on this cycle on **2026-09-21**, contributing 100 samples to the
+detector-native climatology:
+
+```bash
+$PY ts-mjo/ts_days.py --store $BASE/icechunk_v2 --tag cycle-20260827_0000 \
+    --init 20260827 --out $BASE/ts_days_probs_20260827_tracked.nc
+```
+
+| week | ATL mean | NWP mean |
+|---|---|---|
+| 2026-09-14 | 1.1 | 10.4 |
+| 2026-09-21 | 2.3 | 9.7 |
+
+**This cycle's week 1 is the second checkpoint.** Observed 2026-09-14…09-20:
+**ATL 0** against our P(below) = 0.92 — right; **NWP 2** against our P(above) = 0.76 —
+wrong. Together with `20260820` that makes ATL right twice and NWP wrong twice, which is
+what settled the open question in [`ts-mjo/TS_STORM_DAYS.md`](ts-mjo/TS_STORM_DAYS.md).
+
+> **Retention rule.** The store is **583 GB** and will be purged; this product is
+> **~20 KB** and is the entire scientific value of the cycle for this target. It sits at the
+> cycle root, which `cleanup_aifs_run.py` does **not** protect — so running the tracker is a
+> manual pre-purge step, and forgetting it is unrecoverable. See
+> [`ts-mjo/TS_STORM_DAYS.md`](ts-mjo/TS_STORM_DAYS.md).

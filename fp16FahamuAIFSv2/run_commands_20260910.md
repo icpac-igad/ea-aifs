@@ -224,3 +224,29 @@ row where a finished or failed rollout waited on a human noticing; the previous 
 Disk after: **264 GB free (87 %)**. Tier B is 214 GB of that, and
 `cleanup_aifs_run.py` still cannot reclaim it — `HEAVY_PREFIXES` matches neither
 `icechunk_o96` nor `icechunk_n320_aiwq`.
+
+---
+
+## Tropical-storm days — run before this store is purged
+
+The tracker was run on this cycle on **2026-09-21**, contributing 100 samples to the
+detector-native climatology:
+
+```bash
+$PY ts-mjo/ts_days.py --store $BASE/icechunk_n320_aiwq --tag cycle-20260910_0000 \
+    --init 20260910 --out $BASE/ts_days_probs_20260910_tracked.nc
+```
+
+| week | ATL mean | NWP mean |
+|---|---|---|
+| 2026-09-28 | 2.2 | 8.2 |
+| 2026-10-05 | 2.4 | 7.5 |
+
+NWP's 6.2 in the previous cycle and 8.2 here are the low end of the sample —
+the spread across cycles is real and is why a single cycle cannot be a climatology.
+
+> **Retention rule.** The store is **52 GB** and will be purged; this product is
+> **~20 KB** and is the entire scientific value of the cycle for this target. It sits at the
+> cycle root, which `cleanup_aifs_run.py` does **not** protect — so running the tracker is a
+> manual pre-purge step, and forgetting it is unrecoverable. See
+> [`ts-mjo/TS_STORM_DAYS.md`](ts-mjo/TS_STORM_DAYS.md).

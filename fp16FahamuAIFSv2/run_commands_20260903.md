@@ -259,3 +259,30 @@ costs a full 4½-hour rollout, so it is worth settling before the next cycle rat
    11 minutes with no external dependency and no irreversible action — chaining them onto
    Step 2's `DONE:` line would leave every finished rollout submission-ready.
 3. **`--native-vars` scope** — see above; decide before running 20260910.
+
+---
+
+## Tropical-storm days — run before this store is purged
+
+The tracker was run on this cycle on **2026-09-21**, contributing 100 samples to the
+detector-native climatology:
+
+```bash
+$PY ts-mjo/ts_days.py --store $BASE/icechunk_n320_aiwq --tag cycle-20260903_0000 \
+    --init 20260903 --out $BASE/ts_days_probs_20260903_tracked.nc
+```
+
+| week | ATL mean | NWP mean |
+|---|---|---|
+| 2026-09-21 | 2.7 | 9.4 |
+| 2026-09-28 | 2.0 | 6.2 |
+
+First tier-B cycle, so the first to prove the **10-variable sidecar carries the
+tracker**: `10u`, `10v`, `msl`, `t_200/300/500`, `u_850`, `v_850` are all present, and the
+run needs no access to the O96 corpus.
+
+> **Retention rule.** The store is **51 GB** and will be purged; this product is
+> **~20 KB** and is the entire scientific value of the cycle for this target. It sits at the
+> cycle root, which `cleanup_aifs_run.py` does **not** protect — so running the tracker is a
+> manual pre-purge step, and forgetting it is unrecoverable. See
+> [`ts-mjo/TS_STORM_DAYS.md`](ts-mjo/TS_STORM_DAYS.md).

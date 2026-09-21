@@ -350,3 +350,23 @@ cd /home/ezra/ea-aifs/fp16FahamuAIFSv2/O96-icechunk-store/forecast-evaluation
 
 Its inputs survived the 2026-08-22 disk reclaim (both quintile files verified present).
 Its outcome decides whether future cycles need N320 at all beyond the 12 GB tier-B sidecar.
+
+---
+
+## Tropical-storm days — the case for the retention rule
+
+This cycle's N320 store was purged on 2026-09-17 to make room for `20260917`. **The TS
+product survived, and is why this cycle still contributes to the climatology:**
+
+| week | ATL mean | NWP mean |
+|---|---|---|
+| 2026-09-07 | 1.9 | 10.3 |
+| 2026-09-14 | 2.2 | 9.1 |
+
+Week 1 became the **first checkpoint** on 2026-09-14: observed **ATL 0** against our
+P(below) = 0.92 — right; **NWP 0** against P(above) = 0.84 — wrong.
+
+> **583 GB of store is gone; the 20 KB that mattered is not.** Had the tracker not been run
+> before the purge, this cycle would contribute nothing and the first checkpoint would have
+> been impossible. That is the whole argument for the retention rule in
+> [`ts-mjo/TS_STORM_DAYS.md`](ts-mjo/TS_STORM_DAYS.md).
