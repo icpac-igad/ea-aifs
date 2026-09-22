@@ -759,9 +759,10 @@ another group's VPM.
   a VPM basis applied to our fields — those are not the same claim.
 - It has **not been applied to a forecast.** `vpm_index.py --eofs` will now run, but no
   cycle has been put through it, and §6c's 34-day window limit is untouched by any of this.
-- The **VPM-vs-RMM phase offset is now measured** (§6h): **+166.3°, ~3.7 octants**, against
-  PSL's RMM*. It must be applied — ignoring it costs ~4 octants systematically. The value
-  against BOM's *official* RMM, which AI-WQ uses, is **not** confirmed.
+- The **VPM-vs-RMM offset is measured and applied** (§6h, §6i): **+166.3° with det = −1, a
+  reflection**, via `--rmm-rotation`. It corrects a real mirror: `vpm.1x.txt`, and so our
+  basis, ran **westward** at −7.6°/day; it now runs +7.6°/day. Measured against PSL's RMM*,
+  **not** BOM's official RMM — re-measure before submitting.
 - AI-WQ scores MJO against **RMM**, not VPM (§6h). Ceiling for a perfect VPM: 64% exact
   octant, 98.7% within one.
 - **AI-WQ retrieval is blocked**: the ECBox token returns 403 "Not a Branca token". This
@@ -926,6 +927,67 @@ rather than to concentrate it — which our ensemble does naturally.
 - The check that would settle it, `retrieve_daily_MJO_obs()`, is **blocked**: the
   ECBox token returns `403 {"message":"Not a Branca token"}`. Rotating it also
   unblocks real forecast verification against observed days.
+
+---
+
+## 6i. The offset applied — and it is a reflection, not a rotation
+
+`measure_phase_offset.py` measures the transform and `vpm_index.py --rmm-rotation`
+applies it. Getting it right needed one correction that is worth keeping.
+
+### It is a reflection, and forcing it to be a rotation destroys the agreement
+
+The first implementation guarded the orthogonal Procrustes solution with "keep it
+a rotation, not a reflection" — flipping the sign when `det < 0`. That guard looks
+like defensive hygiene and is **wrong here**:
+
+| | angle | det | same octant | component *r* |
+|---|---|---|---|---|
+| forced to a rotation | +36.4° | +1 | **15.9%** | −0.731 / +0.824 |
+| the actual solution | **+166.3°** | **−1** | **64.0%** | **+0.822 / +0.866** |
+
+The reflection is not a numerical accident. The two PSL files carry **opposite sign
+conventions**, and it shows up physically — median phase advance on active
+consecutive days:
+
+```
+vpm.1x.txt        -7.56 deg/day     WESTWARD
+rmm_star.txt      +6.84 deg/day     eastward
+```
+
+Same magnitude (360/6.8 ≈ 53 days, squarely the MJO period), opposite sign. **An MJO
+index must advance eastward through phases 1→8**, so `vpm.1x.txt` is the mirrored
+one — and because `vpm_basis_fit.py` was fitted against that file, **our index
+inherited the mirror**. After the transform ours runs **+7.56 °/day**, eastward.
+
+`measure_phase_offset.py` now **refuses to write** a transform whose output runs
+westward. That check, not the correlation, is what makes a reflection safe to apply.
+
+### Effect on the product
+
+The modal categories move by about four octants, as expected:
+
+| cycle | before (VPM convention) | after (RMM convention) |
+|---|---|---|
+| 20260903 | 6 · 6 · 6 · 5 | **7 · 6 · 7 · 8** |
+| 20260910 | 6 · 5 · 6 · 5 | **6 · 7 · 7 · 7** |
+| 20260917 | 5 · 5 · 6 · 5 | **8 · 7 · 7 · 7** |
+
+The transform is orthogonal, so **amplitude is unchanged** — mean 2.0–2.2,
+P(inactive) 0.05–0.07. §6g's bias is untouched, as it must be.
+
+### What the phase progression now shows
+
+Ensemble-mean PCs advance at **+1.44, +0.11, −0.19 °/day** across the three cycles,
+against an observed +6.8. Near-stationary, and consistent with two things already
+established: §6c's finding that a 34-day window cannot resolve propagation, and
+§6g's mean-state offset, which is large enough to pin the PCs near a fixed
+direction — which is also why the product concentrates 0.7–1.0 probability on a
+single category at short lead. **A confident, nearly stationary phase is what a bias
+looks like**, not what skill looks like.
+
+So the ordering is unchanged: the offset had to be applied, and it was; but §6g
+remains the blocker.
 
 ---
 

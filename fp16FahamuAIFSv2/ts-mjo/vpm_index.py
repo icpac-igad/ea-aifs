@@ -142,6 +142,12 @@ def main():
     ap.add_argument("--members", type=int, default=None)
     ap.add_argument("--regrid-deg", type=float, default=REGRID_DEG,
                     help="regular grid for the Poisson solve (default 1.5)")
+    ap.add_argument("--rmm-rotation",
+                    help="npz from measure_phase_offset.py mapping VPM's phase convention "
+                         "onto RMM's, which is what AI-WQ scores against. WITHOUT IT the "
+                         "phases are ~4 octants wrong and the index runs westward. Measured "
+                         "against PSL's RMM*, not BOM's official RMM -- re-measure before "
+                         "submitting.")
     ap.add_argument("--band-path", choices=("regular", "native"), default="regular",
                     help="grid on which U850/U200 are reduced to the 144-longitude band. "
                          "'regular' matches era5_vpm_clim.py; 'native' is cheaper. Measured "
@@ -308,6 +314,29 @@ def main():
     # `phase_from_pcs` returns (phase, amplitude) and is already vectorised, so
     # it takes the whole (member, day) array at once. Mapping it element-wise and
     # stacking the result silently built a (member, day, 2) array instead.
+    if args.rmm_rotation:
+        # Map VPM's phase convention onto RMM's, which is what AI-WQ scores
+        # against. This is a REFLECTION, not merely a rotation, and it is
+        # physically required rather than cosmetic: as stored, `vpm.1x.txt`
+        # (and therefore our basis, fitted to it) advances WESTWARD at
+        # -7.6 deg/day, while an MJO index must advance eastward through phases
+        # 1..8. After the transform it runs +7.6 deg/day, against the target's
+        # +6.8. Skipping this costs ~4 octants systematically -- 11.5% same
+        # octant instead of 64.0%.
+        #
+        # Being orthogonal it preserves the norm, so it changes PHASE ONLY.
+        # The amplitude bias of MJO_PHASE.md 6g is untouched by it.
+        rz = np.load(args.rmm_rotation)
+        R = rz["rotation"]
+        pcs = np.stack([vpm1, vpm2], axis=-1) @ R.T
+        vpm1, vpm2 = pcs[..., 0], pcs[..., 1]
+        print(f"  applied VPM->RMM transform: {float(rz['angle_deg']):+.2f} deg, "
+              f"det={float(rz['determinant']):+.0f}"
+              + ("  [reflection]" if bool(rz["is_reflection"]) else "")
+              + f"  ({str(rz['rmm_source'])})")
+        print("    NOTE: orthogonal, so amplitude is unchanged -- this does not "
+              "address the 6g bias.")
+
     ph, amp = phase_from_pcs(vpm1, vpm2)
 
     import xarray as xr
@@ -320,6 +349,8 @@ def main():
                 "member": np.arange(nmem)},
         attrs={"index_kind": "vpm", "basis": args.eofs,
                "components": "chi200,u850,u200",
+               "rmm_rotation": str(args.rmm_rotation or "NONE -- phases are in VPM convention, "
+                                   "~4 octants from RMM"),
                "chi200_source": f"divergence on the {args.div_path} grid, "
                                 f"Poisson solve on a {args.regrid_deg} deg regular grid",
                # netCDF attributes cannot hold booleans; record the source path
