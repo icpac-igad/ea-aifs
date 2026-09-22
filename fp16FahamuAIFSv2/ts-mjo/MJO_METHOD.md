@@ -5,7 +5,9 @@ wrong turns. **This document is the summary**: the method as it now stands, the 
 depends on, and how it will be verified. Read this first; go there for why.
 
 **Status: the observed pipeline is validated; the forecast product is not submittable.**
-One thing blocks it, and it is named in §5.
+One thing blocks it: a **model climatology**, which needs historical initial conditions the
+current pkl path cannot supply. §5 has the measurement, the leave-one-out test showing the
+fix works, and why it is a data-preparation task rather than a compute or waiting problem.
 
 ---
 
@@ -117,14 +119,67 @@ Operational MJO forecast indices remove a **model** climatology per lead time fo
 reason. This is the same pattern as the TS product, where the useful climatology also turned
 out to be model-derived rather than observational.
 
-Two things make it tractable, and one makes it slow:
+### It works — tested leave-one-out
 
-- The offset is **stable across cycles** (0.66 / 0.67 / 0.68), so few cycles are needed — the
-  TS climatology was built from five.
-- It is **large and systematic**, so removing it should be most of the fix.
-- But three September cycles give a *September* climatology. Year-round coverage needs cycles
-  spread through the year, and the purged cycles' O96 corpora are gone, so this **accumulates
-  going forward** rather than being recoverable from what is on disk.
+The correction is simply the forecast's own mean state per longitude and per lead, estimated
+from *other* cycles. Built from two cycles and applied to the third (using all three would be
+circular):
+
+| cycle | | mean amplitude | P(inactive) |
+|---|---|---|---|
+| 20260903 | current | 2.81 | 0.01 |
+| | corrected from 0910+0917 | **1.02** | **0.50** |
+| 20260910 | current | 2.59 | 0.02 |
+| | corrected from 0903+0917 | **1.00** | **0.53** |
+| 20260917 | current | 2.75 | 0.01 |
+| | corrected from 0903+0910 | **0.94** | **0.60** |
+| **observed RMM** | | **1.30** | **0.37** |
+
+From 2.8 and 0.01 to ~1.0 and ~0.5. The bias is real and removable — **and the correction
+overshoots**, landing below the observed amplitude rather than on it.
+
+### Why it overshoots, and what that says about the fix
+
+The three cycles **overlap in valid time**: 09-03–10-06, 09-10–10-13, 09-17–10-20. Their mean
+therefore contains the actual MJO state of that period, so subtracting it removes real signal
+along with the bias. This is the same contamination as the 34-day window in §7 — an estimate
+of the mean state built from data that shares the signal.
+
+So the requirement is sharper than "more cycles":
+
+> The model climatology must be indexed by **(lead time, calendar day)** and averaged over
+> **independent MJO states** — which means **different years**, not more weeks of 2026.
+
+Accumulating 2026 cycles does not fix this. Twenty overlapping September 2026 cycles would
+still share one MJO evolution.
+
+### What it would actually take
+
+**Hindcasts**: run the model from historical initial conditions at matching calendar days
+across many years, and average. Three things follow:
+
+- **A single member per date is enough.** The target is a mean state, not a distribution, so
+  the 50-member ensemble is not needed — a 50× saving.
+- **The compute is small.** Measured on this box: ~131 s/member for the input pkl and
+  ~290–390 s/member for the rollout, so **~8 min per hindcast date**. Roughly **48 dates
+  spread across years and seasons is ~6–7 h of GPU** — less than half of one operational cycle.
+- **The storage is negligible.** Only `u_200`, `v_200`, `u_850` at O96 are needed: 3 vars × 1
+  member × 132 steps × 40,320 points × 4 B ≈ **64 MB per date**.
+
+**The real obstacle is initial conditions, not compute.**
+`ecmwf_opendata_pkl_input_aifsens_v2.py` builds the input state from **ECMWF Open Data**,
+whose archive does not reach back years. AIFS-ENS 2.0 needs ~112 fields × 2 timesteps,
+including 14 pressure levels, soil (`stl1/2`, `swvl1/2`), snow depth, and **11 ocean-wave
+parameters** from the `waef`/`wave` stream.
+
+So the blocking task is a **ERA5 → AIFS-input path**. ARCO-ERA5 carries the atmospheric and
+wave fields (§4), and the model is *trained* on ERA5, so the fields exist and are the natural
+input — but the transform, the level set and the wave decomposition (`mwd` →
+`cos_mwd`/`sin_mwd`) all have to be reproduced exactly, and any mismatch would show up as a
+bias in the very quantity the hindcasts are meant to measure.
+
+**That is the whole blocker.** Not compute, not storage, not waiting: one data-preparation
+path, after which the climatology is a few hours of GPU.
 
 A rescale of amplitudes to match the observed inactive fraction is **not** an acceptable
 shortcut: it would hide a mean-state bias behind a variance correction, and the phases would

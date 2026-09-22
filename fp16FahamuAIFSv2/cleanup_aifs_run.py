@@ -53,7 +53,12 @@ AIWQ_PURGE = ("ensemble_icechunk_store", "ensemble_nc_files")
 KEEP_FILES = (
     "ts_days_probs_*.nc",    # ~20 KB; the cycle's contribution to the TS detector
                              # climatology, and unrecoverable once the store is purged
-    "mjo_probs*.nc",
+    "mjo_probs*.nc",         # ~70 KB; the MJO nine-category product. `vpm_probs*.nc` was
+                             # the earlier name, written from a basis fitted to PSL's VPM
+                             # and then rotated to RMM. That basis is superseded (the
+                             # current one is fitted straight to the official RMM), the
+                             # files were removed, and the pattern is retained only so a
+                             # stray old file is never silently purged as "not a product".
     "vpm_probs*.nc",
 )
 # A store must not be purged before the TS product has been extracted from it: the tracker
