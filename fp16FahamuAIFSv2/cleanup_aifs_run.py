@@ -58,6 +58,8 @@ KEEP_FILES = (
 )
 # A store must not be purged before the TS product has been extracted from it: the tracker
 # needs 10u/10v/msl/t_200/t_300/t_500/u_850/v_850 at N320, which only the store has.
+# From 20260924 the sidecar also carries u_200/v_200 (run_local_icechunk_v2.DOWNSTREAM_VARS)
+# so the MJO can read N320 too; until then MJO reads the O96 corpus.
 TS_PRODUCT_GLOB = "ts_days_probs_*.nc"
 TS_SOURCE_PREFIXES = ("icechunk_v2", "icechunk_n320_aiwq")
 

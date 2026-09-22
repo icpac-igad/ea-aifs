@@ -527,6 +527,74 @@ An external climatology is the only way a 34-day series gets an anomaly at all.
 
 ---
 
+## 6d. The climatology landed — and exposed that the two sides computed different quantities
+
+The 1991–2020 climatology finished: 30 years, 5483 daily samples, **365/365 calendar days
+covered**, 7–23 samples per day, smoothed on 3 annual harmonics. 20 MB retained.
+
+Applying it found two bugs and one real inconsistency.
+
+**`--clim` had never run.** It did `stacked[k] - z[k][None, :, :]`, subtracting a `(365, 144)`
+calendar-day climatology from a `(member, 34, 144)` forecast — shapes that cannot even
+broadcast. It now indexes by each forecast day's own date, through a `calendar_index()` shared
+with the builder, because a climatology subtracted under a different day convention than it
+was built with is silently wrong by a day in three years out of four.
+
+**The forecast and the climatology were not the same quantity.** `vpm_index.py` took the
+divergence on the native reduced Gaussian grid and regridded only `D` — justified in its
+docstring on cost, since that halves the interpolation. `era5_vpm_clim.py` regrids `u,v` and
+differentiates on the regular grid. Measured on one member, 20 steps:
+
+| | native path / regular path |
+|---|---|
+| χ₂₀₀ band std | 1.60 |
+| band correlation | 0.64 |
+| k=1 amplitude | 1.38 |
+| k=2 amplitude | 3.41 |
+| **k=1 crest longitude** | **+22.8° mean offset, 36.9° std** |
+
+The last row is decisive: the drift diagnostic reads the motion of the k=1 crest, and a 37°
+path-dependent scatter is several days of propagation at 4–8 °/day. The cheaper path was
+chosen on cost before the difference was measured, and the difference is not small.
+
+`--div-path` now selects it and **defaults to `regular`**, matching the climatology, with a
+warning if `--clim` is combined with `native`.
+
+### The result, and what it does and does not settle
+
+| cycle | stage | k=1 power | speed | lag-1 corr |
+|---|---|---|---|---|
+| 20260903 | raw | 0.86 | +9.85 | 0.68 |
+| | clim, mixed paths | 0.71 | +1.97 | 0.67 |
+| | **clim, consistent** | 0.70 | **+8.08** | **0.87** |
+| 20260910 | raw | 0.88 | +21.47 | 0.50 |
+| | clim, mixed paths | 0.76 | +9.22 | 0.51 |
+| | **clim, consistent** | 0.67 | +12.95 | **0.79** |
+| 20260917 | raw | 0.83 | −10.26 | 0.74 |
+| | clim, mixed paths | 0.62 | −12.50 | 0.73 |
+| | **clim, consistent** | 0.60 | −12.53 | **0.82** |
+
+Two things improved and one did not.
+
+**Magnitudes now agree with observations.** The forecast χ₂₀₀ anomaly std is 7.8/7.1/7.3e6
+against ERA5's ~8e6; under the mixed paths it was 1.21e7.
+
+**Coherence improved, and that is the real evidence the fix was right.** Lag-1 correlation went
+0.68/0.50/0.74 → **0.87/0.79/0.82**, toward ERA5's 0.90. A physical field should be temporally
+coherent; the inconsistent path was destroying that, and no amount of tuning the speed estimate
+would have revealed it.
+
+**The speeds are still scattered, and §6c says they must be.** +8.08, +12.95, −12.53 on 34-day
+windows — and ERA5's own strong MJO gave +11.9 … −9.7 across nine such windows. **So these
+numbers still cannot be read as MJO presence or absence.** 20260903 at +8.08 with corr 0.87 is
+the most MJO-like of the three, and that is as much as a 34-day window supports saying.
+
+What would settle it is the **120-day low-frequency filter** (§4.3) — the one remaining
+reference — and then the basis. Both need the contiguous daily series that only the in-cloud
+run (§7.2) can afford.
+
+---
+
 ## 7. What remains, in order
 
 1. **Stream ARCO-ERA5** for `u200, v200, u850` — **running now**; see §7.1 for the sizing.
@@ -696,8 +764,10 @@ than assuming in either direction.
 - **No VPM EOF basis obtained or built**; the VPM-vs-RMM phase offset is **not measured**.
   This is now the only structural gap: §6c validated everything upstream of the projection.
 - No `P(RMM phase | state)` lookup (§7 step 3). Nothing has been submitted for MJO.
-- The climatology is **running, not finished** — 1991–2020 at stride 2, ~12 h remaining
-  (§7.1). Until it lands, `vpm_index.py` still stops at step 8.
+- The climatology is **done** (§6d): 1991–2020, 365/365 calendar days, 20 MB. `vpm_index.py`
+  now completes steps 5 and 7; steps 6 and 8 remain.
+- The **120-day low-frequency mean is still missing**, and it is now the next blocker rather
+  than the basis — see §6d. It needs a contiguous daily series (§7.2).
 - `era5_vpm_colab.py` (§7.2) is generated and its solver verified bit-identical, but it has
   **not been run** — the in-GCP speed-up is inferred from where the data sits, not measured.
 - The **120-day low-frequency filter** (§4.3) is still unsourced. The climatology stream

@@ -62,6 +62,29 @@ DEFAULT_N_MEMBERS = 50           # size of the member axis in the store
 # not be stored; skipped steps allocate no chunks and read back as NaN.
 DOWNSTREAM_WINDOW = "432-792"
 
+# What the N320 sidecar must carry. Retyped by hand on every cycle until now,
+# which is how `u_200`/`v_200` stayed missing for five of them.
+#
+#   msl, tp, 2t          the three submitted AI-WQ variables
+#   10u, 10v             surface wind for the TS tracker
+#   t_200, t_300, t_500  the TS warm-core test (core vs annulus, 200-500 hPa)
+#   u_850, v_850         low-level wind: TS, and the MJO U850 band
+#   u_200, v_200         200 hPa wind: the MJO U200 band, and chi200 via divergence
+#
+# `u_200`/`v_200` are the newest pair. They are NOT needed to make the MJO work --
+# MJO is zonal wavenumber 1-3 and the O96 corpus at ~112 km is ample, which is the
+# mirror of TS, where 28 km is essential and O96 measurably degrades the wind
+# maximum. What they buy is that ONE store serves both products, so a finished
+# cycle can be reduced to the sidecar alone; and that the ERA5 comparison becomes
+# exact rather than interpolated, because ERA5's native grid IS this N320 grid
+# (542,080 points, identical latitudes -- see ts-mjo/ERA5_VPM_CLOUD_BRIEF.md).
+#
+# Cost, measured: 2 arrays x 50 members x 61 steps x 542,080 points x 4 B =
+# 13.2 GB per cycle, taking the sidecar from ~53 GB to ~66 GB (+25%). Storage is
+# the binding constraint on this box, so this is a real trade -- but against the
+# 583 GB a full-N320 corpus would cost, it is the cheap side of it.
+DOWNSTREAM_VARS = ("msl,tp,2t,10u,10v,t_200,t_300,t_500,u_850,v_850,u_200,v_200")
+
 
 def parse_member_range(member_str):
     """'1-50' or '1,2,3' or '7' -> list[int]."""
@@ -500,8 +523,10 @@ def main():
                     help="also write --native-vars to a SECOND store on the native N320 "
                          "grid. With --grid o96 this is tier B: the AI-WQ product stays "
                          "bit-identical for ~13 GB while the 120-var corpus goes coarse.")
-    ap.add_argument("--native-vars", default="msl,tp,2t",
-                    help="variables for --native-store (default: the three AI-WQ ones)")
+    ap.add_argument("--native-vars", default=DOWNSTREAM_VARS,
+                    help=f"variables for --native-store. Default is everything the "
+                         f"downstream products read: {DOWNSTREAM_VARS}. See DOWNSTREAM_VARS "
+                         f"for what each is for and what the last pair costs.")
     ap.add_argument("--native-write-hours", default=None,
                     help="write window for --native-store, if it should differ from "
                          "--write-hours. The case this exists for: keep the O96 corpus "

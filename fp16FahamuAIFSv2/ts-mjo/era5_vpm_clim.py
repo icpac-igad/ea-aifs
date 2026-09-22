@@ -109,6 +109,29 @@ def daily(bands, times):
     return out, uniq
 
 
+def calendar_index(dates):
+    """Dates -> 0..364 index into a calendar-day climatology.
+
+    Indexed by (month, day), NOT by days-since-Jan-1: in a leap year every date
+    after Feb 28 is one day later in the year, so binning on day-of-year smears
+    the seasonal cycle by a day across a quarter of the samples. Feb 29 folds
+    onto Feb 28.
+
+    Both the builder and every consumer must use THIS function. A climatology
+    subtracted with a different day convention than it was built with is wrong
+    by one day in three years out of four, silently.
+    """
+    cal = {}
+    for m in range(1, 13):
+        for d in range(1, 32):
+            try:
+                cal[(m, d)] = dt.date(2001, m, d).timetuple().tm_yday - 1
+            except ValueError:
+                pass
+    cal[(2, 29)] = cal[(2, 28)]
+    return np.array([cal[(int(str(d)[5:7]), int(str(d)[8:10]))] for d in dates])
+
+
 def build_climatology(dates, series, args):
     """Fold a daily band series into a smoothed calendar-day climatology."""
     # Calendar-day climatology, indexed by (month, day) rather than by
@@ -116,16 +139,7 @@ def build_climatology(dates, series, args):
     # one day later in the year than the same date in a common year, so binning
     # on day-of-year smears the seasonal cycle by a day across 1/4 of the
     # samples. Feb 29 folds onto Feb 28.
-    md = [(int(str(d)[5:7]), int(str(d)[8:10])) for d in dates]
-    cal = {}
-    for m in range(1, 13):
-        for dd in range(1, 32):
-            try:
-                cal[(m, dd)] = dt.date(2001, m, dd).timetuple().tm_yday - 1
-            except ValueError:
-                pass
-    cal[(2, 29)] = cal[(2, 28)]
-    idx = np.array([cal[k] for k in md])
+    idx = calendar_index(dates)
 
     clim, n = {}, np.zeros(365)
     for k in FIELDS:
@@ -175,6 +189,9 @@ def build_climatology(dates, series, args):
     np.savez(args.out, **clim, n_per_day=n,
              span=f"{dates.min()}..{dates.max()}", n_days=len(dates),
              harmonics=args.harmonics, grid="240x121_1p5deg",
+             # in combine mode --stride is the CLI default, not what built the
+             # inputs; the day count is the honest record of sampling density
+             days_per_year=len(dates) / max(1, len(set(str(d)[:4] for d in dates))),
              stride=args.stride, fields=np.array(FIELDS))
     print(f"  wrote calendar-day climatology ({n.min():.0f}-{n.max():.0f} samples "
           f"per day) -> {args.out}")
