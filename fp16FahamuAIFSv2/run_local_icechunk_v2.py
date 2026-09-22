@@ -83,7 +83,20 @@ DOWNSTREAM_WINDOW = "432-792"
 # 13.2 GB per cycle, taking the sidecar from ~53 GB to ~66 GB (+25%). Storage is
 # the binding constraint on this box, so this is a real trade -- but against the
 # 583 GB a full-N320 corpus would cost, it is the cheap side of it.
-DOWNSTREAM_VARS = ("msl,tp,2t,10u,10v,t_200,t_300,t_500,u_850,v_850,u_200,v_200")
+DOWNSTREAM_VARS = "msl,tp,2t,10u,10v,t_200,t_300,t_500,u_850,v_850"
+
+# Opt-in: adds the 200 hPa wind, so the MJO can read N320 instead of the O96 corpus.
+# NOT the default, deliberately. It is not needed to make the MJO work -- MJO is zonal
+# wavenumber 1-3 and O96 at ~112 km is ample, which is the mirror of TS, where 28 km is
+# essential. It costs 13.2 GB per cycle (2 arrays x 50 members x 61 steps x 542,080 pts
+# x 4 B), taking the sidecar ~53 -> ~66 GB, and storage is the binding constraint on this
+# box: a cycle already needs ~256 GB against ~97 GB free. Paying 25% more for a
+# convenience is the wrong default while that is true.
+#
+# Use it when the O96 corpus is going to be purged and the MJO still has to run from what
+# remains, or for a point-for-point ERA5 comparison at 28 km (ERA5's native grid IS this
+# N320 grid -- ts-mjo/ERA5_VPM_CLOUD_BRIEF.md).
+DOWNSTREAM_VARS_MJO = DOWNSTREAM_VARS + ",u_200,v_200"
 
 
 def parse_member_range(member_str):
@@ -524,9 +537,14 @@ def main():
                          "grid. With --grid o96 this is tier B: the AI-WQ product stays "
                          "bit-identical for ~13 GB while the 120-var corpus goes coarse.")
     ap.add_argument("--native-vars", default=DOWNSTREAM_VARS,
-                    help=f"variables for --native-store. Default is everything the "
-                         f"downstream products read: {DOWNSTREAM_VARS}. See DOWNSTREAM_VARS "
-                         f"for what each is for and what the last pair costs.")
+                    help=f"variables for --native-store. Default is what the submitted "
+                         f"products need: {DOWNSTREAM_VARS}. For the 200 hPa wind as well "
+                         f"(MJO from N320 rather than the O96 corpus, +13.2 GB/cycle) pass "
+                         f"--native-vars-mjo instead; see DOWNSTREAM_VARS_MJO.")
+    ap.add_argument("--native-vars-mjo", action="store_true",
+                    help=f"shorthand for --native-vars {DOWNSTREAM_VARS_MJO} -- the default "
+                         f"set plus u_200,v_200. Opt-in because it is +25%% sidecar for a "
+                         f"convenience, not a capability; O96 already serves the MJO.")
     ap.add_argument("--native-write-hours", default=None,
                     help="write window for --native-store, if it should differ from "
                          "--write-hours. The case this exists for: keep the O96 corpus "
@@ -553,7 +571,9 @@ def main():
              if args.gcs_fetch else None,
              cleanup_pkl=args.cleanup_pkl, grid=args.grid,
              native_store=args.native_store,
-             native_vars=[v.strip() for v in args.native_vars.split(",") if v.strip()],
+             native_vars=[v.strip() for v in
+                          (DOWNSTREAM_VARS_MJO if args.native_vars_mjo
+                           else args.native_vars).split(",") if v.strip()],
              native_write_hours=args.native_write_hours)
     return 0 if ok else 1
 

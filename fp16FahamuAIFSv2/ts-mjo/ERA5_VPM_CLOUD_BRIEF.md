@@ -299,7 +299,11 @@ So adding `u_200`/`v_200` to the sidecar is **not** needed to make the MJO work.
 need re-running for a *future* cycle — these are ordinary output variables and adding them is
 a configuration change in the writer. Past cycles would need the O96 corpus, which has them.
 
-**Recommendation — now done.** `u_200`/`v_200` were added to `run_local_icechunk_v2.DOWNSTREAM_VARS`,
+**Recommendation — available, opt-in.** `u_200`/`v_200` are in `DOWNSTREAM_VARS_MJO`, reachable
+with `--native-vars-mjo`. Deliberately **not** the default: it is +25% sidecar for a convenience,
+not a capability, and storage is the binding constraint (a cycle needs ~256 GB against ~97 GB
+free). Turn it on when the O96 corpus is going to be purged and the MJO must still run.
+Original reasoning:
 which is also now the `--native-vars` default, so the next cycle picks them up without anyone
 retyping the list. (They stayed missing for five cycles precisely because it was retyped.)
 Original reasoning: It is 25%

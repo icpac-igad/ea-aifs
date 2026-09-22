@@ -589,9 +589,56 @@ windows — and ERA5's own strong MJO gave +11.9 … −9.7 across nine such win
 numbers still cannot be read as MJO presence or absence.** 20260903 at +8.08 with corr 0.87 is
 the most MJO-like of the three, and that is as much as a 34-day window supports saying.
 
-What would settle it is the **120-day low-frequency filter** (§4.3) — the one remaining
-reference — and then the basis. Both need the contiguous daily series that only the in-cloud
-run (§7.2) can afford.
+### 6e. What the 120-day filter is for, and how much it actually matters
+
+*(This replaces a claim made here first — that the 120-day filter "is now the next blocker,
+ahead of the basis". That was asserted without measuring it, and it is wrong on both counts:
+it is second-order, and it does not gate a submission. Measured below.)*
+
+**What it does.** After the seasonal climatology is removed, RMM and VPM both subtract the mean
+of the **preceding 120 days**. The purpose is to remove interannual and low-frequency
+variability — principally **ENSO**, which shifts the Walker circulation persistently and
+projects onto the same planetary-scale χ₂₀₀/U200 patterns the MJO lives in. Without it, an El
+Niño reads as a large standing "MJO anomaly".
+
+**Why a trailing mean and not a bandpass.** A symmetric 20–100 day bandpass is the better
+filter but needs *future* data, so it cannot be used in real time or on a forecast. A trailing
+120-day mean is **causal** — past data only — which is exactly why WH04 chose it. That is the
+whole reason this awkward-looking step exists.
+
+**How much it matters, measured** on the 30-year ERA5 band series already on disk, comparing
+the climatology-removed anomaly against its own trailing 120-day mean:
+
+| field | anomaly std | 120-day mean std | ratio | variance removed |
+|---|---|---|---|---|
+| χ₂₀₀ | 5.09e6 | 2.15e6 | 0.42 | **7.0%** |
+| U850 | 2.05 | 0.96 | 0.47 | **10.8%** |
+| U200 | 5.78 | 2.68 | 0.47 | **9.6%** |
+
+The removed field is slowly varying and wavenumber-1 dominated (k1 = 0.54 of its power), which
+is the ENSO/Walker signature the step is designed for — so it is doing what it should. But it
+accounts for only **7–11% of variance**. It is a **refinement required for strict VPM
+comparability, not a missing ingredient.**
+
+**It is buildable now** — this was also checked rather than assumed. `ar/` stops at
+2021-12-31, but ARCO's other trees are kept current: `co/single-level-reanalysis.zarr-v2`
+returns valid data for **2026-05-06**, and
+`raw/date-variable-pressure_level/2026/09/02/u_component_of_wind/` has all 20 levels. The
+120 days before 20260903 are 2026-05-06 … 2026-09-02, so the window exists.
+
+Cost, from `raw/`: 3 fields × ~134 days × ~37 MB per day-variable-level file ≈ **15 GB, ~3 h**
+at the measured 1.4 MB/s. It is 0.25° hourly, so it must be conservatively regridded to 1.5°
+and subsampled to 6-hourly to match the climatology — and §6d is the reason to take that
+seriously rather than casually.
+
+**Recommendation: not now.** It is 7–11% of variance, it does not gate a submission, and the
+thing that does gate one is the **basis** (§7 step 2), which cannot be self-built without
+producing a different index. Doing the filter first would be optimising an input to a
+projection that does not exist yet. `--lowfreq` already exists in `vpm_index.py` and now
+validates alignment, so this is a data-acquisition task that can be picked up unchanged later.
+
+§6c's window limit is also **not** something the filter would fix: 34 days is too short to
+resolve propagation regardless of how well the anomaly is referenced.
 
 ---
 
@@ -766,8 +813,9 @@ than assuming in either direction.
 - No `P(RMM phase | state)` lookup (§7 step 3). Nothing has been submitted for MJO.
 - The climatology is **done** (§6d): 1991–2020, 365/365 calendar days, 20 MB. `vpm_index.py`
   now completes steps 5 and 7; steps 6 and 8 remain.
-- The **120-day low-frequency mean is still missing**, and it is now the next blocker rather
-  than the basis — see §6d. It needs a contiguous daily series (§7.2).
+- The **120-day low-frequency mean is not built.** §6e measures it at 7–11% of variance and
+  recommends deferring it: the **basis** is what gates a submission. The data exists through
+  2026-09 (`raw/`, ~15 GB), so this is acquisition work, not a blocker.
 - `era5_vpm_colab.py` (§7.2) is generated and its solver verified bit-identical, but it has
   **not been run** — the in-GCP speed-up is inferred from where the data sits, not measured.
 - The **120-day low-frequency filter** (§4.3) is still unsourced. The climatology stream
