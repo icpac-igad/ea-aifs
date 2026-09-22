@@ -1,5 +1,9 @@
 # MJO phase from the AIFS-ENS Icechunk store
 
+> **Start with [`MJO_METHOD.md`](MJO_METHOD.md)** if you want the finalised method,
+> the input data it needs and how it will be verified. This file is the working log:
+> every attempt in the order it happened, including the wrong turns.
+
 The AI Weather Quest **MJO phase** target. `aifs-ens-2.0` does not output OLR, so the
 canonical RMM index cannot be computed from the store — this file records why, what the
 submission actually demands, and the route that is still open.

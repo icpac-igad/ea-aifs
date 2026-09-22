@@ -51,3 +51,7 @@ why the forecast cannot supply it.
 - [`ERA5_VPM_CLOUD_BRIEF.md`](ERA5_VPM_CLOUD_BRIEF.md) — self-contained handover for rebuilding
   the ERA5 record the VPM index needs, for an agent on a cloud VM with no access to this box.
   ERA5's native grid is the AIFS N320 grid; the record reaches 1940.
+- [`MJO_METHOD.md`](MJO_METHOD.md) — the MJO method as finalised: what was tried,
+  the input data each step needs, and the three verification checks. The observed
+  pipeline is validated (98.4% octant out of sample); the forecast product is **not
+  submittable** pending a model climatology.

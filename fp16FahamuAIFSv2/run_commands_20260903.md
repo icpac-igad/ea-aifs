@@ -286,3 +286,50 @@ run needs no access to the O96 corpus.
 > **refuses to purge a cycle whose N320 store is present but whose TS product is not** — the
 > store is the only source of the fields the tracker reads. See
 > [`ts-mjo/TS_STORM_DAYS.md`](ts-mjo/TS_STORM_DAYS.md).
+
+## MJO phase probabilities — run on 2026-09-22
+
+Produced with the basis fitted **directly to AI-WQ's official RMM** series
+(`ts-mjo/MJO_METHOD.md`). Reads the **O96 corpus**, not the N320 sidecar: the sidecar
+has no `u_200`/`v_200`, and the MJO does not need 28 km — it is zonal wavenumber 1–3,
+the mirror of the TS case.
+
+```bash
+$PY ts-mjo/vpm_index.py --store $BASE/icechunk_o96 --init 20260903 \
+    --clim /tank/projects/era5_vpm_clim/vpm_clim_1991_2020.npz \
+    --eofs /tank/projects/era5_vpm_clim/rmm_basis.npz \
+    --out $BASE/mjo_probs_20260903.nc
+$PY ts-mjo/mjo_submission.py $BASE/mjo_probs_20260903.nc      # -> the (9,4) AI-WQ shape
+```
+
+AI-WQ's MJO array is **9 phases × 4 valid times at init +7/14/21/28 days** — four single
+days, not weekly means, and one file for all four (not split by forecast period).
+
+| phase | 2026-09-10 | 2026-09-17 | 2026-09-24 | 2026-10-01 |
+|---|---|---|---|---|
+| **inactive (0)** | 0.00 | 0.00 | 0.00 | 0.06 |
+| phase 1 | 0.00 | 0.00 | 0.00 | 0.04 |
+| phase 6 | 0.02 | 0.00 | 0.00 | 0.00 |
+| phase 7 | 0.98 | 0.82 | 0.64 | 0.28 |
+| phase 8 | 0.00 | 0.18 | 0.36 | 0.62 |
+
+*(Phases not listed are 0.00 at two decimals.)*
+
+**This was NOT submitted, and should not be.** The distribution is the problem, not the
+plumbing:
+
+| | this cycle | observed RMM |
+|---|---|---|
+| mean amplitude | 2.73 | 1.30 |
+| P(inactive) | 0.01 | 0.37 |
+| PC drift | +1.10 °/day | +5.49 |
+
+Amplitude runs ~2× observed and almost no probability reaches the inactive category, because
+an **observed** climatology is being removed from a **model** field, leaving the model's own
+mean-state bias in the anomaly (`ts-mjo/MJO_PHASE.md` §6g). A confident, nearly stationary
+phase is what that bias looks like — not skill. The fix is a **model climatology at matching
+lead**, which accumulates over cycles.
+
+**Verification is not yet possible.** Valid times are 2026-09-10 … 2026-10-01;
+AI-WQ observations run to **2026-08-24** and the official RMM training series to
+**2026-04-30**. Both lag the forecast, so this cycle becomes verifiable only as they catch up.
