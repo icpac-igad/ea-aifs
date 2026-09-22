@@ -698,6 +698,60 @@ reason to build it is now specific and measured rather than "strict comparabilit
 (Measured with a crude trailing mean over the stride-2 gappy series, so a contiguous
 one should do slightly better — another argument for the in-cloud stride-1 run, §7.2.)
 
+### Who supplies what, and what the 90% therefore means
+
+Three datasets are involved and they play different roles. Conflating them would
+overstate the result, so this is the provenance explicitly:
+
+| dataset | role here | do we touch it? |
+|---|---|---|
+| **NCEP/NCAR R1, 1979–2012** | what Ventrice et al. built the **real VPM EOFs** from | **no — never** |
+| **NOAA PSL `vpm.1x.txt`** | the published **VPM index series**: the regression's *target*, and the source of the phase convention | yes, as labels |
+| **ERA5 (ARCO)** | the **predictor fields** — χ₂₀₀, U850, U200 band anomalies — and the climatology removed from them | yes, as inputs |
+| **AIFS-ENS 2.0** | the forecast the fitted map is finally applied to | yes, at inference |
+
+So the chain is: *ERA5 fields → a functional fitted to reproduce → PSL's VPM index,
+which was itself built from NCEP R1 fields we never see.*
+
+**The claim that is supported:** our ERA5-derived band anomalies, mapped through a
+functional fitted against PSL's published VPM, reproduce that index on held-out
+years at *r* = 0.78 / 0.90, with 90% octant agreement on active days.
+
+**The claim that is _not_ supported:** "we applied the VPM basis to our fields."
+We never had the VPM basis. We have a different object — an ERA5-specific linear map
+that happens to output numbers agreeing with VPM.
+
+### Why the distinction has teeth
+
+**Reanalysis differences are absorbed, not exposed.** Wherever ERA5 and NCEP R1 disagree
+on tropical upper-level divergence — and the tropical upper troposphere is among the
+least observationally constrained parts of any reanalysis — that disagreement is
+silently folded into the fitted coefficients. The fit *cannot* distinguish "this is how
+VPM weights χ₂₀₀" from "this is how ERA5 differs from NCEP R1 in χ₂₀₀". Both appear as
+coefficient values. A genuine VPM basis would keep them separate; this cannot.
+
+**That is not purely a drawback here.** AIFS-ENS 2.0 is *trained on ERA5*, so its output
+lives in ERA5's representation. A map fitted on ERA5 is therefore better matched to this
+forecast than the true NCEP-R1-based VPM EOFs would be. Fitting against ERA5 is the
+right choice for this model — but that is a *different* justification from "we used
+VPM's basis", and it should be argued on its own terms.
+
+**The errors are correlated in a way we cannot see.** If ERA5 and AIFS share a bias
+relative to NCEP R1, the fit absorbs it and the held-out score will not reveal it — the
+held-out years are also ERA5. The 90% is agreement with PSL's index **over observed
+days**, not forecast skill, and not independent validation against VPM's own construction.
+
+**What would settle it**, in increasing cost: obtain the actual VPM EOF vectors from the
+authors (PSL does not host them — §6f); or rebuild VPM from NCEP R1 directly, which is a
+separate acquisition and a separate index computation; or verify against AI-WQ's own
+`retrieve_daily_MJO_obs()` labels, which is the operationally relevant comparison and is
+the cheapest of the three.
+
+**Practical consequence for the product.** Anything shipped from this basis should be
+labelled as a *VPM-like index fitted to PSL's VPM*, not as VPM. The distinction matters
+if the forecast is ever scored against an official VPM or RMM series, or compared with
+another group's VPM.
+
 ### What is still not established
 
 - The fit is against **ERA5**; VPM was built on **NCEP R1 1979–2012**. The out-of-sample
@@ -707,6 +761,97 @@ one should do slightly better — another argument for the in-cloud stride-1 run
   cycle has been put through it, and §6c's 34-day window limit is untouched by any of this.
 - The **VPM-vs-RMM phase offset** is still not measured. It does not need to be for a VPM
   product, but it does if anything is ever compared to RMM phases.
+
+---
+
+## 6g. The pipeline completes — and the forecast amplitudes are wrong, for a locatable reason
+
+`vpm_index.py --eofs` now runs end to end on all three cycles and writes a correctly
+shaped AI-WQ product: `(34 days, 9 categories)`, summing to 1 on every day. This is the
+first MJO output this project has produced.
+
+**It is not submittable.** The reason is worth the detail, because the failure is
+specific and the diagnosis separates what works from what does not.
+
+### The basis and the ERA5 side are validated
+
+Pushing **ERA5 itself** through the fitted basis reproduces the published index's
+distribution:
+
+| | mean amplitude | P(amplitude < 1) |
+|---|---|---|
+| ERA5 through our basis | **1.20** | **0.42** |
+| PSL published VPM | 1.26 | 0.38 |
+
+So the basis is correctly calibrated, and the climatology, band reduction, χ₂₀₀ solve
+and normalisation are all sound on observed data.
+
+### The forecast side is not
+
+| cycle | mean amplitude | P(amplitude < 1) | modal category, day 1 / 8 / 18 / 31 |
+|---|---|---|---|
+| 20260903 | 2.22 | 0.05 | 6 (1.00) · 6 (0.60) · 6 (0.58) · 5 (0.42) |
+| 20260910 | 2.05 | 0.06 | 6 (0.84) · 5 (0.92) · 6 (0.52) · 5 (0.42) |
+| 20260917 | 2.04 | 0.07 | 5 (1.00) · 5 (0.74) · 6 (0.74) · 5 (0.36) |
+
+Amplitude ~2× too large, and **P(inactive) of 0.05 against an observed 0.38–0.42**. The
+MJO is inactive about two days in five; this says one day in twenty. That single number
+disqualifies the product — category 0 would be systematically starved.
+
+The phases are also nearly stationary (stuck in 5–6), which §6c already predicts a
+34-day window cannot resolve either way.
+
+### Cause: a mean-state bias, measured
+
+A wrong first guess is worth recording. The excess was initially attributed to U850/U200
+being banded on the **native O96 grid** while ERA5 bands on the regular grid — plausible,
+since U850 had the largest ratio (1.62×). Banding both on the regular grid **changed
+nothing** (1.62 → 1.65): reducing to 2.5° bins already smooths away the grid difference.
+`--band-path` was kept for consistency, but it fixed nothing.
+
+The actual cause is a **systematic per-longitude offset** between the forecast mean state
+and ERA5's calendar-day climatology:
+
+| cycle | field | anomaly std | \|offset\|/std | std after removing the offset |
+|---|---|---|---|---|
+| 20260903 | χ₂₀₀ | 7.79e6 | 0.68 | **4.22e6** |
+| 20260910 | χ₂₀₀ | 7.12e6 | 0.66 | 3.92e6 |
+| 20260917 | χ₂₀₀ | 7.26e6 | 0.67 | 3.97e6 |
+| 20260917 | U850 | 3.15 | 0.63 | 1.71 |
+| 20260917 | U200 | 7.43 | 0.69 | 4.63 |
+
+ERA5's own factors are **4.91e6 / 1.94 / 5.49**. So removing the offset takes the
+forecast from **1.59×** ERA5's variance to **0.86×** — i.e. essentially all the excess is
+a constant-in-time offset, not extra variability. The ratio is ~0.67 for every field in
+every cycle, which is a bias, not noise.
+
+### Why this was predictable, and what fixes it
+
+Subtracting an **observed** climatology from a **model** field leaves the model's own
+bias and lead-dependent drift in the anomaly. Operational MJO forecast indices therefore
+remove a **model climatology at matching lead**, not an observed one. This pipeline
+removes ERA5's, so the model's departure from ERA5 is being read as MJO signal — and
+then divided by ERA5's standard deviations, which converts it directly into amplitude.
+
+This is the **same pattern as the TS product**, where the useful climatology turned out
+to be detector-native and model-derived rather than observational.
+
+Two facts make it tractable:
+
+- The offset is **stable across cycles** (0.66, 0.67, 0.68), so it is estimable from a
+  small number of cycles — as the TS climatology was from five.
+- It is **large and systematic**, so removing it should be most of the fix: forecast
+  variance lands at 0.86× ERA5's, which is the right order.
+
+The obstacle is seasonal coverage. Three cycles give a *September* model climatology.
+A year-round product needs cycles spread through the year, or hindcasts — and the O96
+corpus of purged cycles is gone, so this accumulates going forward rather than being
+recoverable from what is on disk.
+
+**Until then the MJO product should not be submitted.** A tempting shortcut — rescaling
+amplitudes to match the observed inactive fraction — is not defensible: it would hide a
+mean-state bias behind a variance correction, and the phases would still carry the
+offset.
 
 ---
 

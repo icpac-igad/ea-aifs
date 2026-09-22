@@ -142,6 +142,11 @@ def main():
     ap.add_argument("--members", type=int, default=None)
     ap.add_argument("--regrid-deg", type=float, default=REGRID_DEG,
                     help="regular grid for the Poisson solve (default 1.5)")
+    ap.add_argument("--band-path", choices=("regular", "native"), default="regular",
+                    help="grid on which U850/U200 are reduced to the 144-longitude band. "
+                         "'regular' matches era5_vpm_clim.py; 'native' is cheaper. Measured "
+                         "to make no practical difference -- the 2.5 deg binning dominates -- "
+                         "so this is a consistency knob, not a fix for anything")
     ap.add_argument("--div-path", choices=("regular", "native"), default="regular",
                     help="where to take the divergence. 'regular' (default) regrids u,v "
                          "first, matching how era5_vpm_clim.py builds the climatology -- "
@@ -168,19 +173,44 @@ def main():
     print(f"VPM | init {init:%Y-%m-%d} | members {nmem} | "
           f"{times[0]:%Y-%m-%d} .. {times[-1]:%Y-%m-%d} | {len(steps)} steps")
     print(f"  chi200: divergence on the {args.div_path} grid -> {args.regrid_deg} deg "
-          f"Poisson solve; U850/U200 banded on the native grid")
+          f"Poisson solve; U850/U200 banded on the {args.band_path} grid")
     if args.clim and args.div_path != "regular":
         print("  !! --clim with --div-path native: the climatology is built on the "
               "regular\n     grid, and the two paths put the k=1 crest ~23 deg apart. "
               "This subtraction\n     mixes two different quantities.")
 
+    import earthkit.regrid as ekr
+    src_grid = {"grid": "O96" if lat.size == 40320 else "N320"}
     per_member = []
     for m in range(nmem):
         bands = {"chi200": chi200_bands(g, m, steps, lat, lon180, grid,
                                     args.regrid_deg, div_path=args.div_path)}
         for name, var in (("u850", "u_850"), ("u200", "u_200")):
-            bands[name] = meridional_band(
-                sio.read_member_window(g, var, m, steps), lat, lon180)
+            raw = sio.read_member_window(g, var, m, steps)
+            if args.band_path == "native":
+                bands[name] = meridional_band(raw, lat, lon180)
+            else:
+                # Band on the SAME regular grid the climatology was banded on,
+                # for consistency with era5_vpm_clim.py.
+                #
+                # Honest note: this was changed to chase the ~1.5x excess band
+                # variance against ERA5, on the theory that O96 at ~112 km
+                # carries more into the band than ERA5's 1.5 deg. **That theory
+                # was wrong** -- it made no measurable difference (U850 ratio
+                # 1.62 -> 1.65), because reducing to 2.5 deg bins already smooths
+                # away the grid difference. The real cause is a mean-state bias;
+                # see MJO_PHASE.md 6g. Kept because consistency is still correct,
+                # not because it fixed anything.
+                rg = np.stack([ekr.interpolate(raw[k], src_grid,
+                                               {"grid": [args.regrid_deg, args.regrid_deg]})
+                               for k in range(raw.shape[0])])
+                nlat, nlon = rg.shape[-2], rg.shape[-1]
+                rlat = np.linspace(90.0, -90.0, nlat)
+                rlon = np.arange(nlon) * (360.0 / nlon)
+                bands[name] = meridional_band(
+                    rg.reshape(rg.shape[0], -1), np.repeat(rlat, nlon),
+                    np.tile(np.where(rlon > 180.0, rlon - 360.0, rlon), nlat))
+            del raw
         daily = {k: daily_mean(v, times) for k, v in bands.items()}
         per_member.append({k: v[0] if isinstance(v, tuple) else v
                            for k, v in daily.items()})
@@ -221,11 +251,30 @@ def main():
     else:
         print("  !! no --lowfreq: the preceding 120-day mean is not removed")
 
-    norm = {k: float(np.nanstd(stacked[k])) for k in FIELDS}
+    # Normalisation factors. VPM and RMM use FIXED observed standard deviations
+    # (WH04 ships `WH04_RMM_stddevs.nc` for exactly this reason); normalising a
+    # forecast by its own spread is not the same operation. It differs here by
+    # more than a scale factor: the forecast std includes ensemble spread, so it
+    # runs ~1.6x/1.7x/1.3x the ERA5 values -- unequal across the three fields,
+    # which would reweight them against each other inside the projection.
+    # So if the basis carries the factors it was fitted with, use those.
+    fixed = None
+    if args.eofs:
+        z_ = np.load(args.eofs)
+        if "field_sd" in z_:
+            fixed = {k: float(z_["field_sd"][i]) for i, k in enumerate(FIELDS)}
+    norm = fixed or {k: float(np.nanstd(stacked[k])) for k in FIELDS}
+    own = {k: float(np.nanstd(stacked[k])) for k in FIELDS}
     for k in FIELDS:
         stacked[k] = stacked[k] / max(norm[k], 1e-30)
     print("  normalisation (std per field): "
-          + ", ".join(f"{k}={norm[k]:.3e}" for k in FIELDS))
+          + ", ".join(f"{k}={norm[k]:.3e}" for k in FIELDS)
+          + (f"   [FIXED, from {args.eofs}]" if fixed else "   [this forecast's own]"))
+    if fixed:
+        print("    this forecast's own would have been: "
+              + ", ".join(f"{k}={own[k]:.3e}" for k in FIELDS)
+              + "  -- ratios "
+              + ", ".join(f"{own[k]/norm[k]:.2f}" for k in FIELDS))
 
     if args.dump_bands:
         np.savez(args.dump_bands, dates=np.array([str(d) for d in dates]),
@@ -246,6 +295,16 @@ def main():
         raise SystemExit(f"state vector {x.shape[2]} != EOF length {e1.size}. "
                          f"VPM EOFs must be 3*{N_LON_BINS} ordered [chi200, u850, u200].")
     vpm1, vpm2 = (x @ e1) / sd1, (x @ e2) / sd2
+    # A regression basis carries an intercept; an EOF basis does not. Apply it
+    # when present so the two cases are handled identically downstream.
+    z_ = np.load(args.eofs)
+    if "intercept" in z_:
+        ic = np.atleast_1d(z_["intercept"])
+        vpm1, vpm2 = vpm1 + float(ic[0]), vpm2 + float(ic[-1])
+        print(f"  applied basis intercept ({float(ic[0]):+.4f}, {float(ic[-1]):+.4f})")
+    if str(z_.get("kind", "")) .startswith("regression"):
+        print("  basis is a REGRESSION onto PSL's published VPM, not an EOF: "
+              f"e1.e2={float(e1 @ e2):.1f} (not orthogonal, as expected)")
     # `phase_from_pcs` returns (phase, amplitude) and is already vectorised, so
     # it takes the whole (member, day) array at once. Mapping it element-wise and
     # stacking the result silently built a (member, day, 2) array instead.
@@ -263,8 +322,12 @@ def main():
                "components": "chi200,u850,u200",
                "chi200_source": f"divergence on the {args.div_path} grid, "
                                 f"Poisson solve on a {args.regrid_deg} deg regular grid",
-               "climatology_removed": bool(args.clim),
-               "lowfreq_removed": bool(args.lowfreq),
+               # netCDF attributes cannot hold booleans; record the source path
+               # (or "none"), which is more useful than a flag anyway
+               "climatology_removed": str(args.clim or "none"),
+               "lowfreq_removed": str(args.lowfreq or "none"),
+               "div_path": args.div_path,
+               "basis_kind": str(np.load(args.eofs).get("kind", "unknown")),
                "source_store": str(args.store), "cycle_init": args.init},
     ).to_netcdf(args.out)
     print(f"\n  wrote {args.out}")
