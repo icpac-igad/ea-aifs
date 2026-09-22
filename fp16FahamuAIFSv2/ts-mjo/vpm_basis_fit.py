@@ -89,6 +89,11 @@ def main():
     ap.add_argument("--clim", default="/tank/projects/era5_vpm_clim/vpm_clim_1991_2020.npz")
     ap.add_argument("--vpm", default="/tank/projects/era5_vpm_clim/vpm.1x.txt",
                     help="PSL vpm.1x.txt: year month day hour VPM1 VPM2 amplitude")
+    ap.add_argument("--target-rmm", default=None,
+                    help="glob of AI-WQ MJO_DAILY_YYYY.nc files. Fits onto the OFFICIAL RMM "
+                         "that AI-WQ scores against, instead of onto PSL's VPM. Strictly "
+                         "better: it removes the VPM->RMM convention step entirely, along "
+                         "with the RMM* caveat that step carried.")
     ap.add_argument("--lowfreq", action="store_true",
                     help="also remove the 120-day trailing mean (helps amplitude; see __doc__)")
     ap.add_argument("--train-end", type=int, default=2010,
@@ -109,13 +114,28 @@ def main():
         blocks.append(a)
     X = np.concatenate(blocks, axis=1)
 
-    v = np.loadtxt(args.vpm)
-    vd = np.array([np.datetime64(f"{int(y):04d}-{int(m):02d}-{int(d):02d}")
-                   for y, m, d in v[:, :3]])
+    if args.target_rmm:
+        # The official RMM AI-WQ verifies against. Fitting straight onto it means
+        # there is no VPM convention to correct afterwards -- the fitted map
+        # lands in RMM's frame by construction, including its handedness.
+        import xarray as xr
+        ds = xr.open_mfdataset(sorted(glob.glob(args.target_rmm)), combine="by_coords")
+        vd = ds.time.values.astype("datetime64[D]")
+        v2 = np.column_stack([ds.RMM1.values, ds.RMM2.values])
+        good = np.isfinite(v2).all(axis=1)
+        vd, v2 = vd[good], v2[good]
+        target_name = f"official RMM ({args.target_rmm})"
+    else:
+        v = np.loadtxt(args.vpm)
+        vd = np.array([np.datetime64(f"{int(y):04d}-{int(m):02d}-{int(d):02d}")
+                       for y, m, d in v[:, :3]])
+        v2 = v[:, 4:6]
+        target_name = f"PSL VPM ({args.vpm})"
+    print(f"  target: {target_name}, {len(vd)} days")
     pos = {d: i for i, d in enumerate(vd)}
     ok = np.isfinite(X).all(axis=1) & np.array([d in pos for d in dates])
     X, ds = X[ok], dates[ok]
-    Y = v[[pos[d] for d in ds], 4:6]
+    Y = v2[[pos[d] for d in ds]]
 
     # normalise each field by its own std, as the index does, and keep the
     # factors so a forecast can be scaled the same way
@@ -149,7 +169,9 @@ def main():
              intercept=coef[-1], sd1=1.0, sd2=1.0, field_sd=sd,
              fields=np.array(FIELDS), n_lon=N_LON,
              kind="regression_onto_published_VPM",
-             source=args.vpm, clim=args.clim,
+             source=args.target_rmm or args.vpm,
+             target="official_RMM" if args.target_rmm else "PSL_VPM",
+             clim=args.clim,
              train_years=f"..{args.train_end}", n_train=int(tr.sum()),
              lowfreq_removed=bool(args.lowfreq))
     print(f"\n  wrote {args.out}")

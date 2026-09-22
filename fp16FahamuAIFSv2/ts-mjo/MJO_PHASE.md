@@ -763,10 +763,15 @@ another group's VPM.
   reflection**, via `--rmm-rotation`. It corrects a real mirror: `vpm.1x.txt`, and so our
   basis, ran **westward** at −7.6°/day; it now runs +7.6°/day. Measured against PSL's RMM*,
   **not** BOM's official RMM — re-measure before submitting.
-- AI-WQ scores MJO against **RMM**, not VPM (§6h). Ceiling for a perfect VPM: 64% exact
-  octant, 98.7% within one.
-- **AI-WQ retrieval is blocked**: the ECBox token returns 403 "Not a Branca token". This
-  blocks both the official-RMM offset check and any forecast verification. It does not need to be for a VPM
+- AI-WQ scores MJO against **RMM**, not VPM (§6h). §6h's "64% ceiling" was an artifact of
+  routing through VPM; fitting to RMM directly gives **98.4%** (§6j).
+- ~~AI-WQ retrieval is blocked~~ — **wrong, see §6j**. FTP with `AIWQ_PASSWORD` works; the
+  403 came from the ecbox *fallback* being handed the FTP password, after FTP failed on a
+  file that simply is not published yet.
+- **Forecast verification is not yet possible**: observations lag ~4 weeks (latest Monday
+  `20260824`), and all three cycles start after it. It becomes possible as obs catch up.
+- The basis is now fitted **directly to official RMM** (§6j): 98.4% correct octant out of
+  sample, correct handedness by construction. The VPM detour and its rotation are obsolete. It does not need to be for a VPM
   product, but it does if anything is ever compared to RMM phases.
 
 ---
@@ -988,6 +993,89 @@ looks like**, not what skill looks like.
 
 So the ordering is unchanged: the offset had to be applied, and it was; but §6g
 remains the blocker.
+
+---
+
+## 6j. The AI-WQ archive has the official RMM — fit to that instead
+
+Following the suggestion to look at the same package path that supplies the
+tas/pr climatology. It works, and it makes §6f–§6i's whole construction obsolete.
+
+### First: the credentials were never broken
+
+§6h reported the ECBox token as dead (`403 "Not a Branca token"`). **That diagnosis
+was wrong**, and the way it was wrong is instructive.
+
+`ftp_or_ecbox_loading(remote_path, local_path, password)` takes **one** `password`
+argument and uses it as **two different credentials** — the FTP password first,
+then, on failure, as the *ecbox Branca token*. Passing `AIWQ_PASSWORD` therefore
+produces a Branca-token error that looks like an expired token but is really the
+FTP leg having failed for an unrelated reason.
+
+And that reason was mundane: `FTP failed (550 Can't check for file existence)` —
+the file was **not there**. Observations lag about four weeks; the latest published
+Monday is `20260824`, and the request was for `20260914`. FTP authentication with
+`AIWQ_PASSWORD` works fine.
+
+*Lesson worth keeping: a 403 from a fallback path is evidence about the fallback,
+not about the primary. Read the first error, not the last.*
+
+### What the archive actually holds
+
+```
+/training_data/MJO_DAILY_1979.nc .. MJO_DAILY_2026.nc     official RMM, 48 years
+/training_data/MJO_reference_data/WH04_combinedEOFs.nc    EOF1,EOF2 (3,144), ['U200','U850','OLR']
+/training_data/MJO_reference_data/WH04_RMM_stddevs.nc     [52.641, 55.437]
+/observations/<Monday>/MJO_obs_DAILY_*.nc                 through 20260824
+```
+
+`MJO_DAILY_*.nc` carries `RMM1`, `RMM2`, `amplitude`, `phase_angle`, `phase` — **the
+official RMM series AI-WQ scores against**, daily, 1979–2026.
+
+### Fit to RMM directly, and the VPM detour disappears
+
+§6f fitted to PSL's VPM and §6h/§6i then rotated VPM→RMM. With the official RMM in
+hand, fit **straight onto it**. Same predictors, same held-out split (fit 1991–2010,
+test 2011–2020, 1828 days):
+
+| | via VPM + rotation | **direct to official RMM** |
+|---|---|---|
+| PC1 test *r* | 0.778 | **0.922** |
+| PC2 test *r* | 0.903 | **0.936** |
+| amplitude test *r* | 0.697 | **0.859** |
+| median phase error | 15.7° | **8.9°** |
+| **correct octant, active days** | 89.9% | **98.4%** |
+
+And the handedness comes out right **by construction** — ERA5 through this basis
+advances **+5.49 °/day eastward**, with mean amplitude 1.36 and P(amp<1) = 0.34
+against the official series' 1.30 and 0.37. No rotation, no reflection, no
+convention bookkeeping.
+
+**§6h's "64% ceiling" was wrong.** It was not a property of using wind-plus-χ₂₀₀
+instead of OLR — it was the cost of routing through VPM and then correcting the
+convention, which compounds two errors. Fitting to the target directly gives 98.4%.
+The §6h and §6i findings about `vpm.1x.txt` being stored mirrored remain true and
+are worth keeping, but the machinery built on them is no longer needed.
+
+`--rmm-rotation` is retained for the VPM-fitted basis and must **not** be used with
+this one.
+
+### The forecast side is unchanged, which is the point
+
+| cycle | mean amplitude | P(amp<1) | PC drift |
+|---|---|---|---|
+| 20260903 | 2.73 | 0.01 | +1.10 °/day |
+| 20260910 | 2.51 | 0.02 | +0.15 |
+| 20260917 | 2.69 | 0.01 | +0.23 |
+| **official RMM** | **1.30** | **0.37** | **+5.49** |
+
+A better basis made the *observed* side much better and the *forecast* side slightly
+worse. That is exactly what §6g predicts: the amplitude failure is a **model
+mean-state bias against ERA5's climatology**, and no basis can absorb it. The
+separation is now clean —
+
+- **basis and observed pipeline: validated** (98.4% octant out of sample);
+- **forecast pipeline: blocked on a model climatology** (§6g), and on nothing else.
 
 ---
 
