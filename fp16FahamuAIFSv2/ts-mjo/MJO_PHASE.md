@@ -642,6 +642,74 @@ resolve propagation regardless of how well the anomaly is referenced.
 
 ---
 
+## 6f. NOAA PSL does not publish the VPM EOFs — but the index is enough
+
+Checked, and the answer is a negative result plus a way round it.
+
+**PSL does not publish the VPM EOF patterns.** Its
+`ftp2.psl.noaa.gov:/Datasets.other/MJO/` has `eof1/` and `eof2/` directories, but
+they are **OMI's**, not VPM's: 366 files each (one per day of year), 2448 values per
+file = **144 longitudes × 17 latitudes**, a single OLR field. VPM would be one fixed
+pair of 3×144 = 432-element vectors. The `MJO` note in that directory reads *"EOF
+basis patterns. could be deleted most likely."* The `README` reads *"eof patterns.
+See George Kiladis."* Neither is the VPM basis.
+
+**But PSL publishes the VPM index itself** — [`vpm.1x.txt`](https://psl.noaa.gov/mjo/mjoindex/vpm.1x.txt),
+daily VPM1, VPM2 and amplitude, **1979-04-30 … 2026-03-17**, 17,124 days.
+
+That is enough, and it dissolves the objection this document has been making since
+§4.2. The objection was never to fitting coefficients — it was that a *self-computed
+EOF* is a different index with no published phase convention. So do not compute an
+EOF: **fit the linear functional that reproduces PSL's published PCs from our own
+band anomalies.** It inherits VPM's phase convention by construction, because it is
+fitted to VPM's own series.
+
+`vpm_basis_fit.py` does this. It is a **regression, not an EOF** — not orthonormal,
+not variance-maximising, and it inherits our reanalysis, climatology and grid.
+Nothing downstream needs otherwise; `vpm_index.py` only forms `x @ e1`, `x @ e2`.
+
+### How well it works, out of sample
+
+Fit on 1991–2010, tested on the held-out 2011–2020 (1828 days):
+
+| | climatology only | + 120-day mean |
+|---|---|---|
+| VPM1 test *r* | 0.794 | 0.778 |
+| VPM2 test *r* | 0.868 | **0.903** |
+| amplitude test *r* | 0.626 | **0.697** |
+| median phase error (active days) | 16.4° | **15.7°** |
+| **correct octant (active days)** | **90.2%** | 89.9% |
+
+**The octant hit rate is the number that matters**, because the AI-WQ MJO product is
+exactly those nine categories: the right octant ~90% of the time on active days, from
+a basis we do not have and fields the model was never asked to produce.
+
+Amplitude is the weak component (*r* 0.63–0.70), and amplitude is what decides
+**category 0, inactive** — so category 0 will be the noisiest of the nine.
+
+### This also settles §6e empirically
+
+The 120-day filter lifts amplitude *r* from 0.626 to **0.697** and leaves the octant
+rate flat. So §6e's "7–11% of variance" understates its value: the filter buys
+**amplitude**, which is precisely the weak link and precisely what the inactive
+category depends on. §6e's recommendation to defer it stands on priority, but the
+reason to build it is now specific and measured rather than "strict comparability".
+
+(Measured with a crude trailing mean over the stride-2 gappy series, so a contiguous
+one should do slightly better — another argument for the in-cloud stride-1 run, §7.2.)
+
+### What is still not established
+
+- The fit is against **ERA5**; VPM was built on **NCEP R1 1979–2012**. The out-of-sample
+  numbers above already absorb that, but they are agreement with PSL's index, not with
+  a VPM basis applied to our fields — those are not the same claim.
+- It has **not been applied to a forecast.** `vpm_index.py --eofs` will now run, but no
+  cycle has been put through it, and §6c's 34-day window limit is untouched by any of this.
+- The **VPM-vs-RMM phase offset** is still not measured. It does not need to be for a VPM
+  product, but it does if anything is ever compared to RMM phases.
+
+---
+
 ## 7. What remains, in order
 
 1. **Stream ARCO-ERA5** for `u200, v200, u850` — **running now**; see §7.1 for the sizing.
