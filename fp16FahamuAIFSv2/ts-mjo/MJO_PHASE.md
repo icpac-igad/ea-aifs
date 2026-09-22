@@ -759,7 +759,13 @@ another group's VPM.
   a VPM basis applied to our fields — those are not the same claim.
 - It has **not been applied to a forecast.** `vpm_index.py --eofs` will now run, but no
   cycle has been put through it, and §6c's 34-day window limit is untouched by any of this.
-- The **VPM-vs-RMM phase offset** is still not measured. It does not need to be for a VPM
+- The **VPM-vs-RMM phase offset is now measured** (§6h): **+166.3°, ~3.7 octants**, against
+  PSL's RMM*. It must be applied — ignoring it costs ~4 octants systematically. The value
+  against BOM's *official* RMM, which AI-WQ uses, is **not** confirmed.
+- AI-WQ scores MJO against **RMM**, not VPM (§6h). Ceiling for a perfect VPM: 64% exact
+  octant, 98.7% within one.
+- **AI-WQ retrieval is blocked**: the ECBox token returns 403 "Not a Branca token". This
+  blocks both the official-RMM offset check and any forecast verification. It does not need to be for a VPM
   product, but it does if anything is ever compared to RMM phases.
 
 ---
@@ -852,6 +858,74 @@ recoverable from what is on disk.
 amplitudes to match the observed inactive fraction — is not defensible: it would hide a
 mean-state bias behind a variance correction, and the phases would still carry the
 offset.
+
+---
+
+## 6h. AI-WQ scores against RMM, not VPM — and the offset is ~4 octants
+
+Two findings, one of which would have silently ruined any submission.
+
+### AI-WQ's MJO target is RMM
+
+`AI_WQ_package.retrieve_training_data.retrieve_MJO_projection_data()` fetches
+**`WH04_combinedEOFs.nc`** and **`WH04_RMM_stddevs.nc`**, and
+`retrieve_daily_MJO_obs()` returns `phase` / `amplitude` from those observations.
+So the verification target is **Wheeler & Hendon's RMM**. Our index is VPM,
+adopted because the model cannot produce OLR (§1). **A VPM product is therefore
+scored against an RMM truth**, and the correspondence between them is not a
+detail — it is the ceiling on the whole approach.
+
+### The convention offset is ~166°, and ignoring it is catastrophic
+
+Comparing PSL's two published series directly — `vpm.1x.txt` against
+`rmm_star_data.txt`, 7613 common days, 1979–2021 — the components do not line up:
+
+```
+VPM1 vs RMM*1   r = -0.804      <- sign flip
+VPM2 vs RMM*2   r = +0.837
+```
+
+The best rigid rotation between the two 2-D series is **+166.3°, i.e. +3.70
+octants**, after which components correlate **+0.822 / +0.866**.
+
+| | same octant | within ±1 octant | median phase error |
+|---|---|---|---|
+| **without** the rotation | **11.5%** | 44.7% | 79.8° |
+| **with** the rotation | **64.0%** | **98.7%** | **13.1°** |
+
+Submitting VPM phases as if they were RMM phases would have been **wrong by
+about four octants, systematically** — worse than climatology, and it would have
+looked like a modelling failure rather than a convention error. `MJO_PHASE.md`
+has flagged this offset as unmeasured since §4.2; it is now measured, and it is
+nowhere near zero.
+
+*(Recorded because it nearly went unnoticed: the first pass reported 11.5%
+same-octant and read it as "VPM is a poor RMM surrogate". That conclusion was
+wrong. The number was an unmodelled convention difference, and the check that
+exposed it was correlating the components rather than comparing the derived
+phases.)*
+
+### The realistic ceiling
+
+RMM\*'s components are not unit-variance (mean amplitude 0.885, P(amp<1) = 0.62);
+rescaling by 0.704 gives mean 1.26 and P(<1) = 0.40, matching VPM's 1.26 / 0.38.
+With that and the rotation applied:
+
+**64% exact octant, 98.7% within one octant** is what a *perfect* VPM would score
+against RMM. For a deterministic label that is mediocre; for the **probabilistic
+nine-category product AI-WQ actually wants it is workable**, because the honest
+response to a 64/98.7 split is to spread probability across adjacent octants
+rather than to concentrate it — which our ensemble does naturally.
+
+### Caveats
+
+- `rmm_star_data.txt` is **PSL's** RMM realisation, not BOM's official RMM, which
+  is what AI-WQ most likely distributes. The offset against the official series
+  must be re-measured before anything is submitted — the *existence* and rough
+  size of the offset is established, its exact value is not.
+- The check that would settle it, `retrieve_daily_MJO_obs()`, is **blocked**: the
+  ECBox token returns `403 {"message":"Not a Branca token"}`. Rotating it also
+  unblocks real forecast verification against observed days.
 
 ---
 
