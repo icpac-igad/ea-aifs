@@ -757,6 +757,45 @@ the repo — 3.3 GB in `/tank/projects/aifs-run/wave_sensitivity_20260813/` and 
 `…_short/`. Delete them once the numbers above are trusted; `wave_sensitivity.py` skips
 configurations whose `.npz` already exists, so a partial re-run is cheap.
 
+## 6b. A second use, and one field this folder does not yet donor
+
+This folder was built for a **MAM 2026 product window**. A different need has since arrived:
+the MJO product needs a **model climatology**, which needs hindcasts at matching calendar days
+across *different years* so the MJO state averages out
+([`../ts-mjo/MJO_METHOD.md`](../ts-mjo/MJO_METHOD.md) §5). That makes 2025 the target, and it
+is the same donor problem.
+
+Checked with `check_open_data_inputs.py` across 2024-09 → 2025-09:
+
+| date | v2 status |
+|---|---|
+| 2024-09-05 | missing `tcw`, `sot`, levels 600/400/150/100 |
+| 2024-11-07 | missing `sot`, `vsw`, 4 levels |
+| 2025-01-02 | 4 pressure levels still missing |
+| **2025-01-16 onward** | only `sd` + 10 hPa + the 8 waves |
+
+**So `j1r2` is not the binding constraint** — its 2024-05-02 → 2026-06-20 coverage is wider
+than open data's own completeness. The effective donor window is **~2025-01-16 → 2026-05-12**.
+
+**And for 2025 dates the gap is 14 fields, not 13.** `sd` (snow depth) is also absent from
+open data that far back. It is a v2 addition over v1 (see the operational builder's docstring),
+so §1's table — which was written from a 2026-02-12 failure — does not list it.
+
+`sd` is a standard ERA5 single-level variable, and `fetch_era5_l10.py` already performs CDS
+retrieval plus N320 regridding, so this is **one variable added to an existing request**, not a
+new donor. Note it is *not* in ARCO's N320 `co/single-level-reanalysis` store (which carries
+`tsn` and the soil layers but no `sd`), so CDS is the source.
+
+Two things worth checking when it is implemented, neither yet done:
+
+- **Units.** IFS `sd` and ERA5 `sd` are both snow-depth *water equivalent*, but confirm rather
+  than assume; a metres-vs-water-equivalent mismatch would be a silent factor-of-several error.
+- **The donor experiment should be re-run with `sd` included.** §5's result validates the
+  13-field donor set. Adding a 14th field is a new configuration, and the harness
+  (`wave_sensitivity.py`) already exists to score it against a same-seed control.
+
+---
+
 ## 7. If ECMWF changes the inputs again
 
 The same trap will recur at the next cycle upgrade, and the failure mode is misleading:

@@ -5,9 +5,10 @@ wrong turns. **This document is the summary**: the method as it now stands, the 
 depends on, and how it will be verified. Read this first; go there for why.
 
 **Status: the observed pipeline is validated; the forecast product is not submittable.**
-One thing blocks it: a **model climatology**, which needs historical initial conditions the
-current pkl path cannot supply. §5 has the measurement, the leave-one-out test showing the
-fix works, and why it is a data-preparation task rather than a compute or waiting problem.
+One thing blocks it: a **model climatology**, which needs hindcasts from historical initial
+conditions. §5 has the measurement, a leave-one-out test showing the fix works, and why the
+remaining work is **one ERA5 field and a date list** — the donor path is already built and
+validated in [`../run-pre50r1-dates/`](../run-pre50r1-dates/README.md).
 
 ---
 
@@ -166,20 +167,92 @@ across many years, and average. Three things follow:
 - **The storage is negligible.** Only `u_200`, `v_200`, `u_850` at O96 are needed: 3 vars × 1
   member × 132 steps × 40,320 points × 4 B ≈ **64 MB per date**.
 
-**The real obstacle is initial conditions, not compute.**
-`ecmwf_opendata_pkl_input_aifsens_v2.py` builds the input state from **ECMWF Open Data**,
-whose archive does not reach back years. AIFS-ENS 2.0 needs ~112 fields × 2 timesteps,
-including 14 pressure levels, soil (`stl1/2`, `swvl1/2`), snow depth, and **11 ocean-wave
-parameters** from the `waef`/`wave` stream.
+### The initial-condition path is mostly already built
 
-So the blocking task is a **ERA5 → AIFS-input path**. ARCO-ERA5 carries the atmospheric and
-wave fields (§4), and the model is *trained* on ERA5, so the fields exist and are the natural
-input — but the transform, the level set and the wave decomposition (`mwd` →
-`cos_mwd`/`sin_mwd`) all have to be reproduced exactly, and any mismatch would show up as a
-bias in the very quantity the hindcasts are meant to measure.
+An earlier version of this section called the blocker "an ERA5 → AIFS-input path" and treated
+it as unbuilt. **That was overstated.** [`../run-pre50r1-dates/`](../run-pre50r1-dates/README.md)
+already solves most of it, for a different reason (a MAM 2026 forecast window), and the work
+is validated rather than sketched.
 
-**That is the whole blocker.** Not compute, not storage, not waiting: one data-preparation
-path, after which the climatology is a few hours of GPU.
+The problem it solved: 13 of AIFS-ENS 2.0's 112 input fields are IFS Cy50r1 outputs, which
+went operational on **2026-05-12** — jointly with AIFS v2 itself — so open data does not carry
+them before that. The resolution:
+
+- the **8 wave fields** come from ECMWF research experiment **`j1r2`**, the ecWAM hindcast
+  AIFS v2's wave inputs were trained on, on the native N320 grid;
+- the **10 hPa level** comes from **ERA5 via CDS**, regridded to N320.
+
+And it was tested rather than assumed. A donor experiment at `20260604` — 12 rollouts, 6
+configurations × 2 seeds — scored each substitute against a same-seed control:
+
+| treatment | 2t × floor | % of ensemble scale | reading |
+|---|---|---|---|
+| identical run (the floor) | 1.0 | 3.6% | — |
+| ERA5 10 hPa | 4.1 | 14.8% | usable |
+| j1r2 waves | 4.9 | 17.7% | usable |
+| **both donors** | **5.6** | **20.4%** | **usable** (thresholds 10× / 40%) |
+| 50 hPa carried up (positive control) | 135 | 491% | catastrophic |
+
+`ecmwf_opendata_pkl_input_aifsens_v2_pre50r1.py` is the operational builder with those 13
+fields donored, everything else untouched, plus a land-sea mask repair asserted byte-identical
+to the member's own `swh`.
+
+### What is actually still missing: one field, and a date window
+
+Checked against `check_open_data_inputs.py` for 2025 dates. For **2025-04-03, 2025-06-05 and
+2025-09-04** the gap is **14 fields, not 13** — the documented 13 **plus `sd` (snow depth)**,
+which open data does not carry that far back either. Everything else is present.
+
+`sd` is a standard ERA5 single-level variable and `fetch_era5_l10.py` already does CDS
+retrieval and N320 regridding, so this is **one variable added to an existing request** — not
+a new path. (It is *not* in ARCO's N320 `co/single-level-reanalysis` store, which has `tsn`
+and the soil layers but no `sd`, so CDS it is.)
+
+**The usable window is set by open data's own completeness, not by `j1r2`.** Probing:
+
+| date | v2 status |
+|---|---|
+| 2024-09-05 | unusable — missing `tcw`, `sot`, and levels 600/400/150/100 |
+| 2024-11-07 | unusable — missing `sot`, `vsw`, 4 levels |
+| 2025-01-02 | unusable — 4 pressure levels still missing |
+| **2025-01-16 onward** | **usable** — only `sd` + 10 hPa + the 8 waves, all donorable |
+| 2026-05-13 onward | operational builder, no donors needed |
+
+`j1r2` covers 2024-05-02 → 2026-06-20, so it is not the binding constraint. The effective
+donor window is **~2025-01-16 → 2026-05-12**, about 16 months, which covers every season.
+
+### Why last year is the right target, and not just the available one
+
+A 2025 hindcast set does **three** jobs at once, and the third is the one that makes it the
+right choice rather than merely the possible one:
+
+1. **Independent MJO states.** 2025 and 2026 share no MJO evolution, which is exactly what the
+   overlapping-cycle problem above requires.
+2. **Full calendar coverage**, so the climatology can be a smooth function of calendar day and
+   lead rather than a September-only correction.
+3. **It is verifiable immediately.** AI-WQ observations run to 2026-08-24 and the official RMM
+   series to 2026-04-30 — both *past* every 2025 date. So the same hindcasts that build the
+   climatology also produce the first genuine forecast verification, with no waiting. The three
+   2026 cycles in hand cannot do this: their valid times start 2026-09-10, ahead of the
+   observations (§7b).
+
+That is a materially better plan than accumulating 2026 cycles, which §5 shows cannot fix the
+bias at all.
+
+### The concrete shape of it
+
+- **Dates**: Thursdays across ~2025-01-16 → 2026-05-12, thinned to ~24–36 dates for calendar
+  coverage. The operational cadence is Thursday, so matching it keeps lead/valid-day alignment
+  identical to production.
+- **Members**: **1 per date for the climatology** — the target is a mean state, not a
+  distribution. A handful of dates at full 50 members for the probabilistic verification.
+- **Cost**: ~2 min/member for the open-data fields plus a one-off ~2.5 min/date for the
+  donors, then the rollout. ~8 min/date end to end → **~4 h for 30 single-member hindcasts**.
+- **Storage**: write only `u_200`, `v_200`, `u_850` at O96 — ~64 MB/date, ~2 GB for the set.
+
+**So the blocker is one ERA5 field and a date list**, not a data-preparation project. The
+heavy lifting — waves from `j1r2`, 10 hPa from ERA5, the mask repair, and the donor validation
+that shows all of it is safe — is done and recorded in `../run-pre50r1-dates/`.
 
 A rescale of amplitudes to match the observed inactive fraction is **not** an acceptable
 shortcut: it would hide a mean-state bias behind a variance correction, and the phases would
