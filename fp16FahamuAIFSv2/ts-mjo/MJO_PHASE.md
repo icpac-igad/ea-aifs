@@ -14,7 +14,7 @@ submission actually demands, and the route that is still open.
 | Evaluation | [BSS over 9 categories](https://ecmwf-ai-weather-quest.readthedocs.io/en/latest/forecast_evaluation.html#mjo-phase-probability-forecasts) |
 | Code | `mjo_index.py`, `grid_ops.py`, `store_io.py` |
 | Research notes | `vpm-mjo.md` — exploratory VPM notes, kept **outside the repo**; §4 below is the committed summary |
-| Status | **not submittable** — no valid index without OLR or a substitute basis |
+| Status | **submitted from `20260924`, miscalibrated** — VPM χ₂₀₀ replaces OLR (§4), basis fitted to AI-WQ's official RMM (§6j, 98.4% octant out of sample), but the forecast carries a model mean-state bias (§6g) |
 
 > The tropical-storm-days target lives in [`TS_STORM_DAYS.md`](TS_STORM_DAYS.md).
 
@@ -1251,7 +1251,10 @@ than assuming in either direction.
 - No `ttr` in the store, so no true RMM without an emulator (§1).
 - **No VPM EOF basis obtained or built**; the VPM-vs-RMM phase offset is **not measured**.
   This is now the only structural gap: §6c validated everything upstream of the projection.
-- No `P(RMM phase | state)` lookup (§7 step 3). Nothing has been submitted for MJO.
+- No `P(RMM phase | state)` lookup (§7 step 3) — the nine categories come straight from the
+  ensemble's phase counts.
+- **MJO has now been submitted** (`20260924`, window 1 only — see below), against this
+  file's own recommendation and on instruction. §6g's bias is unfixed.
 - The climatology is **done** (§6d): 1991–2020, 365/365 calendar days, 20 MB. `vpm_index.py`
   now completes steps 5 and 7; steps 6 and 8 remain.
 - The **120-day low-frequency mean is not built.** §6e measures it at 7–11% of variance and

@@ -4,11 +4,20 @@
 wrong turns. **This document is the summary**: the method as it now stands, the data it
 depends on, and how it will be verified. Read this first; go there for why.
 
-**Status: the observed pipeline is validated; the forecast product is not submittable.**
+**Status: the observed pipeline is validated; the forecast product is miscalibrated.**
 One thing blocks it: a **model climatology**, which needs hindcasts from historical initial
 conditions. §5 has the measurement, a leave-one-out test showing the fix works, and why the
 remaining work is **one ERA5 field and a date list** — the donor path is already built and
 validated in [`../run-pre50r1-dates/`](../run-pre50r1-dates/README.md).
+
+> **Submitted anyway, from cycle `20260924`.** `MJO_20260924_p1_Fahamu_fp16FahamuAIFSv2.nc` is
+> on the AI-WQ server (verified with `AI_WQ_check_submission`), the team's first MJO entry.
+> This document recommended **against** submitting and that recommendation has not changed —
+> it was submitted on instruction. Recorded so the record is not read backwards: mean amplitude
+> **2.84** and P(amp<1) = **0.01** against an observed 1.30 and 0.37, so expect category 0 to be
+> starved and the BSS to suffer. The score, when it arrives, will measure the §5 mean-state bias
+> and **not** the index, the basis or the chain, all of which §7 validates separately.
+> Per-cycle detail: [`../run_commands_20260924.md`](../run_commands_20260924.md).
 
 ---
 

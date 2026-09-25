@@ -9,7 +9,7 @@ store. Detector, tracker, IBTrACS calibration, and the state of a submission.
 | Evaluation | [RPSS on terciles per basin](https://ecmwf-ai-weather-quest.readthedocs.io/en/latest/forecast_evaluation.html#tropical-storm-days-ts) |
 | Code | `ts_days.py` (driver), `ts_tracks.py` (tracker), `grid_ops.py`, `store_io.py` |
 | Test | `test_tercile_binning.py` |
-| Status | **not submittable** — NWP over-count; ATL verified correct 2026-09-21 |
+| Status | **submitted from `20260924`** (windows 1 and 2) — NWP over-count unfixed; ATL verified correct 2026-09-21 |
 
 ```bash
 PY=/tank/projects/micromamba/envs/aifs-gpu/bin/python
@@ -31,10 +31,44 @@ scores (its week-3 / week-4 targets).
 
 | Needed | Source | Why a forecast alone cannot supply it |
 |---|---|---|
-| Tercile boundaries (`--aiwq-tercile-dir`, `--tercile-clim`) | **`AI_WQ_package.TS_processing.download_IBTRACS_compute_TStercile_climatology(date, ibtracs_file, savedir)`** — or build from IBTrACS with *this* detector | the package's version is built from **observed** IBTrACS counts; ours are detector counts, and the two only interchange if the detector is bias-corrected ([§8](#8-the-correction--done-2026-08-23-ts_trackspy)) |
+| Tercile boundaries (`--aiwq-tercile-dir`, `--tercile-clim`) | **AI-WQ publishes them directly**: `/climatologies/<year>/TS_20yrCLIM_WEEKLYTSDAYS_terciles_<validdate>.nc` on the FTP. Fallbacks: `AI_WQ_package.TS_processing.download_IBTRACS_compute_TStercile_climatology(...)`, or build from IBTrACS with *this* detector | the published bounds are built from **observed** IBTrACS counts; ours are detector counts, and the two only interchange if the detector is bias-corrected ([§8](#8-the-correction--done-2026-08-23-ts_trackspy)) |
 
 Without one, `ts_days.py` falls back to the ensemble's own terciles and prints a loud
 warning — those probabilities are self-referential and not submission-grade.
+
+### The published bounds are what scoring uses — and they expose the NWP bias
+
+Found while preparing the `20260924` submission. One small file per valid date, `(tercile, basin)`
+with `tercile = [0.333, 0.667]` and `basin = ['ATL','NWP','SWIO','SEIO']` — the same basin order
+the submission array wants. **These are the bounds RPSS is computed against**, so probabilities
+binned on anything else are not the quantity being scored.
+
+They are materially different from the detector-native climatology earlier cycles reported
+against:
+
+| week | basin | **published (official)** | detector-native |
+|---|---|---|---|
+| 2026-10-12 | ATL | 1 / 5 | 0 / 2 |
+| | NWP | 3 / 7 | 5 / 8 |
+| 2026-10-19 | ATL | 1 / 4 | 0 / 2 |
+| | NWP | 2 / 7 | 5 / 8 |
+
+**The official NWP thresholds sit *below* ours**, so binning our over-counted NWP totals
+(7.6 and 6.1 days) against them pushes probability onto "above": P(above) = 0.58 and 0.46 for
+`20260924`. That is the same shape as the two verified checkpoints where NWP was confidently
+wrong at 0.84 and 0.76.
+
+So the published bounds do not fix the §8 problem, they **measure** it. Switching to a
+friendlier climatology would only hide it — the RPSS is computed on the official bounds either
+way. The fix remains detector calibration.
+
+**Out-of-season basins need care.** `check_fc_submission.check_data_characteristics` activates
+ATL+NWP for months 6–11 and SWIO+SEIO for 12/1/2, and **only the active columns must sum to 1**
+(atol 0.2); inactive ones are unconstrained and NaN is permitted. An inactive basin's published
+bounds are `0/0`, and under the binning rule (`below: x<lower`, `above: x>=upper`, `near` only
+when `lower != upper`) that sends **all** probability to "above" — a confident forecast of a
+dormant basin. `submit_ts_mjo_cli.py` fills inactive columns with a uniform 1/3 instead:
+unscored either way, and it asserts nothing.
 
 Built and on disk: `/tank/projects/ibtracs/clim/TS_20yrCLIM_WEEKLYTSDAYS_terciles_*.nc`,
 from `/tank/projects/ibtracs/IBTrACS.ALL.v04r01.nc` (23 MB, NOAA/NCEI).
