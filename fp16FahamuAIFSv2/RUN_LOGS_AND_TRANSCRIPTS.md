@@ -114,13 +114,24 @@ grep -niE "password|token|secret|Bearer|api[_-]?key"      fp16FahamuAIFSv2_${DAT
 Each cycle against its predecessors — the step banners should line up within a
 few lines, and a new transcript that does not is worth looking at:
 
-| | 20260827 | 20260903 | 20260910 | 20260917 |
-|---|---|---|---|---|
-| 3b command | 1 | 1 | 1 | 1 |
-| 3c command | 344 | 337 | 348 | 348 |
-| `SUBMISSION SUMMARY` | 1001 | 1030 | 1065 | 1065 |
-| total lines | 1009 | 1038 | 1073 | **1073** |
-| registered-team rows | 528 | 564 | 588 | 588 |
+| | 20260827 | 20260903 | 20260910 | 20260917 | 20260924 |
+|---|---|---|---|---|---|
+| 3b command | 1 | 1 | 1 | 1 | 1 |
+| 3c command | 344 | 337 | 348 | 348 | 348 |
+| TS/MJO command | — | — | — | — | 1073 |
+| total lines | 1009 | 1038 | 1073 | 1073 | **1436** |
+| registered rows, 3c log | 528 | 564 | 588 | 588 | 588 |
+| registered rows, TS/MJO log | — | — | — | — | 294 |
+
+**20260924 jumps 1073 → 1436 because the transcript gained a third block, not because
+anything in the forecast grew.** It is the first cycle to submit TS and MJO, so
+`submit_ts_mjo_cli.py`'s log is appended after 3c — and the 3c block is byte-for-byte the same
+length as 20260917's (command at line 348, 588 registered rows).
+
+The registered-teams table is printed **once per authentication**, so it appears in the TS/MJO
+log too: 294 rows there against 588 in 3c, because 3c authenticates twice per file over six
+files while TS/MJO does so once per file over three. Count rows **per block** when comparing
+cycles; a whole-file count (882 here) is not comparable with the earlier figures.
 
 **20260910 and 20260917 have identical line counts and banner positions.** That is
 coincidence, not a duplicated file: the registered-teams table did not grow between
