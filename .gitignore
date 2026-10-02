@@ -30,3 +30,6 @@ __pycache__/
 *.swp
 *.swo
 *~
+
+# local secrets
+.env
