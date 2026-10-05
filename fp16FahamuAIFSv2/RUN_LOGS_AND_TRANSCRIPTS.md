@@ -123,6 +123,18 @@ few lines, and a new transcript that does not is worth looking at:
 | registered rows, 3c log | 528 | 564 | 588 | 588 | 588 |
 | registered rows, TS/MJO log | — | — | — | — | 294 |
 
+`20261001` came out at **1436 lines too**, with the same block positions (3c at 348, TS/MJO at
+1073). The registered-teams table did not grow between 2026-09-24 and 2026-10-02, and the two
+cycles' logs happen to match — the files differ and have different md5s. Check that before
+assuming a copy/paste error, exactly as for the 20260910/20260917 pair above.
+
+**One caution specific to the TS/MJO block.** On `20261001` the submission was first attempted
+by a chained background script that died without submitting, then re-run by hand the next day.
+The transcript carries the log of the run that **actually submitted**
+(`run_1001_tsmjo2.log`), not the failed one. When a submission step has run more than once,
+match the log against the server with `AI_WQ_check_submission` rather than against the newest
+file — see [`run_commands_20261001.md`](run_commands_20261001.md).
+
 **20260924 jumps 1073 → 1436 because the transcript gained a third block, not because
 anything in the forecast grew.** It is the first cycle to submit TS and MJO, so
 `submit_ts_mjo_cli.py`'s log is appended after 3c — and the 3c block is byte-for-byte the same
