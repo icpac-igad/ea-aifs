@@ -46,11 +46,14 @@ quantity.
   6–10 m/s. `u50_mean` agrees with IFS (12.5 against 11.9 m/s in D1-10). The
   feature is kept so the schema matches.
 
-## Purge guard (add once validated)
+## Purge guard (in `cleanup_aifs_run.py`, 2026-10-10)
 
-Purge the O96 store only if `manifest.json` exists, `members == 50`, and every
-listed file's sha256 matches. This is the same pattern as the TS/MJO rule in
-`cleanup_aifs_run.py`.
+A cycle that has an `icechunk_o96*` store is purged only if
+`<--crma-layer3-root>/<date>/manifest.json` exists (default
+`/tank/projects/crma_layer3`), reports `members == 50`, and every file it lists
+is present with a matching sha256. Otherwise the whole cycle is skipped, with
+the reason printed. This is the same pattern as the TS product rule. Cycles
+without an O96 store are unaffected.
 
 ## Checks to run on the first cycle
 
@@ -171,5 +174,6 @@ which is (55 × 20 + 11 × 19 + 5 × 5 + 7 × 1) × 4 windows × 50 members, and
 2.7–2.8 MB per cycle. Checks 1–3 (`crma_layer3_check.py`) pass on all five,
 and check 4 matches every shared key.
 
-**No store has been purged.** Checks 1–4, the grid and the schema now all pass.
-The next step is the purge guard in `cleanup_aifs_run.py`, as described above.
+**No store has been purged.** Checks 1–4, the grid and the schema now all pass,
+and the purge guard is in place. A dry run passes 20260903–20261001 and skips
+20260514, 20260604, 20260709 and 20260820, whose O96 stores have no layer 3 yet.

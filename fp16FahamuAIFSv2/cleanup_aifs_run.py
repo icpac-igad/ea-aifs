@@ -28,6 +28,8 @@ import argparse
 import os
 import re
 import glob
+import hashlib
+import json
 import shutil
 import subprocess
 import sys
@@ -67,6 +69,12 @@ KEEP_FILES = (
 # so the MJO can read N320 too; until then MJO reads the O96 corpus.
 TS_PRODUCT_GLOB = "ts_days_probs_*.nc"
 TS_SOURCE_PREFIXES = ("icechunk_v2", "icechunk_n320_aiwq")
+# Likewise CRMA layer 3 (epistemic-reasoning-risk/crma_layer3_extract.py) is cut from the
+# O96 corpus. A cycle with an O96 store is purged only once its layer-3 manifest exists,
+# reports 50 members, and every file it lists matches its sha256. See CRMA_LAYER3.md.
+CRMA_LAYER3_ROOT = "/tank/projects/crma_layer3"
+CRMA_SOURCE_PREFIX = "icechunk_o96"
+CRMA_MEMBERS = 50
 
 CYCLE_RE = re.compile(r"^\d{8}_\d{4}$")
 
@@ -104,6 +112,38 @@ def busy_cycles():
     return busy
 
 
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def crma_layer3_problem(cycle, root):
+    """None if the cycle's CRMA layer 3 is complete and intact, else the reason it is not."""
+    d = os.path.join(root, cycle.split("_")[0])
+    mf = os.path.join(d, "manifest.json")
+    if not os.path.isfile(mf):
+        return f"no {mf}"
+    try:
+        m = json.load(open(mf))
+    except Exception as e:
+        return f"unreadable manifest: {e}"
+    if m.get("members") != CRMA_MEMBERS:
+        return f"members {m.get('members')} != {CRMA_MEMBERS}"
+    files = m.get("files") or {}
+    if not files:
+        return "manifest lists no files"
+    for name, meta in files.items():
+        p = os.path.join(d, name)
+        if not os.path.isfile(p):
+            return f"missing {name}"
+        if sha256(p) != meta.get("sha256"):
+            return f"sha256 mismatch on {name}"
+    return None
+
+
 def purge_targets(cycle_dir):
     """List heavy paths inside one cycle directory."""
     targets = []
@@ -129,6 +169,8 @@ def main():
                     help="protect the N most recent cycles (default 1). Ignored with --date.")
     ap.add_argument("--yes", action="store_true",
                     help="actually delete (default is a dry-run plan only)")
+    ap.add_argument("--crma-layer3-root", default=CRMA_LAYER3_ROOT,
+                    help="where crma_layer3_extract.py writes <date>/manifest.json")
     args = ap.parse_args()
 
     if not os.path.isdir(args.run_root):
@@ -167,6 +209,18 @@ def main():
             unextracted.append(c)
             selected.remove(c)
 
+    # nor the O96 corpus before CRMA layer 3 has been extracted and verified from it
+    no_layer3 = []
+    for c in list(selected):
+        cd = os.path.join(args.run_root, c)
+        if not any(n.startswith(CRMA_SOURCE_PREFIX) and os.path.isdir(os.path.join(cd, n))
+                   for n in os.listdir(cd)):
+            continue
+        why = crma_layer3_problem(c, args.crma_layer3_root)
+        if why:
+            no_layer3.append((c, why))
+            selected.remove(c)
+
     print(f"Run root : {args.run_root}")
     print(f"Cycles   : {', '.join(cycles)}")
     if protected:
@@ -177,6 +231,11 @@ def main():
         print(f"\nSKIPPED -- TS product not yet extracted: {', '.join(unextracted)}")
         print(f"  These cycles hold the only N320 fields the TS tracker can read.")
         print(f"  Run ts-mjo/ts_days.py first, then re-run this. See TS_STORM_DAYS.md.")
+    if no_layer3:
+        print(f"\nSKIPPED -- CRMA layer 3 not extracted or not verified:")
+        for c, why in no_layer3:
+            print(f"  {c}: {why}")
+        print(f"  Run epistemic-reasoning-risk/crma_layer3_extract.py first. See CRMA_LAYER3.md.")
 
     print(f"Mode     : {'DELETE' if args.yes else 'DRY-RUN (nothing will be removed)'}")
     print("=" * 72)
