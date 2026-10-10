@@ -5,8 +5,8 @@
 import hashlib, json, sys
 import numpy as np, pandas as pd, xarray as xr, icechunk
 
-EXPECTED_NAN = {("cape", "global"), ("cape", "hydrobasin"), ("cape", "synoptic"),
-                ("swvl1", "global"), ("ro", "global"), ("cp_frac", "hydrobasin")}
+EXPECTED_NAN = {("cape", "hydrobasin"), ("cape_mean", "synoptic"),   # no CAPE in AIFS
+                ("cp_frac", "hydrobasin")}                          # no rain in the window
 
 def op(c, p):
     r = icechunk.Repository.open(icechunk.local_filesystem_storage(f"/tank/projects/aifs-run/{c}_0000/{p}"))

@@ -28,7 +28,7 @@ quantity.
 
 | file | content |
 |---|---|
-| `evidence.parquet` | CRMA long layout (`init_time, window, region_id, region_type, feature, node, member, value`), windows D1-10, D11-20, D21-30, D31-33, 50 members. The 55 lev04 basins are read through a 1.5° buffer; also the synoptic, global and ocean loci. Features: the 16 S2S node features under the same names, plus `w700`, `cp_frac`, `swvl1`, `ro`. |
+| `evidence.parquet` | CRMA long layout (`init_time, window, region_id, region_type, feature, node, member, value`), windows D1-10, D11-20, D21-30, D31-33, 50 members numbered 0–49 as in S2S. Every region type carries exactly the features `s2s_features.py` writes for it. **hydrobasin**: the 55 lev04 basins through a 1.5° buffer, with the 16 S2S node features plus the AIFS-only `w700`, `cp_frac`, `swvl1`, `ro`. **synoptic**: `<field>_mean` for each derived field, plus `vo850_max`, `mfx850_max`, `slp_boxmax`, `slp_boxmin`. **global**: `u200_mean`, `u850_mean`, `u50_mean`, `u10_mean`, `slp_mean`. **ocean**: `sst_mean` for INDIAN_OCEAN_LOCI (node `indian_ocean`) and ENSO_LOCI (node `enso`), taken from `skt` over sea points. |
 | `tp_basins.npz` | daily basin rainfall per member, days 0–32, mm/day |
 | `regional_compact.npz` | regime box and the ten gridded drivers per member and window, on the S2S 1.5° regional grid |
 | `manifest.json` | rows, members, windows, variables used and missing, sha256 per file |
@@ -37,8 +37,14 @@ quantity.
 
 - **CAPE is absent.** The convective node uses the lapse rate only.
 - **There is no OLR**, so the MJO comes from the existing `ts-mjo` product.
-- **Ocean loci** are written only if the store carries `sst`. The O96 corpus
-  does not, so in practice AIFS layer 3 has no `ocean` rows.
+- **There is no `sst`.** Ocean `sst_mean` is taken from `skt` (skin temperature)
+  at sea points, using `swvl1` NaN as the sea mask. Against IFS SST on
+  2026-10-01 it is 0.4 K cooler, with r = 0.98 across the 7 boxes.
+- **Do not use `u10_mean` as stratospheric evidence.** `u_10` is the 10 hPa
+  wind, not the 10 m wind. On 2026-10-01, IFS swings the QBO box from westerly
+  to easterly (2.1 → -4.8 → -10.2 m/s by window), while AIFS stays westerly at
+  6–10 m/s. `u50_mean` agrees with IFS (12.5 against 11.9 m/s in D1-10). The
+  feature is kept so the schema matches.
 
 ## Purge guard (add once validated)
 
@@ -134,21 +140,36 @@ climatologies are meant to absorb; none of them is an extraction error:
 AIFS ensemble spread is narrower than IFS, at 0.6–1.0 of IFS's spread (median
 across basins). Part of that is 50 members against 101.
 
-## Before the purge: loci schema, not yet fixed
+## Loci aligned to the S2S schema (2026-10-10)
 
-Basins match the S2S layout exactly. **The loci do not**, and unlike a name,
-a missing variable cannot be recovered once the O96 store is gone:
+Basins already matched the S2S layout. The loci did not, and a missing variable
+cannot be re-derived once the O96 store is purged. So the loci now follow
+`s2s_features.py` exactly:
 
-- **synoptic**: S2S writes `<field>_mean` (e.g. `q850_mean`, `tp_mean`) plus
-  `vo850_max`, `mfx850_max`, `slp_boxmax` and `slp_boxmin`. AIFS writes the
-  basin names (`q850`, `tp`) and no box maxima or minima.
-- **global**: S2S writes `u200_mean`, `u850_mean`, `u50_mean`, `u10_mean` and
-  `slp_mean`. AIFS writes the 20 basin features instead, and has no u50 or u10
-  although the store carries `u_50` and `u_10` (the QBO locus needs them).
-- **ocean**: S2S writes `sst_mean` for INDIAN_OCEAN_LOCI and ENSO_LOCI. AIFS
-  writes none because there is no `sst`, but the store has `skt`, which over the
-  sea is the SST.
-- **member**: S2S numbers members from 0, AIFS from 1.
+- **synoptic**: `<field>_mean`, plus the daily within-box extremes
+  `vo850_max`, `mfx850_max`, `slp_boxmax` and `slp_boxmin`, averaged over the
+  window. Node names come from `s2s_features.NODE_OF`.
+- **global**: `u200_mean`, `u850_mean`, `u50_mean`, `u10_mean`, `slp_mean`.
+- **ocean**: `sst_mean` from `skt` at sea points.
+- **member**: 0-based. Store member 1 is row member 0, and the same holds in
+  `tp_basins.npz`.
 
-**No store has been purged.** Checks 1–4 and the grid now pass, but the loci
-should match the S2S schema before any store is purged.
+Against the IFS rows for 2026-10-01 (`crma_layer3_check4.py`), every key now
+matches over the shared windows: synoptic 209/209, global 25/25, ocean 7/7.
+The basins match on their 880 S2S keys and add the four AIFS-only features. In
+D11-20 the across-region correlations are 0.92–0.99 for synoptic moisture,
+pressure and transport, 0.98 for ocean SST, and 0.98–0.997 for global slp,
+u50 and u200. `u10_mean` (r = 0.02) is the exception covered above.
+
+The IFS op store has **101 members** for this init, all finite and distinct
+(member 1 ≠ member 51). That fits ECMWF's move of the extended-range ensemble
+from 51 to 101 members with Cy48r1 in 2023.
+
+
+All five cycles were re-extracted with the aligned schema: 268,200 rows each,
+which is (55 × 20 + 11 × 19 + 5 × 5 + 7 × 1) × 4 windows × 50 members, and
+2.7–2.8 MB per cycle. Checks 1–3 (`crma_layer3_check.py`) pass on all five,
+and check 4 matches every shared key.
+
+**No store has been purged.** Checks 1–4, the grid and the schema now all pass.
+The next step is the purge guard in `cleanup_aifs_run.py`, as described above.
