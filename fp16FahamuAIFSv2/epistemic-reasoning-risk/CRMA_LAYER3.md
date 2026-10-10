@@ -175,5 +175,28 @@ which is (55 × 20 + 11 × 19 + 5 × 5 + 7 × 1) × 4 windows × 50 members, and
 and check 4 matches every shared key.
 
 **No store has been purged.** Checks 1–4, the grid and the schema now all pass,
-and the purge guard is in place. A dry run passes 20260903–20261001 and skips
-20260514, 20260604, 20260709 and 20260820, whose O96 stores have no layer 3 yet.
+and the purge guard is in place.
+
+## Older cycles with O96 stores (2026-10-10)
+
+| cycle | O96 store | layer 3 |
+|---|---|---|
+| 20260514 | complete: 50 members, 6–792 h | extracted; C1, C3 pass; C2 n/a (no N320 store) |
+| 20260604 | only 4 of 50 members filled | not extractable |
+| 20260709 | complete | extracted; C1, C3 pass; C2 n/a (no N320 store) |
+| 20260813 | 50 members but only 432–792 h filled | not extractable |
+| 20260820 | complete | extracted; C1, C3 pass; C2 n/a (see below) |
+
+Each extracted cycle has 268,200 rows and 2.8 MB, and its sha256 values match.
+20260820's `icechunk_n320_nwh` is not a sidecar of the O96 run. Only member 1
+is filled, only at 432–792 h, and it is a different trajectory: against O96
+member 1 at 432 h, msl has r = 0.957 and an RMSE of 2 hPa, where a true
+O96/N320 pair (20261001, 792 h) gives r = 0.991. `crma_layer3_check.py` now
+uses `icechunk_n320_aiwq` or `icechunk_n320_nwh`, whichever exists, and reports
+n/a when there is neither. In place of C2, the basin `tp` means of all eight
+cycles (0.7–3.0 mm/day by window, drier May–August and wetter from late
+September) are on one scale. A units error would put them about 1000× off.
+
+A dry run of `cleanup_aifs_run.py` now passes 20260514, 20260709, 20260820 and
+20260903–20261001. The guard will block 20260604 and 20260813 permanently,
+because there is no complete layer 3 to make from them.
