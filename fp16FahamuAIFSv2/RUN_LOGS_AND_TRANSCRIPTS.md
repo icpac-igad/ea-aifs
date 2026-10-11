@@ -91,6 +91,26 @@ P='(aifs-gpu) ezra@e4drr-crafd-icpac:~/ea-aifs/fp16FahamuAIFSv2$ '
 sed -i 's/\x1b\[[0-9;]*m//g' fp16FahamuAIFSv2_${DATE}.txt
 ```
 
+### Verifying a submission: use the paginated check, not the package's
+
+`20261008` added a fourth block to the transcript: the output of
+`check_submissions_paged.py`. That exists because
+**`AI_WQ_package`'s `AI_WQ_check_submission` reports false failures.** It calls
+`content_manager.list(remote_path=...)` once and ignores the `continuation_token`; ECBox pages
+at 100 entries and a competition date holds hundreds of files. On `20261008` it declared all
+four `tas` and `pr` files ABSENT while 3c had submitted them — the first page ended at
+`mslp_20261008_p2_NMCBridge_multical.nc` and everything sorting later was invisible.
+
+The failure is alphabetical, so trust depends on the variable:
+
+| filename | sorts | official checker |
+|---|---|---|
+| `MJO_*`, `TS_*` | early (uppercase) | reliable |
+| `mslp_*`, `pr_*`, `tas_*` | late (lowercase) | **may report false ABSENT** |
+
+Always finish a cycle with `python check_submissions_paged.py --date <DATE>` and paste its
+`N/9 present` into the transcript. See [`run_commands_20261008.md`](run_commands_20261008.md).
+
 ### Two things to do before committing
 
 **1. Strip ANSI escapes.** icechunk's Rust logger emits colour codes, so a log
